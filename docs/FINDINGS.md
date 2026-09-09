@@ -377,7 +377,7 @@ Two fixes:
    escalates above a trivial amount. An unread registry can only hide
    *negative* signal; nobody launders a good reputation.
 
-## F18 — fail-safe coverage vs. usability · OPEN, needs a decision
+## F18 — fail-safe coverage vs. usability · RESOLVED
 
 The F17 fix is correct and immediately inconvenient. Live re-run:
 
@@ -559,7 +559,7 @@ on the stub facilitator).
 | ERC-7730 descriptor draft + EIP-712 payload | Day 3 | Done — draft in repo, registry PR post-hackathon |
 | `upto` scheme — may map to a mandate more directly than batch-settlement | Day 1 spike | No — still unspiked, cut first |
 | Graph Studio API key, sealed | Day 1 | Done — `secrets/graph.enc` |
-| Mandate YAML → device-signed channel open (load-bearing minimum #1) | Day 2+ | **Yes — the biggest remaining gap** |
+| Mandate YAML → device-signed channel open (load-bearing minimum #1) | Day 2+ | Built — live proof pending (`mandate:open` needs Ledger + funds) |
 
 ## How to add a finding
 
