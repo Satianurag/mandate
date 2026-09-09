@@ -12,6 +12,13 @@
  */
 
 import { createHash } from "node:crypto";
+import {
+  Client,
+  PrivateKey,
+  AccountId,
+  TopicId,
+  TopicMessageSubmitTransaction,
+} from "@hiero-ledger/sdk";
 import type { PolicyDecision, PaymentProposal, SettlementResponse } from "./types.ts";
 
 export interface AuditRecord {
@@ -31,6 +38,12 @@ export interface AuditRecord {
   traceHash: string;
 }
 
+export interface HederaOperatorCredentials {
+  accountId: string;
+  /** Hex-encoded ECDSA private key (with or without 0x prefix). */
+  privateKeyHex: string;
+}
+
 export function buildRecord(
   proposal: PaymentProposal,
   decision: PolicyDecision,
@@ -46,25 +59,58 @@ export function buildRecord(
     asset: proposal.assetSymbol,
     agentId: decision.reputation.agentId,
     score: decision.reputation.meanScore,
-    txId: settlement?.transactionId,
+    txId: settlement?.transactionId ?? settlement?.transaction,
     traceHash: createHash("sha256")
       .update(JSON.stringify(decision.trace))
       .digest("hex"),
   };
 }
 
+let queue: Promise<void> = Promise.resolve();
+
+function operatorFromEnv(): HederaOperatorCredentials | null {
+  const accountId = process.env.MANDATE_HEDERA_ACCOUNT_ID;
+  const privateKeyHex = process.env.MANDATE_HEDERA_SIGNING_KEY;
+  if (!accountId || !privateKeyHex) return null;
+  return { accountId, privateKeyHex };
+}
+
 /**
- * TODO(day-2): submit via @hiero-ledger/sdk.
- *
- *   await new TopicMessageSubmitTransaction()
- *     .setTopicId(topicId)
- *     .setMessage(JSON.stringify(record))
- *     .execute(client);
- *
- * Submission must never block the payment path -- a consensus write that is
- * slow or failing should be queued and retried, not turned into a refusal.
- * The log records what happened; it does not decide what happens.
+ * Submit to HCS. Never blocks the payment path — failures are queued for retry
+ * in-process only (demo scope). Uses sealed Key Ring credentials when passed
+ * from executePayment; falls back to MANDATE_HEDERA_ACCOUNT_ID +
+ * MANDATE_HEDERA_SIGNING_KEY only for standalone probes.
  */
-export async function submit(_topicId: string, _record: AuditRecord): Promise<void> {
-  throw new Error("audit.submit: not yet implemented -- see Day 2 in docs/plan.md");
+export async function submit(
+  topicId: string,
+  record: AuditRecord,
+  creds?: HederaOperatorCredentials
+): Promise<void> {
+  const op = creds ?? operatorFromEnv();
+  if (!op) {
+    console.warn("[audit] HCS credentials unset — record not submitted:", record.verdict);
+    return;
+  }
+
+  queue = queue
+    .then(async () => {
+      const hex = op.privateKeyHex.startsWith("0x")
+        ? op.privateKeyHex.slice(2)
+        : op.privateKeyHex;
+      const client = Client.forTestnet();
+      client.setOperator(
+        AccountId.fromString(op.accountId),
+        PrivateKey.fromStringECDSA(hex)
+      );
+      await new TopicMessageSubmitTransaction()
+        .setTopicId(TopicId.fromString(topicId))
+        .setMessage(JSON.stringify(record))
+        .execute(client);
+      client.close();
+    })
+    .catch((err) => {
+      console.error("[audit] HCS submit failed (will not block payment):", err);
+    });
+
+  await queue;
 }

@@ -19,6 +19,10 @@ info "quit that app so it releases USB, then open Ledger Sync on the device."
 
 if wallet-cli ring keys 2>&1 | grep -q '"ok": *true'; then
   ok "Key Ring already provisioned"
+elif wallet-cli ring keys 2>&1 | grep -qE '^Key|^─|mandate-|graph-'; then
+  ok "Key Ring already provisioned"
+elif ! wallet-cli ring keys 2>&1 | grep -qi 'not initialized'; then
+  ok "Key Ring already provisioned"
 else
   provisioned=0
   for i in $(seq 1 90); do

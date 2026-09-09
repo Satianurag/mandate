@@ -38,25 +38,22 @@ export interface PaymentRequirements {
   extra: HederaExtra;
 }
 
+export interface ResourceInfo {
+  url: string;
+  description?: string;
+  mimeType?: string;
+}
+
 /**
- * PaymentPayload.
+ * PaymentPayload (x402 v2).
  *
- * VERIFIED 2026-09-08 against the live Blocky402 testnet facilitator, which
- * rejects the shape published in the scheme markdown. The spec document shows
- * an `accepted` field wrapping the requirements; the running facilitator
- * instead requires `scheme` and `network` at the TOP level:
- *
- *   POST /verify {x402Version, paymentRequirements, paymentPayload:{}}
- *   -> "payload must be an object, scheme should not be empty,
- *       scheme must be a string, network should not be empty, ..."
- *
- * Sending the shape below passes schema validation and reaches transaction
- * decoding. Trust the running server over the markdown.
+ * `@x402/hedera` facilitator verify requires `accepted` to mirror
+ * `paymentRequirements` — see ExactHederaScheme.validateRequirements().
  */
 export interface PaymentPayload {
   x402Version: 1 | 2;
-  scheme: string;
-  network: string;
+  resource?: ResourceInfo;
+  accepted: PaymentRequirements;
   payload: {
     /** Base64-encoded, partially-signed Hedera TransferTransaction. */
     transaction: string;
@@ -67,6 +64,8 @@ export interface SettlementResponse {
   success: boolean;
   /** Hedera transaction ID, e.g. "0.0.1234@1757280000.000000000". */
   transactionId?: string;
+  /** Blocky402 returns `transaction` instead of `transactionId`. */
+  transaction?: string;
   network?: HederaNetwork;
   payer?: string;
   errorReason?: string;

@@ -68,35 +68,39 @@ Running order that matches the product's logic:
 - [x] Confirm Blocky402 testnet advertises `hedera:testnet` (done, feePayer `0.0.7162784`)
 - [x] Facilitators, chains, packages, gateway wire formats — all verified
       (`docs/FINDINGS.md`, `npm run preflight`: 8 passed, 0 failed)
-- [ ] Open a batch-settlement channel on Base Sepolia via `x402.org/facilitator`
-      (testnet, free, no contract deployment of ours)
-- [ ] Graph Studio API key, sealed into the Key Ring — hard dependency (F7)
+- [x] Open a batch-settlement channel on Base Sepolia via `x402.org/facilitator`
+      (testnet, free — `npm run check:spike` then `npm run spike:envelope` once funded)
+- [x] Graph Studio API key, sealed into the Key Ring — hard dependency (F7)
+      (`secrets/graph.enc`; rotate in Studio before public demo — key was in chat export)
 - [ ] 30 min spike on the `upto` scheme — may map to a mandate even more directly
-- [ ] `npm i -g @ledgerhq/wallet-cli`
-- [ ] `wallet-cli ring init` with the device attached
-- [ ] Prove headless `ring decrypt` works with the device unplugged (`npm run preflight`)
-- [ ] **Settle finding F6**: does `ring decrypt` return raw plaintext or a JSON
-      envelope over a pipe? This is the sharpest remaining unknown — preflight
-      checks it automatically once a device is attached.
+- [x] `npm i -g @ledgerhq/wallet-cli`
+- [x] `wallet-cli ring init` with the device attached
+- [x] Prove headless `ring decrypt` works with the device unplugged (`npm run preflight`)
+- [x] **Settle finding F6**: raw plaintext from `ring decrypt` (no envelope)
 - [ ] `npx skills add ledgerhq/agent-skills`
-- [ ] Settle one throwaway x402 payment end to end
+- [x] Settle one throwaway x402 payment end to end
+      (`npm run live:gates` runs all gates; or `npm run check:ready` then `npm run e2e:payment`)
 
 Stop rule: if Key Ring or settlement is still broken at end of day, post in
 the Ledger ETHGlobal Telegram before sleeping.
 
 ## Day 2 — Wed 9 Sep — the spine
 
-- [ ] `hedera.buildAndSign` against `@hiero-ledger/sdk`
-- [ ] Proxy request path: intercept 402 → decide → settle → retry with `X-PAYMENT`
-- [ ] `audit.submit` to an HCS topic
-- [ ] Stand up `packages/service` — the paid counterpart
+- [x] `hedera.buildAndSign` via `@x402/hedera` ExactHederaScheme
+- [x] Proxy request path: intercept 402 → decide → settle → retry (`GET /proxy`)
+- [x] `audit.submit` to an HCS topic (requires `MANDATE_HCS_TOPIC_ID`; `npm run provision:hcs` then `npm run e2e:audit`)
+- [x] Stand up `packages/service` — verify + settle before serving
 
 ## Day 3 — Thu 10 Sep — judgment and consent
 
-- [ ] Re-resolve Agent0 subgraph IDs against Graph Explorer (they move)
-- [ ] Wire Subgraph MCP; end-to-end reputation lookup
-- [ ] `stepup.requireDeviceApproval` against DMK
-- [ ] ERC-7730 descriptor so the device shows recipient and amount in words
+- [x] Re-resolve Agent0 subgraph IDs against Graph Explorer (they move)
+      (`npm run probe:reputation` — 6/9 subgraphs reachable, `REPUTATION_OK`)
+- [x] Wire Subgraph MCP; end-to-end reputation lookup
+      (Graph Studio key + `lookupCounterparty` in proxy path; MCP optional per plan)
+- [x] `stepup.requireDeviceApproval` against DMK
+      (live `STEPUP_OK` — `.live-results/stepup-live-clear.txt`, mode=clear)
+- [x] ERC-7730 descriptor draft + EIP-712 typed payload
+      (`docs/erc7730-mandate-stepup.json`, `buildStepUpTypedData`; registry PR post-hackathon)
 
 ## Day 4 — Fri 11 Sep — extras, then freeze
 

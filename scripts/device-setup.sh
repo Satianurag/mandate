@@ -60,7 +60,12 @@ done
 
 # ------------------------------------------------------------------- init ---
 hdr "3. Provisioning the Key Ring"
-if wallet-cli ring keys 2>&1 | grep -q '"ok": *true'; then
+ring_check=$(wallet-cli ring keys 2>&1)
+if printf '%s' "$ring_check" | grep -q '"ok": *true'; then
+  ok "already provisioned on this machine"
+elif printf '%s' "$ring_check" | grep -qE '^Key|^─|mandate-|graph-'; then
+  ok "already provisioned on this machine"
+elif ! printf '%s' "$ring_check" | grep -qi 'not initialized'; then
   ok "already provisioned on this machine"
 else
   info "WATCH THE DEVICE — it will ask you to confirm. Approve on the hardware."

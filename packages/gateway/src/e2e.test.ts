@@ -27,6 +27,19 @@ function startService(): Promise<ChildProcess> {
 }
 
 test("live 402 -> policy engine -> fail-safe deny", async (t) => {
+  const prevDiscover = process.env.MANDATE_STEPUP_DISCOVER_MS;
+  const prevAttempts = process.env.MANDATE_STEPUP_ATTEMPTS;
+  const prevStub = process.env.MANDATE_STEPUP_STUB;
+  process.env.MANDATE_STEPUP_STUB = "deny";
+  t.after(() => {
+    if (prevDiscover === undefined) delete process.env.MANDATE_STEPUP_DISCOVER_MS;
+    else process.env.MANDATE_STEPUP_DISCOVER_MS = prevDiscover;
+    if (prevAttempts === undefined) delete process.env.MANDATE_STEPUP_ATTEMPTS;
+    else process.env.MANDATE_STEPUP_ATTEMPTS = prevAttempts;
+    if (prevStub === undefined) delete process.env.MANDATE_STEPUP_STUB;
+    else process.env.MANDATE_STEPUP_STUB = prevStub;
+  });
+
   const svc = await startService();
   t.after(() => svc.kill());
 
@@ -55,6 +68,39 @@ test("live 402 -> policy engine -> fail-safe deny", async (t) => {
     out.decision.trace.includes("reputation:unregistered"),
     "unreachable reputation must degrade to unregistered, not to trusted"
   );
+});
+
+test("service rejects a malformed x-payment header", async (t) => {
+  const svc = await startService();
+  t.after(() => svc.kill());
+
+  const res = await fetch(`http://localhost:${PORT}/analytics`, {
+    headers: { "x-payment": Buffer.from("not-valid-json").toString("base64") },
+  });
+  assert.equal(res.status, 500, "malformed payload should not settle");
+});
+
+test("service rejects payment that fails facilitator verify", async (t) => {
+  const svc = await startService();
+  t.after(() => svc.kill());
+
+  const probe = await fetch(`http://localhost:${PORT}/analytics`);
+  const challenge = (await probe.json()) as PaymentRequiredBody;
+  const bogus = Buffer.from(
+    JSON.stringify({
+      x402Version: 2,
+      accepted: challenge.accepts[0]!,
+      payload: { transaction: "deadbeef" },
+    })
+  ).toString("base64");
+
+  const res = await fetch(`http://localhost:${PORT}/analytics`, {
+    headers: { "x-payment": bogus },
+  });
+  assert.notEqual(res.status, 200, "invalid payment must not serve analytics");
+  assert.ok(res.status === 402 || res.status === 500, "invalid payment is rejected");
+  const body = (await res.json()) as { error?: string };
+  assert.ok(body.error, "response explains why payment was rejected");
 });
 
 test("complexity metering prices a bigger query higher", async (t) => {

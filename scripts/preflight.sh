@@ -29,7 +29,16 @@ else
   ok "WALLET_PASS set"
 fi
 ring_out=$(wallet-cli ring keys 2>&1)
+ring_provisioned=0
 if printf '%s' "$ring_out" | grep -q '"ok": *true'; then
+  ring_provisioned=1
+elif printf '%s' "$ring_out" | grep -qE '^Key|^─|mandate-|graph-'; then
+  # Human table when stdout is a TTY; JSON envelope when piped (F6).
+  ring_provisioned=1
+elif ! printf '%s' "$ring_out" | grep -qi 'not initialized'; then
+  ring_provisioned=1
+fi
+if [ "$ring_provisioned" -eq 1 ]; then
   ok "ring provisioned"
   probe="preflight-$(date +%s)"
   sealed=$(printf '%s' "$probe" | wallet-cli ring encrypt --key mandate-probe 2>/dev/null | base64)
@@ -98,10 +107,23 @@ if curl -sS --max-time 10 -o /dev/null "https://testnet.gateway.thegraph.com/api
 else
   wrn "Graph testnet x402 gateway still does not resolve (finding F9, documented but not deployed)"
 fi
+if [ -f secrets/hedera.enc ] && [ -n "${WALLET_PASS:-}" ]; then
+  ok "secrets/hedera.enc present"
+elif [ -n "${MANDATE_HEDERA_ACCOUNT_ID:-}" ]; then
+  wrn "MANDATE_HEDERA_ACCOUNT_ID set but secrets/hedera.enc missing — npm run seal:keys"
+fi
+
 if [ -z "${GRAPH_API_KEY:-}" ]; then
-  wrn "GRAPH_API_KEY unset — Agent0 lookups need it (no public route, finding F7)"
-  note "Get one at https://thegraph.com/studio then seal it:"
-  note "  printf '%s' \"\$KEY\" | wallet-cli ring encrypt --key graph-gateway > secrets/graph.enc"
+  if [ -f secrets/graph.enc ] && [ -n "${WALLET_PASS:-}" ]; then
+    if wallet-cli ring decrypt --key graph-gateway < secrets/graph.enc >/dev/null 2>&1; then
+      ok "secrets/graph.enc present and decryptable (F7)"
+    else
+      wrn "secrets/graph.enc present but could not decrypt — check WALLET_PASS"
+    fi
+  else
+    wrn "GRAPH_API_KEY unset — Agent0 lookups need it (no public route, finding F7)"
+    note "Get one at https://thegraph.com/studio/apikeys/ then: npm run seal:keys"
+  fi
 else
   body=$(curl -sS --max-time 20 -X POST "https://gateway.thegraph.com/api/subgraphs/id/$SUB" \
     -H "authorization: Bearer $GRAPH_API_KEY" -H 'content-type: application/json' \

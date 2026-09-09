@@ -26,6 +26,7 @@ import type {
   SettlementResponse,
 } from "./types.ts";
 import type { FacilitatorConfig } from "./facilitators.ts";
+import { ExactHederaScheme, createClientHederaSigner, PrivateKey } from "@x402/hedera";
 
 /** A facilitator refusal. Never retried — see post(). */
 export class FacilitatorError extends Error {
@@ -141,28 +142,53 @@ export function encodePaymentHeader(payload: PaymentPayload): string {
   return Buffer.from(JSON.stringify(payload), "utf8").toString("base64");
 }
 
+export function buildPaymentPayload(
+  requirements: PaymentRequirements,
+  transaction: string,
+  resourceUrl?: string
+): PaymentPayload {
+  return {
+    x402Version: 2,
+    resource: {
+      url: resourceUrl ?? requirements.resource ?? "mandate://payment",
+      description: requirements.description,
+      mimeType: "application/json",
+    },
+    accepted: requirements,
+    payload: { transaction },
+  };
+}
+
 /**
  * Build and partially sign the transfer.
- *
- * TODO(day-2): implement against @hiero-ledger/sdk.
- *
- *   const tx = new TransferTransaction()
- *     .addHbarTransfer(from, Hbar.fromTinybars(-amount))
- *     .addHbarTransfer(requirements.payTo, Hbar.fromTinybars(amount))
- *     .setTransactionId(TransactionId.generate(requirements.extra.feePayer))
- *     .setNodeAccountIds([...])
- *     .freeze();
- *
- * Note the transaction ID is generated against the FEE PAYER, not against us.
- * That is counter-intuitive and is the first thing to check when the
- * facilitator returns an invalid-transaction reason.
  *
  * The signing key arrives as a Buffer from keyring.withSecret() and must be
  * consumed inside that callback so it can be zeroed on the way out.
  */
 export async function buildAndSign(
-  _requirements: PaymentRequirements,
-  _signingKey: Buffer
+  requirements: PaymentRequirements,
+  signingKey: Buffer,
+  accountId?: string
 ): Promise<string> {
-  throw new Error("buildAndSign: not yet implemented -- see Day 2 in docs/plan.md");
+  const payer = accountId ?? process.env.MANDATE_HEDERA_ACCOUNT_ID;
+  if (!payer) {
+    throw new Error(
+      "MANDATE_HEDERA_ACCOUNT_ID is required to sign Hedera exact payments."
+    );
+  }
+
+  const raw = signingKey.toString("utf8").trim();
+  const hex = raw.startsWith("0x") ? raw.slice(2) : raw;
+  const privateKey = PrivateKey.fromStringECDSA(hex);
+  const signer = createClientHederaSigner(payer, privateKey, {
+    network: requirements.network,
+  });
+  const scheme = new ExactHederaScheme(signer);
+
+  const result = await scheme.createPaymentPayload(2, requirements);
+  const payload = result.payload as { transaction?: string };
+  if (!payload?.transaction) {
+    throw new Error("ExactHederaScheme did not return a serialized transaction.");
+  }
+  return payload.transaction;
 }

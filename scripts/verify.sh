@@ -24,8 +24,16 @@ for f in packages/gateway/src/*.ts; do
 done
 
 hdr "3. No secrets committed"
-if [ -f .env ] || ls secrets/*.enc >/dev/null 2>&1; then bad "secret material present"; else ok "no .env, no sealed blobs in tree"; fi
-if grep -rIn --exclude-dir=.git --exclude-dir=node_modules --exclude=verify.sh -E "(PRIVATE_KEY|BEGIN [A-Z ]*PRIVATE|0x[a-fA-F0-9]{64})" . >/dev/null 2>&1; then
+tracked=$(git ls-files --error-unmatch .env secrets/*.enc 2>/dev/null || true)
+if [ -n "$tracked" ]; then
+  bad "secret material tracked in git"
+  printf '    \033[2m%s\033[0m\n' "$tracked"
+elif [ -f .env ]; then
+  bad ".env present locally (gitignored — ok for dev, not for commits)"
+else
+  ok "no tracked .env or secrets/*.enc (local Key Ring blobs are gitignored)"
+fi
+if grep -rIn --exclude-dir=.git --exclude-dir=node_modules --exclude-dir=.live-results --exclude=verify.sh -E "(PRIVATE_KEY|BEGIN [A-Z ]*PRIVATE|0x[a-fA-F0-9]{64})" . >/dev/null 2>&1; then
   bad "possible key material in source"; else ok "no key-shaped literals in source"; fi
 
 hdr "4. Doc consistency (no contradictions)"

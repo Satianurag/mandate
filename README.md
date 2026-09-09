@@ -111,15 +111,17 @@ confirms the Blocky402 testnet facilitator advertises Hedera. Verified today:
 
 | Component | State |
 |---|---|
-| Policy engine | implemented, 10 tests passing |
-| Key Ring custody | implemented, **provisioned and proven headless on real hardware** |
-| Reputation lookup (Agent0) | implemented; subgraph IDs need re-resolving |
+| Policy engine | implemented, 14 tests passing |
+| Key Ring custody | **provisioned and proven headless (F11)** |
+| Reputation lookup (Agent0) | implemented; needs sealed Graph key |
 | x402 wire types + facilitator client | implemented |
-| Mandate parser + device signing | Day 2 |
-| Facilitator registry (live-asserted) | implemented, verified |
-| The Graph x402 client (non-standard wire) | implemented, live-tested |
-| Batch-settlement channel, Base Sepolia | Day 1 — facilitator support verified |
-| Operator console | Day 4 |
+| Mandate parser + device signing | Day 2+ (YAML → DMK Clear Sign) |
+| Batch-settlement envelope client | `envelope.ts` + `npm run spike:envelope` |
+| Gateway proxy (`/proxy`) | implemented — decide → sign → settle → retry |
+| Hedera `buildAndSign` | implemented via `@x402/hedera` |
+| HCS audit (`audit.submit`) | implemented — needs topic id + operator creds |
+| Paid service verify/settle | implemented — no longer 501 |
+| Operator console | **not started** (per user: no UI until requested) |
 
 - [`docs/sponsor-case.md`](docs/sponsor-case.md) — why each sponsor wants this
 - [`docs/plan.md`](docs/plan.md) — day-by-day, with the cut order
