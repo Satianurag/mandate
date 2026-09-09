@@ -54,21 +54,21 @@ export async function unseal(keyName: string, ciphertext: Buffer): Promise<Buffe
 
   const out = await run(["ring", "decrypt", "--key", keyName], ciphertext);
 
-  // Guard against the CLI wrapping plaintext in its JSON envelope when stdout
-  // is a pipe. Returning `{"ok":true,...}` as if it were a private key would
-  // fail far downstream with an unreadable error, so catch it here.
+  // F6 proved `ring decrypt` returns raw plaintext over a pipe. A JSON
+  // envelope here means the CLI changed behaviour — fail loudly with the
+  // exact output. Never unwrap-and-continue: returning `{"ok":true,...}` as
+  // if it were key material would fail far downstream, unreadably.
   const env = tryEnvelope(out.toString("utf8"));
   if (env) {
-    const e = env as { ok?: boolean; error?: { message?: string }; data?: unknown };
+    const e = env as { ok?: boolean; error?: { message?: string } };
     if (e.ok === false) {
       throw new KeyRingError(
         `ring decrypt failed for key "${keyName}": ${e.error?.message ?? "unknown"}`
       );
     }
-    if (typeof e.data === "string") return Buffer.from(e.data, "utf8");
     throw new KeyRingError(
       `ring decrypt returned a JSON envelope rather than raw plaintext for key ` +
-        `"${keyName}". Pass --output explicitly or update this adapter.`
+        `"${keyName}" (wallet-cli behaviour change — update this adapter).`
     );
   }
 
@@ -87,8 +87,9 @@ export async function seal(keyName: string, plaintext: Buffer): Promise<Buffer> 
  * List keys provisioned on this machine. Used by the preflight check.
  *
  * wallet-cli 2.1.0 emits a `{ok, data}` JSON envelope when stdout is a pipe
- * (verified 2026-09-08), so this parses the envelope rather than splitting
- * lines. Falls back to line-splitting if a future version emits plain text.
+ * (verified 2026-09-08). Anything else is a CLI behaviour change and throws
+ * rather than guessing: silently misreading the key list would seal secrets
+ * under the wrong identity.
  */
 export async function listKeys(): Promise<string[]> {
   const out = (await run(["ring", "keys"], Buffer.alloc(0))).toString("utf8");
@@ -99,7 +100,9 @@ export async function listKeys(): Promise<string[]> {
     const keys = (data as { keys?: unknown })?.keys;
     if (Array.isArray(keys)) return keys.map(String);
   }
-  return out.split("\n").map((l) => l.trim()).filter(Boolean);
+  throw new KeyRingError(
+    `ring keys returned unparseable output (wallet-cli behaviour change): ${out.slice(0, 200)}`
+  );
 }
 
 /**

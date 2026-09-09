@@ -1,5 +1,10 @@
 /**
- * The consent gate — stub path has no DMK imports (keeps unit tests offline).
+ * The consent gate.
+ *
+ * There is deliberately no stub, mock, or bypass: a faked device approval
+ * would be a false record of human consent. Tests inject a fake device
+ * function through `deps` (dependency injection at the boundary); every
+ * other caller touches real hardware. Live proof: `npm run e2e:stepup`.
  */
 import type { PaymentProposal } from "./types.ts";
 import { formatLedgerError } from "./ledger-errors.ts";
@@ -17,16 +22,23 @@ export interface StepUpRequest {
   timeoutMs: number;
 }
 
+export interface StepUpDeps {
+  signOnDevice?: (
+    proposal: PaymentProposal,
+    reason: string,
+    timeoutMs: number
+  ) => Promise<void>;
+}
+
 export async function requireDeviceApproval(
   req: StepUpRequest,
+  deps: StepUpDeps = {}
 ): Promise<boolean> {
-  const stub = process.env.MANDATE_STEPUP_STUB?.toLowerCase();
-  if (stub === "approve") return true;
-  if (stub === "deny") throw new StepUpDenied("stub deny");
-
+  const sign =
+    deps.signOnDevice ??
+    ((await import("./stepup-device.ts")).signStepUpOnDevice);
   try {
-    const { signStepUpOnDevice } = await import("./stepup-device.ts");
-    await signStepUpOnDevice(req.proposal, req.reason, req.timeoutMs);
+    await sign(req.proposal, req.reason, req.timeoutMs);
     return true;
   } catch (e) {
     throw new StepUpDenied(formatLedgerError(e));

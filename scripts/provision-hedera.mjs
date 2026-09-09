@@ -16,6 +16,7 @@
 import { spawn } from "node:child_process";
 import { readFile, writeFile, unlink } from "node:fs/promises";
 import { join } from "node:path";
+import { ensureWalletPass } from "./load-wallet-pass.mjs";
 import {
   Client,
   PrivateKey,
@@ -30,22 +31,6 @@ const WAIT = process.argv.includes("--wait");
 const PAT = process.env.HEDERA_PAT?.trim();
 const MIRROR = "https://testnet.mirrornode.hedera.com/api/v1/accounts";
 const PENDING = join(ROOT, "secrets/.hedera-pending.json");
-
-async function loadWalletPass() {
-  if (process.env.WALLET_PASS) return;
-  const c = spawn("security", [
-    "find-generic-password",
-    "-a",
-    "default",
-    "-s",
-    "ledger-wallet-cli",
-    "-w",
-  ]);
-  let out = "";
-  c.stdout.on("data", (d) => (out += d));
-  await new Promise((r) => c.on("close", r));
-  if (out.trim()) process.env.WALLET_PASS = out.trim();
-}
 
 function run(cmd, args, input, binaryStdout = false) {
   return new Promise((resolve, reject) => {
@@ -139,7 +124,7 @@ async function sealKey(hexKey) {
   console.log(`sealed → secrets/hedera.enc`);
 }
 
-await loadWalletPass();
+await ensureWalletPass();
 if (!process.env.WALLET_PASS) {
   console.error("WALLET_PASS missing — run npm run device first");
   process.exit(1);

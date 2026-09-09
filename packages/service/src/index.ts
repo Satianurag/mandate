@@ -16,18 +16,22 @@ import {
 import { BLOCKY402_TESTNET } from "../../gateway/src/facilitators.ts";
 import type { PaymentPayload, PaymentRequirements } from "../../gateway/src/types.ts";
 
-const PORT = Number(process.env.SERVICE_PORT ?? 8403);
-const HOST = process.env.SERVICE_HOST ?? "127.0.0.1";
+export interface ServiceConfig {
+  payTo: string;
+  feePayer: string;
+  port: number;
+  host: string;
+}
 
 /**
  * The fee payer is NEVER hardcoded (invariant 3): a rotated facilitator key
  * would otherwise produce confusing "invalid transaction" failures. It is
  * read from the facilitator's live /supported at boot, and the service
  * refuses to start if the advertisement is missing — fail fast at boot,
- * not per-request. SERVICE_FEE_PAYER overrides only for hermetic tests.
+ * not per-request. An explicit `--fee-payer` CLI flag may pin it instead;
+ * explicit operator configuration, not a silent fallback.
  */
-async function resolveFeePayer(): Promise<string> {
-  if (process.env.SERVICE_FEE_PAYER) return process.env.SERVICE_FEE_PAYER;
+export async function resolveFeePayer(): Promise<string> {
   const res = await fetch(`${BLOCKY402_TESTNET.baseUrl}/supported`);
   if (!res.ok) throw new Error(`${BLOCKY402_TESTNET.name}: /supported returned ${res.status}`);
   const body = (await res.json()) as {
@@ -44,16 +48,37 @@ async function resolveFeePayer(): Promise<string> {
   return kind.extra.feePayer;
 }
 
-const PAY_TO =
-  process.env.SERVICE_PAY_TO ?? process.env.MANDATE_HEDERA_ACCOUNT_ID ?? "";
-if (!PAY_TO || PAY_TO === "0.0.0") {
-  console.error("Set SERVICE_PAY_TO or MANDATE_HEDERA_ACCOUNT_ID before starting the paid service.");
-  process.exit(1);
+function flagValue(name: string): string | undefined {
+  const i = process.argv.indexOf(name);
+  return i >= 0 ? process.argv[i + 1] : undefined;
 }
-const FEE_PAYER = await resolveFeePayer().catch((e: unknown) => {
+
+export async function loadConfig(): Promise<ServiceConfig> {
+  const payTo =
+    flagValue("--pay-to") ??
+    process.env.SERVICE_PAY_TO ??
+    process.env.MANDATE_HEDERA_ACCOUNT_ID ??
+    "";
+  if (!payTo || payTo === "0.0.0") {
+    throw new Error("Set --pay-to (or SERVICE_PAY_TO) before starting the paid service.");
+  }
+  const feePayer = flagValue("--fee-payer") ?? (await resolveFeePayer());
+  return {
+    payTo,
+    feePayer,
+    port: Number(process.env.SERVICE_PORT ?? 8403),
+    host: process.env.SERVICE_HOST ?? "127.0.0.1",
+  };
+}
+
+const boot: ServiceConfig = await loadConfig().catch((e: unknown): never => {
   console.error(`Cannot start paid service: ${e instanceof Error ? e.message : e}`);
   process.exit(1);
 });
+const PAY_TO = boot.payTo;
+const FEE_PAYER = boot.feePayer;
+const PORT = boot.port;
+const HOST = boot.host;
 
 /** Tinybars. 1 HBAR = 1e8 tinybars. */
 const BASE_PRICE = 2_000_000n;

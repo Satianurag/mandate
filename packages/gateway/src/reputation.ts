@@ -167,7 +167,12 @@ export async function lookupCounterparty(
   // first; ERC-8004 reputation is keyed by wallet address.
   let wallet = payTo.toLowerCase();
   if (HEDERA_ID_RE.test(payTo.trim())) {
-    const mirror = HEDERA_MIRRORS[opts.network ?? "hedera:testnet"] ?? HEDERA_MIRRORS["hedera:testnet"]!;
+    // Unknown networks throw rather than defaulting: resolving an alias
+    // against the wrong network's mirror would attribute reputation to the
+    // wrong account.
+    const network = opts.network ?? "hedera:testnet";
+    const mirror = HEDERA_MIRRORS[network];
+    if (!mirror) throw new Error(`No Hedera mirror for network "${network}".`);
     let alias: string | null;
     try {
       alias = await resolveHederaEvmAddress(payTo.trim(), mirror, fetchFn);

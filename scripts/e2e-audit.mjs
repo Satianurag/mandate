@@ -1,8 +1,12 @@
 #!/usr/bin/env node
-/** Submit a probe audit record to HCS — verifies audit.submit end to end. */
+/**
+ * HCS audit round trip: submit a probe record, then read it back from the
+ * mirror node by its unique nonce. A submit that never becomes readable
+ * never happened — this gate proves the evidence path, not just the call.
+ */
 
-import { spawn } from "node:child_process";
 import { readFile } from "node:fs/promises";
+import { ensureWalletPass } from "./load-wallet-pass.mjs";
 
 const ROOT = new URL("..", import.meta.url).pathname;
 
@@ -15,34 +19,20 @@ function need(name) {
   return v;
 }
 
-async function loadWalletPass() {
-  if (process.env.WALLET_PASS) return;
-  const c = spawn("security", [
-    "find-generic-password",
-    "-a",
-    "default",
-    "-s",
-    "ledger-wallet-cli",
-    "-w",
-  ]);
-  let out = "";
-  c.stdout.on("data", (d) => (out += d));
-  await new Promise((r) => c.on("close", r));
-  if (out.trim()) process.env.WALLET_PASS = out.trim();
-}
-
-await loadWalletPass();
-need("MANDATE_HEDERA_ACCOUNT_ID");
-need("MANDATE_HCS_TOPIC_ID");
+await ensureWalletPass();
+const accountId = need("MANDATE_HEDERA_ACCOUNT_ID");
+const topicId = need("MANDATE_HCS_TOPIC_ID");
 if (!process.env.WALLET_PASS) {
   console.error("WALLET_PASS missing — run npm run device first");
   process.exit(1);
 }
 
 const { buildRecord, submit } = await import(`${ROOT}/packages/gateway/src/audit.ts`);
+const { pollTopicRecord } = await import(`${ROOT}/packages/gateway/src/evidence.ts`);
 const { withSecret } = await import(`${ROOT}/packages/gateway/src/keyring.ts`);
 const hederaEnc = await readFile(`${ROOT}/secrets/hedera.enc`);
 
+const nonce = `probe-${Date.now()}`;
 const record = buildRecord(
   {
     origin: "http://127.0.0.1:8403",
@@ -51,7 +41,7 @@ const record = buildRecord(
       network: "hedera:testnet",
       asset: "0.0.0",
       amount: "2000000",
-      payTo: process.env.MANDATE_HEDERA_ACCOUNT_ID,
+      payTo: accountId,
       maxTimeoutSeconds: 60,
       resource: "probe",
       description: "HCS audit probe",
@@ -63,7 +53,7 @@ const record = buildRecord(
   {
     verdict: "allow",
     reason: "HCS audit probe",
-    trace: ["probe"],
+    trace: ["probe", nonce],
     reputation: {
       registered: true,
       feedbackCount: 10,
@@ -75,14 +65,20 @@ const record = buildRecord(
       chainsFailed: [],
     },
   },
-  { success: true, transactionId: "probe-tx" }
+  // The nonce rides in txId: the on-topic record carries only the verdict
+  // plus a trace hash, so the probe marks itself where it can be found.
+  { success: true, transactionId: nonce }
 );
 
 await withSecret("hedera-payment", hederaEnc, async (key) => {
-  await submit(process.env.MANDATE_HCS_TOPIC_ID, record, {
-    accountId: process.env.MANDATE_HEDERA_ACCOUNT_ID,
+  await submit(topicId, record, {
+    accountId,
     privateKeyHex: key.toString("utf8").trim(),
   });
 });
+console.log(`submitted ${nonce}, awaiting consensus…`);
 
-console.log("HCS_AUDIT_OK");
+const found = await pollTopicRecord(topicId, (r) => r?.txId === nonce, {
+  timeoutMs: 90_000,
+});
+console.log(`HCS_AUDIT_OK seq=${found.sequence} consensus=${found.consensusTimestamp}`);

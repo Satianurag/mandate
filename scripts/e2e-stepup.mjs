@@ -1,33 +1,20 @@
 #!/usr/bin/env node
 /** Live step-up — requires Ledger + Ethereum app (see docs/STEPUP.md). */
-import { spawn, spawnSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
 import { join } from "node:path";
-import { createRequire } from "node:module";
 import { ensureWalletPass } from "./load-wallet-pass.mjs";
 
 const ROOT = new URL("..", import.meta.url).pathname;
 await ensureWalletPass();
 
-function countLedgerHid() {
-  try {
-    const require = createRequire(join(ROOT, "packages/gateway/package.json"));
-    const hid = require("node-hid");
-    return hid.devices().filter((d) => d.vendorId === 0x2c97 && d.usagePage === 0xffa0).length;
-  } catch {
-    return -1;
-  }
-}
-
-const hidCount = countLedgerHid();
-if (hidCount === 0) {
-  console.error("No Ledger HID device (usagePage 0xffa0). Plug in, unlock, open Ethereum app.");
-  process.exit(1);
-}
+// No pre-probe: DMK discovery IS the device check. A separate HID probe
+// would need a native node-hid dependency just to duplicate the error path
+// that discovery already reports ("timed out", "no device") with retries.
 
 // Release HID from any stale wallet-cli / DMK session (Ledger agent-skills: no parallel device access).
 spawnSync(process.execPath, [join(ROOT, "scripts/ledger-reset.mjs")], { stdio: "ignore" });
 
-if (!process.env.MANDATE_STEPUP_STUB && process.env.MANDATE_ETH_APP_OPEN !== "1") {
+if (process.env.MANDATE_ETH_APP_OPEN !== "1") {
   console.log("Waking device (ledger:check on dashboard — NOT inside Ethereum app)…");
   const wake = spawnSync(process.execPath, [join(ROOT, "scripts/ledger-genuine-check.mjs")], {
     env: {
@@ -69,9 +56,8 @@ const proposal = {
   assetSymbol: "HBAR",
 };
 
-console.log("Step-up test — confirm message on device (see docs/STEPUP.md)…");
-console.log("Unlock Ledger if locked; approve when message appears.");
-console.log("Set MANDATE_STEPUP_STUB=approve to skip device for CI.\n");
+console.log("Step-up test — live device required (see docs/STEPUP.md)…");
+console.log("Unlock Ledger if locked; approve when prompted on screen.\n");
 
 try {
   await requireDeviceApproval({

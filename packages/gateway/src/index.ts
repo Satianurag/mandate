@@ -21,7 +21,7 @@ import {
 } from "./hedera.ts";
 import { BLOCKY402_TESTNET, X402_FOUNDATION } from "./facilitators.ts";
 import { buildRecord, submit } from "./audit.ts";
-import { requireDeviceApproval, StepUpDenied } from "./stepup.ts";
+import { requireDeviceApproval, StepUpDenied, type StepUpDeps } from "./stepup.ts";
 import { withSecret } from "./keyring.ts";
 import type { PaymentProposal, PaymentRequiredBody, PaymentPayload, PaymentRequirements, SettlementResponse } from "./types.ts";
 
@@ -41,7 +41,8 @@ export const policyEngine = new PolicyEngine(DEFAULT_POLICY);
 export async function decide(
   origin: string,
   challenge: PaymentRequiredBody,
-  graphApiKey: string
+  graphApiKey: string | null,
+  deps: { stepUp?: StepUpDeps } = {}
 ) {
   const requirements = challenge.accepts[0];
   if (!requirements) {
@@ -56,9 +57,24 @@ export async function decide(
     assetSymbol: symbol,
   };
 
-  const reputation = await lookupCounterparty(requirements.payTo, graphApiKey, {
-    network: requirements.network,
-  }).catch((e) => {
+  // A null key means reputation is UNAVAILABLE (no sealed key on this host),
+  // not "unregistered". No doomed lookups are attempted; the coverage record
+  // says exactly what happened, and policy degrades to step_up.
+  const reputation =
+    graphApiKey === null
+      ? {
+          registered: false,
+          feedbackCount: 0,
+          meanScore: null,
+          revokedCount: 0,
+          validationCount: 0,
+          chainsQueried: Object.keys(AGENT0_SUBGRAPHS).length,
+          chainsReachable: 0,
+          chainsFailed: ["graph-key-missing"],
+        }
+      : await lookupCounterparty(requirements.payTo, graphApiKey, {
+          network: requirements.network,
+        }).catch((e) => {
     // Total lookup failure (programming error, not a registry outage — those
     // are recorded per-chain inside the reputation record). Fail safe AND
     // say so: zero registries were read.
@@ -79,11 +95,14 @@ export async function decide(
 
   if (decision.verdict === "step_up") {
     try {
-      await requireDeviceApproval({
-        proposal,
-        reason: decision.reason,
-        timeoutMs: Number(process.env.MANDATE_STEPUP_TIMEOUT_MS ?? 120_000),
-      });
+      await requireDeviceApproval(
+        {
+          proposal,
+          reason: decision.reason,
+          timeoutMs: Number(process.env.MANDATE_STEPUP_TIMEOUT_MS ?? 120_000),
+        },
+        deps.stepUp ?? {}
+      );
     } catch (e) {
       if (e instanceof StepUpDenied) {
         return {
@@ -179,23 +198,19 @@ export async function executePayment(
   };
 }
 
-async function loadGraphKey(): Promise<string> {
-  // Sealed Key Ring blob first — it is the production path. A plaintext env
-  // key is a local-dev fallback only, and its use is logged so it can never
-  // silently become the deployment's credential story.
-  try {
-    const { readFile } = await import("node:fs/promises");
-    const enc = await readFile(GRAPH_KEY_PATH);
-    return await withSecret("graph-gateway", enc, (buf) =>
-      Promise.resolve(buf.toString("utf8").trim())
-    );
-  } catch {
-    if (process.env.GRAPH_API_KEY) {
-      console.error("[custody] WARNING: using plaintext GRAPH_API_KEY — seal it (npm run seal:keys)");
-      return process.env.GRAPH_API_KEY;
-    }
-    throw new Error(`No Graph API key: ${GRAPH_KEY_PATH} unreadable and GRAPH_API_KEY unset.`);
-  }
+/**
+ * Unseal the Graph gateway key from the Key Ring. Returns null when no
+ * sealed key exists on this host — the caller then records reputation as
+ * unavailable (never as trusted). There is no env-var path: a plaintext
+ * API key in the environment would violate invariant 1.
+ */
+async function loadGraphKey(): Promise<string | null> {
+  const { readFile } = await import("node:fs/promises");
+  const enc = await readFile(GRAPH_KEY_PATH).catch(() => null);
+  if (!enc) return null;
+  return withSecret("graph-gateway", enc, (buf) =>
+    Promise.resolve(buf.toString("utf8").trim())
+  );
 }
 
 async function loadHederaKeyEnc(): Promise<Buffer> {
@@ -211,7 +226,7 @@ export async function proxyFetch(upstreamUrl: string, init?: RequestInit) {
   if (res.status !== 402) return res;
 
   const challenge = (await res.json()) as PaymentRequiredBody;
-  const graphKey = await loadGraphKey().catch(() => "deliberately-invalid-key");
+  const graphKey = await loadGraphKey();
   const out = await decide(origin, challenge, graphKey);
 
   if (out.decision.verdict === "deny") {
@@ -247,6 +262,12 @@ export async function proxyFetch(upstreamUrl: string, init?: RequestInit) {
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
+  // The audit trail is load-bearing: a gateway that cannot record verdicts
+  // must not serve. No silent degraded mode.
+  if (!HCS_TOPIC) {
+    console.error("Set MANDATE_HCS_TOPIC_ID before starting the gateway (npm run provision:hcs).");
+    process.exit(1);
+  }
   const server = createServer(async (req, res) => {
     const url = new URL(req.url ?? "/", `http://127.0.0.1:${PORT}`);
     if (url.pathname !== "/proxy") {

@@ -19,17 +19,19 @@ const PORT = 8409;
 
 function startService(): Promise<ChildProcess> {
   // Hermetic: the suite must pass with ZERO ambient env (README's one-liner).
-  // SERVICE_FEE_PAYER pins the test double; production resolves it live.
+  // Explicit CLI flags pin the test double; production resolves live.
   const child = spawn(
     process.execPath,
-    ["--experimental-strip-types", new URL("../../service/src/index.ts", import.meta.url).pathname],
+    [
+      "--experimental-strip-types",
+      new URL("../../service/src/index.ts", import.meta.url).pathname,
+      "--pay-to",
+      "0.0.5005",
+      "--fee-payer",
+      "0.0.7162784",
+    ],
     {
-      env: {
-        ...process.env,
-        SERVICE_PORT: String(PORT),
-        SERVICE_PAY_TO: process.env.SERVICE_PAY_TO ?? "0.0.5005",
-        SERVICE_FEE_PAYER: "0.0.7162784",
-      },
+      env: { ...process.env, SERVICE_PORT: String(PORT) },
       stdio: "ignore",
     }
   );
@@ -37,19 +39,6 @@ function startService(): Promise<ChildProcess> {
 }
 
 test("live 402 -> policy engine -> fail-safe deny", async (t) => {
-  const prevDiscover = process.env.MANDATE_STEPUP_DISCOVER_MS;
-  const prevAttempts = process.env.MANDATE_STEPUP_ATTEMPTS;
-  const prevStub = process.env.MANDATE_STEPUP_STUB;
-  process.env.MANDATE_STEPUP_STUB = "deny";
-  t.after(() => {
-    if (prevDiscover === undefined) delete process.env.MANDATE_STEPUP_DISCOVER_MS;
-    else process.env.MANDATE_STEPUP_DISCOVER_MS = prevDiscover;
-    if (prevAttempts === undefined) delete process.env.MANDATE_STEPUP_ATTEMPTS;
-    else process.env.MANDATE_STEPUP_ATTEMPTS = prevAttempts;
-    if (prevStub === undefined) delete process.env.MANDATE_STEPUP_STUB;
-    else process.env.MANDATE_STEPUP_STUB = prevStub;
-  });
-
   const svc = await startService();
   t.after(() => svc.kill());
 
@@ -70,8 +59,15 @@ test("live 402 -> policy engine -> fail-safe deny", async (t) => {
   assert.equal(symbol, "HBAR");
   assert.equal(amount, Number(req.amount) / 1e8);
 
-  // The invariant.
-  const out = await decide(`http://localhost:${PORT}`, challenge, "deliberately-invalid-key");
+  // The invariant. Null key = reputation unavailable; denying device = no
+  // human consent. Neither may produce an allow.
+  const out = await decide(`http://localhost:${PORT}`, challenge, null, {
+    stepUp: {
+      signOnDevice: async () => {
+        throw new Error("no device in test");
+      },
+    },
+  });
   assert.notEqual(out.decision.verdict, "allow", "a missing Graph key must never fail open");
   assert.equal(out.decision.verdict, "deny", "no device -> escalation resolves to deny");
   assert.ok(

@@ -110,14 +110,6 @@ log.push(
   )
 );
 
-log.push(
-  await gate("e2e-stepup-stub", () =>
-    run(process.execPath, [join(ROOT, "scripts/e2e-stepup.mjs")], {
-      env: { ...process.env, MANDATE_STEPUP_STUB: "approve" },
-    })
-  )
-);
-
 if (process.env.MANDATE_STEPUP_LIVE === "1") {
   log.push(
     await gate("e2e-stepup-device", () =>
@@ -137,6 +129,10 @@ log.push(
     );
     await new Promise((r) => setTimeout(r, 1500));
     try {
+      // Fail fast on the step-up: no device is attached during gates, and a
+      // real discovery cycle (5 attempts) would stall the suite for minutes.
+      process.env.MANDATE_STEPUP_DISCOVER_MS = "3000";
+      process.env.MANDATE_STEPUP_ATTEMPTS = "1";
       const { proxyFetch } = await import(`${ROOT}/packages/gateway/src/index.ts`);
       const url = "http://127.0.0.1:8411/analytics?q=%7B%20a%20%7B%20id%20%7D%20%7D";
       const res = await proxyFetch(url);
