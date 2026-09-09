@@ -48,6 +48,7 @@ plan changes. Re-verify any time with `npm run verify` (counts itself) and
 | F24 | No Substreams endpoint serves Base Sepolia (either provider) — module CUT, not deferred | **RESOLVED** | 09 Sep |
 | F25 | HCS-14 SDK runtime proven spec-correct; three packaging gaps worked around honestly | **RESOLVED** | 09 Sep |
 | F26 | Treasury top-up leg: three SDK footguns caught by probes before they cost a demo | **RESOLVED** | 09 Sep |
+| F27 | `upto` spike: the mapping we wanted already exists where we control the scheme — don't adopt | **RESOLVED** | 09 Sep |
 
 ---
 
@@ -680,3 +681,31 @@ enforced in the builder.
 `scripts/treasury-topup.mjs` (`npm run treasury:topup`), treasury stanza in
 `seal-hedera.sh`. Live mirror read from the sandbox is ECONNRESET-blocked, so
 the operator's first `treasury:topup` run is also the live read-back proof.
+
+## F27 — `upto` spike: don't adopt · RESOLVED
+
+**Hypothesis:** the x402 `upto` scheme (authorize a max, settle the actual)
+might model a mandate more directly than `exact`.
+
+**Observed (installed `@x402/*@2.25`, not docs-memory):**
+1. Stock `upto` is EVM-only and Permit2-based: `UptoEvmScheme` client +
+   facilitator in `@x402/evm`, settling through the `x402UptoPermit2Proxy`
+   contract (`caipFamily = "eip155:*"`). `@x402/hedera` exports only
+   `ExactHederaScheme` — no Hedera `upto` exists; one would have to be
+   hand-built on HTS allowances (custom scheme code, weeks, against the
+   stock-tools rule).
+2. As a *client*, the scheme is the server's choice, not ours. Our gateway
+   registers Hedera-exact only, and no merchant in our path serves `upto`
+   requirements. Registering `UptoEvmScheme` speculatively would be code
+   with nobody to talk to.
+3. As a *facilitator*, the hypothesis is true but already realized: our
+   self-hosted batch-settlement channel on Base Sepolia IS
+   authorize-max/settle-actual (deposit ceiling -> voucher actuals ->
+   settle). There is no second, better-shaped mechanism to gain.
+
+**Verdict:** don't adopt. If an `upto` merchant ever appears, the recipe is
+5 lines — register `UptoEvmScheme` with an EVM signer in `client.ts` — and
+zero policy changes: the `onBeforePaymentCreation` / `onPaymentResponse`
+hooks are scheme-agnostic.
+
+**Cost:** ~25 min spike, zero code changed.

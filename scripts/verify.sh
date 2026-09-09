@@ -81,20 +81,29 @@ hedera-harness 1.2.2
 PKGS
 
 hdr "6. Live rails"
+# Probes exit 2 when the host itself is unreachable (sandboxed/egress-filtered
+# network) so a red line names its cause instead of crying rail regression.
+netcode="const c=e?.cause?.code??e?.code??'';process.exit(['ECONNRESET','ENOTFOUND','EAI_AGAIN','ETIMEDOUT','ECONNREFUSED'].includes(c)?2:1)"
 node --experimental-strip-types -e "
 import('./packages/gateway/src/facilitators.ts').then(async m=>{
   await m.assertSupports(m.BLOCKY402_URL,'exact@hedera:testnet');
   process.exit(0);
-}).catch(e=>{console.error(e.message);process.exit(1)})" >/dev/null 2>&1 \
-  && ok "exact@hedera:testnet live on Blocky402 (EVM leg is self-hosted; proven by mandate:open)" \
-  || bad "Blocky402 no longer advertises exact@hedera:testnet"
+}).catch(e=>{console.error(e.message);eval(\"$netcode\")})" >/dev/null 2>&1
+case $? in
+  0) ok "exact@hedera:testnet live on Blocky402 (EVM leg is self-hosted; proven by mandate:open)" ;;
+  2) bad "Blocky402 UNREACHABLE from this network (re-run verify on the operator host)" ;;
+  *) bad "Blocky402 no longer advertises exact@hedera:testnet" ;;
+esac
 node --experimental-strip-types -e "
 import('./packages/gateway/src/graph.ts').then(async m=>{
   const r=await m.queryOrChallenge('43s9hQRurMGjuYnC1r2ZwS6xSQktbFyXMPMqGKUFJojb','{_meta{block{number}}}');
   process.exit(r.kind==='challenge'?0:1);
-}).catch(()=>process.exit(1))" >/dev/null 2>&1 \
-  && ok "Graph x402 gateway still returns a decodable 402" \
-  || bad "Graph x402 challenge changed shape"
+}).catch(e=>{eval(\"$netcode\")})" >/dev/null 2>&1
+case $? in
+  0) ok "Graph x402 gateway still returns a decodable 402" ;;
+  2) bad "Graph gateway UNREACHABLE from this network (re-run verify on the operator host)" ;;
+  *) bad "Graph x402 challenge changed shape" ;;
+esac
 
 hdr "Result"
 printf '  \033[1mpassed %d   failed %d\033[0m\n\n' "$pass" "$fail"

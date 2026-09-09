@@ -73,7 +73,7 @@ Running order that matches the product's logic:
       the Day-1 plaintext-key spike is deleted, superseded by the mandate flow)
 - [x] Graph Studio API key, sealed into the Key Ring — hard dependency (F7)
       (`secrets/graph.enc`; rotate in Studio before public demo — key was in chat export)
-- [ ] 30 min spike on the `upto` scheme — may map to a mandate even more directly
+- [x] 30 min spike on the `upto` scheme — verdict: DON'T adopt (F27: EVM/Permit2-only, no Hedera stock scheme; our batch-settlement channel already is authorize-max/settle-actual)
 - [x] `npm i -g @ledgerhq/wallet-cli`
 - [x] `wallet-cli ring init` with the device attached
 - [x] Prove headless `ring decrypt` works with the device unplugged (`npm run preflight`)
@@ -116,8 +116,8 @@ the Ledger ETHGlobal Telegram before sleeping.
 
 - [ ] 2–4 min video: one allow, one step-up with the device in frame, one deny
 - [ ] Screen-record a real settled transaction ID
-- [ ] Finish `DX.md`
-- [ ] README with one-command reproduction
+- [x] Finish `DX.md` (per-sponsor developer journeys, every command real)
+- [x] README with one-command reproduction (`npm install && npm run verify`; verify §6 names unreachable-vs-regressed honestly)
 - [ ] **Submit Saturday evening, not Sunday morning**
 
 ## The console
