@@ -1,0 +1,16 @@
+node_modules/
+dist/
+*.tsbuildinfo
+.DS_Store
+.device-results
+
+# Never commit plaintext secrets. Breaker has no .env by design --
+# credentials live in the Ledger Key Ring. See docs/threat-model.md.
+.env
+.env.*
+*.key
+*.pem
+
+# Key Ring ciphertext is safe to commit in principle, but keep demo
+# blobs out of history to avoid confusing judges about what is sealed.
+secrets/*.enc

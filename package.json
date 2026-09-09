@@ -1,0 +1,22 @@
+{
+  "name": "mandate",
+  "private": true,
+  "version": "0.1.0",
+  "description": "A hardware-signed authorization envelope for AI agents. Approve once on your Ledger; the agent works at machine speed inside bounds it cannot widen.",
+  "workspaces": [
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "preflight": "bash scripts/preflight.sh",
+    "gateway": "npm run dev -w @mandate/gateway",
+    "service": "npm run dev -w @mandate/service",
+    "build": "npm run build --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "verify": "bash scripts/verify.sh",
+    "device": "bash scripts/ring-watch.sh"
+  },
+  "license": "MIT"
+}

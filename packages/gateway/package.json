@@ -1,0 +1,21 @@
+{
+  "name": "@mandate/gateway",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "node --experimental-strip-types src/index.ts",
+    "build": "tsc -p tsconfig.json",
+    "test": "node --experimental-strip-types --test src/*.test.ts"
+  },
+  "dependencies": {
+    "@hiero-ledger/sdk": "^2.87.0",
+    "@ledgerhq/device-management-kit": "^1.9.0",
+    "@ledgerhq/device-signer-kit-ethereum": "^1.18.0",
+    "@ledgerhq/device-transport-kit-web-hid": "^1.2.4",
+    "@x402/core": "^2.25.0",
+    "@x402/evm": "^2.25.0",
+    "@x402/hedera": "^2.25.0",
+    "@x402/fetch": "^2.25.0"
+  }
+}
