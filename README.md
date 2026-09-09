@@ -95,34 +95,53 @@ sealed with `wallet-cli ring encrypt` and unsealed for the lifetime of a single
 operation, then zeroed. A blob sealed once with the device attached opens later
 on a VPS with no device present.
 
-## Getting started
+## Getting started — one command reproduces everything checkable
 
 ```bash
-npm install
+npm install && npm run verify
+```
+
+`verify` runs the hermetic suite in every workspace with an **empty
+environment** (no keys, no network, no device), imports every module, scans
+for committed secrets, checks the docs against the code (fee-payer
+invariant, Graph 200-on-error, findings log agreement), and confirms the
+pinned toolchain versions against npm. Zero env required; anyone can run it.
+
+Operator flows (need the Key Ring + testnet funds) build on top:
+
+```bash
 npm run preflight          # toolchain, Key Ring, facilitator, Graph key
-npm test -w @mandate/gateway
 ```
 
 `preflight` seals and unseals a throwaway value with no device attached, and
-confirms the Blocky402 testnet facilitator advertises Hedera. Verified today:
+confirms the Blocky402 testnet facilitator advertises Hedera. Verified:
 `hedera:testnet`, scheme `exact`, feePayer `0.0.7162784`.
+
+The mandate demo (one tap, then vouchers):
+
+```bash
+npm run mandate:keygen && npm run facilitator:keygen
+# fund the payer with Base Sepolia USDC + the submitter with ETH (links printed)
+cp mandate.example.yaml mandate.yaml   # set salt + receiver
+npm run check:mandate && npm run mandate:open
+```
 
 ## Status
 
 | Component | State |
 |---|---|
-| Policy engine | implemented, 14 tests passing |
+| Policy engine | implemented, hermetic suite green, F18 hybrid locked in |
 | Key Ring custody | **provisioned and proven headless (F11)** |
-| Reputation lookup (Agent0) | implemented; needs sealed Graph key |
-| x402 wire types + facilitator client | implemented |
-| Mandate parser + device signing | Day 2+ (YAML → DMK Clear Sign) |
-| Batch-settlement envelope client | `envelope.ts` + `npm run spike:envelope` |
-| Gateway proxy (`/proxy`) | implemented — decide → sign → settle → retry |
-| Hedera `buildAndSign` | implemented via `@x402/hedera` |
-| HCS audit (`audit.submit`) | implemented — needs topic id + operator creds |
-| Paid service verify/settle | implemented — no longer 501 |
+| Reputation lookup (Agent0) | implemented; Hedera `0.0.x` → EVM alias resolution (F20) |
+| Device step-up (DMK) | implemented, live `STEPUP_OK` (clear mode) |
+| Mandate client (`DmkEvmSigner` + ceiling strategy) | implemented; live proof = `npm run mandate:open` |
+| Self-hosted facilitator + mandate service | implemented, strict-booting; live proof = `npm run mandate:open` |
+| HCS audit (payments + mandates) + mirror read-back | implemented — every record carries the operator UAID (F25); needs topic id; Key Ring creds only |
+| Treasury top-up (HIP-423 time-locked schedule) | implemented, 9 hermetic tests; live run = `npm run treasury:topup` (F26) |
+| Hedera paid service (Blocky402) | stock harness — fee payer merged live from the facilitator ad, boot fails fast |
 | Operator console | **not started** (per user: no UI until requested) |
 
+- [`docs/DX.md`](docs/DX.md) — the developer journey per sponsor, command by command
 - [`docs/sponsor-case.md`](docs/sponsor-case.md) — why each sponsor wants this
 - [`docs/plan.md`](docs/plan.md) — day-by-day, with the cut order
 - [`docs/architecture.md`](docs/architecture.md) — which rail does what, and the invariants

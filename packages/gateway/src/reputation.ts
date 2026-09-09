@@ -14,9 +14,53 @@
  * MCP:   https://github.com/graphops/subgraph-mcp
  */
 
+import { HEDERA_ENTITY_ID_REGEX } from "@x402/hedera";
 import type { CounterpartyReputation } from "./types.ts";
 
 const GATEWAY = "https://gateway.thegraph.com/api";
+// Current canonical mirror endpoints. NOT the stock `@x402/hedera` mirror
+// constants -- those still point at the legacy `*-public` hosts.
+const HEDERA_MIRRORS: Record<string, string> = {
+  "hedera:mainnet": "https://mainnet.mirrornode.hedera.com/api/v1",
+  "hedera:testnet": "https://testnet.mirrornode.hedera.com/api/v1",
+  "hedera:previewnet": "https://previewnet.mirrornode.hedera.com/api/v1",
+};
+/** Entity-id shape, stock from `@x402/hedera` — identical to the hand-rolled regex this replaces. */
+const HEDERA_ID_RE = HEDERA_ENTITY_ID_REGEX;
+
+type FetchFn = typeof fetch;
+
+export interface LookupOptions {
+  /** CAIP-2 network of the payment; selects the Hedera mirror for alias resolution. */
+  network?: string;
+  /** Injectable for tests; defaults to the global fetch. */
+  fetchFn?: FetchFn;
+}
+
+/**
+ * Resolve a Hedera account ID (0.0.x) to its EVM address alias via the
+ * mirror node, so ERC-8004 reputation (keyed by EVM wallet) can be read for
+ * Hedera-native payees. Without this, every Hedera payment resolves to
+ * "unregistered" and escalates — the metered-query path could never `allow`.
+ *
+ * Returns null when the account exists but carries no EVM alias. THROWS when
+ * the mirror itself cannot be read, so the caller records a coverage failure
+ * rather than a clean "unregistered".
+ */
+export async function resolveHederaEvmAddress(
+  accountId: string,
+  mirrorBase: string,
+  fetchFn: FetchFn = fetch
+): Promise<string | null> {
+  const res = await fetchFn(`${mirrorBase}/accounts/${accountId}`);
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(`Hedera mirror: HTTP ${res.status} for ${accountId}`);
+  const body = (await res.json().catch(() => null)) as { evm_address?: string } | null;
+  if (!body) throw new Error(`Hedera mirror: unparseable response for ${accountId}`);
+  return typeof body.evm_address === "string" && body.evm_address.startsWith("0x")
+    ? body.evm_address.toLowerCase()
+    : null;
+}
 
 /**
  * Agent0 deployments, by chain. Verified against The Graph's docs 2026-09-08.
@@ -28,8 +72,9 @@ const GATEWAY = "https://gateway.thegraph.com/api";
  * the SAME chain rather than reading mainnet reputation to authorise a testnet
  * payment, which never really made sense.
  *
- * Testnet is queried first for that reason; mainnet stays as a fallback so a
- * counterparty registered only on mainnet is still recognised.
+ * Every deployment is queried and the results are POOLED (F15): there is no
+ * "testnet first, mainnet fallback" ordering — ordering lookups by chain is
+ * what created the laundering vector.
  */
 export const AGENT0_TESTNET: Record<string, string> = {
   "base-sepolia": "4yYAvQLFjBhBtdRCY7eUWo181VNoTSLLFd5M7FXQAi6u",
@@ -110,15 +155,62 @@ interface RawAgent {
  * for the same reason.
  */
 export async function lookupCounterparty(
-  payToEvmAddress: string,
-  apiKey: string
+  payTo: string,
+  apiKey: string,
+  opts: LookupOptions = {}
 ): Promise<CounterpartyReputation> {
-  const wallet = payToEvmAddress.toLowerCase();
-
+  const fetchFn = opts.fetchFn ?? fetch;
   const entries = Object.entries(AGENT0_SUBGRAPHS);
+  const fullCoverage = {
+    chainsQueried: entries.length,
+    chainsReachable: entries.length,
+    chainsFailed: [] as string[],
+  };
+
+  // Hedera-native payees (0.0.x) are not EVM wallets. Resolve the EVM alias
+  // first; ERC-8004 reputation is keyed by wallet address.
+  let wallet = payTo.toLowerCase();
+  if (HEDERA_ID_RE.test(payTo.trim())) {
+    // Unknown networks throw rather than defaulting: resolving an alias
+    // against the wrong network's mirror would attribute reputation to the
+    // wrong account.
+    const network = opts.network ?? "hedera:testnet";
+    const mirror = HEDERA_MIRRORS[network];
+    if (!mirror) throw new Error(`No Hedera mirror for network "${network}".`);
+    let alias: string | null;
+    try {
+      alias = await resolveHederaEvmAddress(payTo.trim(), mirror, fetchFn);
+    } catch {
+      // The mirror did not answer: zero registries were read, and the audit
+      // record must say so rather than reporting a clean "unregistered".
+      return {
+        registered: false,
+        feedbackCount: 0,
+        meanScore: null,
+        revokedCount: 0,
+        validationCount: 0,
+        chainsQueried: entries.length,
+        chainsReachable: 0,
+        chainsFailed: ["hedera-mirror"],
+      };
+    }
+    if (!alias) {
+      // Account exists but has no EVM alias: genuinely no ERC-8004 identity.
+      return {
+        registered: false,
+        feedbackCount: 0,
+        meanScore: null,
+        revokedCount: 0,
+        validationCount: 0,
+        ...fullCoverage,
+      };
+    }
+    wallet = alias;
+  }
+
   const settled = await Promise.allSettled(
     entries.map(async ([chain, id]) => {
-      const agent = await queryAgent(id, wallet, apiKey);
+      const agent = await queryAgent(id, wallet, apiKey, fetchFn);
       return { chain, agent };
     })
   );
@@ -192,9 +284,10 @@ export async function lookupCounterparty(
 async function queryAgent(
   subgraphId: string,
   wallet: string,
-  apiKey: string
+  apiKey: string,
+  fetchFn: FetchFn = fetch
 ): Promise<RawAgent | null> {
-  const res = await fetch(`${GATEWAY}/subgraphs/id/${subgraphId}`, {
+  const res = await fetchFn(`${GATEWAY}/subgraphs/id/${subgraphId}`, {
     method: "POST",
     headers: {
       "content-type": "application/json",

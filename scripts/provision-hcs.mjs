@@ -5,7 +5,6 @@
  * Prerequisites: secrets/hedera.enc, MANDATE_HEDERA_ACCOUNT_ID, WALLET_PASS
  */
 
-import { spawn } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import {
   Client,
@@ -13,6 +12,7 @@ import {
   AccountId,
   TopicCreateTransaction,
 } from "@hiero-ledger/sdk";
+import { ensureWalletPass } from "./load-wallet-pass.mjs";
 
 const ROOT = new URL("..", import.meta.url).pathname;
 
@@ -25,23 +25,7 @@ function need(name) {
   return v;
 }
 
-async function loadWalletPass() {
-  if (process.env.WALLET_PASS) return;
-  const c = spawn("security", [
-    "find-generic-password",
-    "-a",
-    "default",
-    "-s",
-    "ledger-wallet-cli",
-    "-w",
-  ]);
-  let out = "";
-  c.stdout.on("data", (d) => (out += d));
-  await new Promise((r) => c.on("close", r));
-  if (out.trim()) process.env.WALLET_PASS = out.trim();
-}
-
-await loadWalletPass();
+await ensureWalletPass();
 need("MANDATE_HEDERA_ACCOUNT_ID");
 if (!process.env.WALLET_PASS) {
   console.error("WALLET_PASS missing — run npm run device first");

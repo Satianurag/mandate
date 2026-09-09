@@ -68,16 +68,17 @@ Running order that matches the product's logic:
 - [x] Confirm Blocky402 testnet advertises `hedera:testnet` (done, feePayer `0.0.7162784`)
 - [x] Facilitators, chains, packages, gateway wire formats — all verified
       (`docs/FINDINGS.md`, `npm run preflight`: 8 passed, 0 failed)
-- [x] Open a batch-settlement channel on Base Sepolia via `x402.org/facilitator`
-      (testnet, free — `npm run check:spike` then `npm run spike:envelope` once funded)
+- [x] Open a batch-settlement channel on Base Sepolia via the self-hosted facilitator
+      (testnet, free — `npm run check:mandate` then `npm run mandate:open` once funded;
+      the Day-1 plaintext-key spike is deleted, superseded by the mandate flow)
 - [x] Graph Studio API key, sealed into the Key Ring — hard dependency (F7)
       (`secrets/graph.enc`; rotate in Studio before public demo — key was in chat export)
-- [ ] 30 min spike on the `upto` scheme — may map to a mandate even more directly
+- [x] 30 min spike on the `upto` scheme — verdict: DON'T adopt (F27: EVM/Permit2-only, no Hedera stock scheme; our batch-settlement channel already is authorize-max/settle-actual)
 - [x] `npm i -g @ledgerhq/wallet-cli`
 - [x] `wallet-cli ring init` with the device attached
 - [x] Prove headless `ring decrypt` works with the device unplugged (`npm run preflight`)
 - [x] **Settle finding F6**: raw plaintext from `ring decrypt` (no envelope)
-- [ ] `npx skills add ledgerhq/agent-skills`
+- [x] `npx skills add ledgerhq/agent-skills` (4 skills, project-level: `.agents/skills/` + `skills-lock.json`)
 - [x] Settle one throwaway x402 payment end to end
       (`npm run live:gates` runs all gates; or `npm run check:ready` then `npm run e2e:payment`)
 
@@ -86,7 +87,7 @@ the Ledger ETHGlobal Telegram before sleeping.
 
 ## Day 2 — Wed 9 Sep — the spine
 
-- [x] `hedera.buildAndSign` via `@x402/hedera` ExactHederaScheme
+- [x] Sealed Hedera signer delegating to `@x402/hedera` ExactHederaScheme (stock client + `wrapFetchWithPayment`; judgment in SDK hooks)
 - [x] Proxy request path: intercept 402 → decide → settle → retry (`GET /proxy`)
 - [x] `audit.submit` to an HCS topic (requires `MANDATE_HCS_TOPIC_ID`; `npm run provision:hcs` then `npm run e2e:audit`)
 - [x] Stand up `packages/service` — verify + settle before serving
@@ -104,10 +105,10 @@ the Ledger ETHGlobal Telegram before sleeping.
 
 ## Day 4 — Fri 11 Sep — extras, then freeze
 
-- [ ] Substreams `x402-payments` module
-- [ ] Scheduled-Transaction treasury top-up leg
-- [ ] HCS-14 UAID registration
-- [ ] Hedera Harness Tier 3.5 x402 assertion PR — **only if the core is stable**
+- [x] ~~Substreams `x402-payments` module~~ — CUT, not deferred (F24: no Base Sepolia endpoint on either provider, and no toolchain obtainable to build it — a module that can neither compile here nor observe our chain is theater)
+- [x] Scheduled-Transaction treasury top-up leg (HIP-423 wait-for-expiry; `treasury:topup`; live run pending operator)
+- [x] HCS-14 UAID registration (`uaid.ts` + `npm run uaid:register`; every audit record carries the operator UAID — live inscription pending operator run)
+- [x] Hedera Harness Tier 3.5 x402 assertion PR — code DONE, 173/173 green, patch ready; push blocked on GitHub scope (bot token 403 on hedera-dev fork) — operator runs: `gh repo fork hedera-dev/hedera-harness --clone=true`, apply `/home/user/harness-x402-tier35.patch` (`git am`), push branch, `gh pr create`
 - [ ] Deploy the gateway to a VPS; the no-device demo runs from there
 - [ ] Record a clean step-up take as insurance
 
@@ -115,8 +116,8 @@ the Ledger ETHGlobal Telegram before sleeping.
 
 - [ ] 2–4 min video: one allow, one step-up with the device in frame, one deny
 - [ ] Screen-record a real settled transaction ID
-- [ ] Finish `DX.md`
-- [ ] README with one-command reproduction
+- [x] Finish `DX.md` (per-sponsor developer journeys, every command real)
+- [x] README with one-command reproduction (`npm install && npm run verify`; verify §6 names unreachable-vs-regressed honestly)
 - [ ] **Submit Saturday evening, not Sunday morning**
 
 ## The console

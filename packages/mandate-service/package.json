@@ -1,0 +1,19 @@
+{
+  "name": "@mandate/mandate-service",
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "node --experimental-strip-types src/index.ts",
+    "build": "tsc -p tsconfig.json",
+    "test": "node --experimental-strip-types --test src/*.test.ts"
+  },
+  "dependencies": {
+    "@x402/core": "^2.25.0",
+    "@x402/evm": "^2.25.0",
+    "viem": "^2.48.11"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.1",
+    "typescript": "~7.0.2"
+  }
+}

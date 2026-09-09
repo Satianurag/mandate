@@ -17,7 +17,7 @@ export const {
 } = require("@ledgerhq/device-management-kit");
 
 export type DeviceActionState<TOutput> =
-  import("@ledgerhq/device-management-kit").DeviceActionState<TOutput>;
+  import("@ledgerhq/device-management-kit").DeviceActionState<TOutput, unknown, unknown>;
 
 export const { nodeHidTransportFactory } = require("@ledgerhq/device-transport-kit-node-hid") as {
   nodeHidTransportFactory: typeof import("@ledgerhq/device-transport-kit-node-hid").nodeHidTransportFactory;

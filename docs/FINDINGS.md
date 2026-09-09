@@ -6,7 +6,7 @@ and the other doc gets fixed.
 
 **Rule: every entry is something we OBSERVED, not something we read.** Where a
 measurement contradicts published documentation, the measurement wins and the
-plan changes. Re-verify any time with `npm run verify` (26 checks) and
+plan changes. Re-verify any time with `npm run verify` (counts itself) and
 `npm run preflight` (live rails).
 
 | Status | Meaning |
@@ -39,7 +39,16 @@ plan changes. Re-verify any time with `npm run verify` (26 checks) and
 | F15 | First-chain-wins reputation lookup was a **laundering vector** | **RESOLVED** | 08 Sep |
 | F16 | All three verdicts reached from live on-chain reputation | **PROVEN** | 08 Sep |
 | F17 | 3 of 9 Agent0 deployments fail — silently, until now | **RESOLVED** | 09 Sep |
-| F18 | Fail-safe coverage vs. usability — a real tradeoff, undecided | **OPEN** | 09 Sep |
+| F18 | Fail-safe coverage vs. usability — hybrid (weighted + hard gate) | **RESOLVED** | 09 Sep |
+| F19 | `envelope.ts` salt diverged from the spike's — one nibble, different channel | **RESOLVED** | 09 Sep |
+| F20 | Hedera `0.0.x` payees could never resolve reputation — always escalated | **RESOLVED** | 09 Sep |
+| F21 | Settled spend was never recorded — the rolling budget never accrued | **RESOLVED** | 09 Sep |
+| F22 | Hand-rolled pay flow settled before delivery and doubled settlement — replaced by the stock flow | **RESOLVED** | 09 Sep |
+| F23 | TS 7.0.2 fails ambient `@types` inclusion across workspace packages — explicit `types: ["node"]` + toolchain to latest | **RESOLVED** | 09 Sep |
+| F24 | No Substreams endpoint serves Base Sepolia (either provider) — module CUT, not deferred | **RESOLVED** | 09 Sep |
+| F25 | HCS-14 SDK runtime proven spec-correct; three packaging gaps worked around honestly | **RESOLVED** | 09 Sep |
+| F26 | Treasury top-up leg: three SDK footguns caught by probes before they cost a demo | **RESOLVED** | 09 Sep |
+| F27 | `upto` spike: the mapping we wanted already exists where we control the scheme — don't adopt | **RESOLVED** | 09 Sep |
 
 ---
 
@@ -252,7 +261,7 @@ Useful schema details confirmed at the same time:
 **Still to verify once a working key exists:** the exact field names in our
 query (`agents(where: {agentWallet: …})`, `feedbacks`, `validations`).
 
-## F13 — a Studio *deploy key* is not a gateway *API key* · OPEN
+## F13 — a Studio *deploy key* is not a gateway *API key* · RESOLVED
 
 Both are 32-hex strings and both live in Subgraph Studio, so they are easy to
 confuse. Symptom, with a correctly-shaped but wrong key:
@@ -373,7 +382,7 @@ Two fixes:
    escalates above a trivial amount. An unread registry can only hide
    *negative* signal; nobody launders a good reputation.
 
-## F18 — fail-safe coverage vs. usability · OPEN, needs a decision
+## F18 — fail-safe coverage vs. usability · RESOLVED
 
 The F17 fix is correct and immediately inconvenient. Live re-run:
 
@@ -443,8 +452,181 @@ meaningful amount**. Small payments flow on discounted evidence; anything that
 actually matters still needs a human while registries are dark. C's usability,
 B's guarantee where it counts, one sentence to a judge.
 
-Still not decided — and specifically, do not let it get settled by whatever
-makes the demo look best.
+### Decision (09 Sep, evening): hybrid — IMPLEMENTED
+
+Still not decided by demo-convenience — decided by the arithmetic. Gating (B)
+makes `allow` unreachable for every payment above 0.02 while three
+deployments are dark, which removes the product's core motion (metered queries
+flowing unattended). The hybrid keeps a hard gate where it matters:
+
+- amount ≤ `trivialAmount` (0.02): raw score, coverage ignored (unchanged)
+- 0.02 < amount ≤ `coverageGateAmount` (0.05): F18 shrinkage
+  (`PRIOR=0.35`, `K_MAX=40`), verdict from the effective score
+- amount > 0.05 with any unread registry: `step_up`, however good the score
+
+The thin-history rule (`minFeedbackForTrust=3`) STAYS alongside the
+shrinkage — defence in depth, not redundancy. The 8 live wallets reproduce
+the simulation table exactly (allow=4 step_up=2 deny=2), locked in as
+`policy.test.ts` vectors. The effective score is written to the decision
+trace (`score=0.98->0.90`) and the coverage (`6/9` + failed chains) to the
+HCS record, so the evidence shows the discount, not just the verdict.
+
+---
+
+## F19 — the envelope salt diverged from the spike's · RESOLVED
+
+Unifying the channel salt to a single source of truth (`envelope.ts`,
+imported by the spike) exposed that the two had already diverged:
+
+```
+spike (inline padEnd): 0x6d616e64617465…0000   left-aligned
+envelope (padHex):      0x0000…6d616e64617465   right-aligned
+```
+
+One nibble of difference derives a different `computeChannelId` — and the
+Day-1 spike channel was opened with the inline value. The odd one out was
+`envelope.ts`: Solidity `bytes32("mandate")` is left-aligned (zero
+right-padded), so the spike's value matches on-chain convention and
+`padHex` needed `dir: "right"`. Fixed, with an equality assertion as the
+regression proof. Lesson: a "cleanup" refactor of a value that already has
+on-chain state is a consensus change, not cosmetics.
+
+## F20 — Hedera payees could never resolve reputation · RESOLVED
+
+`lookupCounterparty` lowercased `requirements.payTo` and queried
+`agents(where: {agentWallet})` with it. On the Hedera path `payTo` is
+`0.0.x` — not an EVM wallet — so the lookup could never match, every Hedera
+payment resolved to "unregistered", and the metered-query path could never
+`allow`. Two independent mechanisms (this and the F18 gating) each made the
+"400 queries fly past" demo moment impossible.
+
+Fixed with mirror-node alias resolution: `0.0.x` → `evm_address` before the
+Agent0 queries, with the mirror network following the payment's CAIP-2. A
+missing alias is honestly unregistered (full coverage, nothing to read); a
+mirror outage is a coverage failure (`chainsFailed: ["hedera-mirror"]`), not
+a clean unregistered. Five hermetic tests with stub fetch.
+
+## F21 — settled spend was never recorded · RESOLVED
+
+`PolicyEngine.recordSettled` existed, was unit-tested — and was never called
+outside tests. `executePayment` settled via the facilitator and returned
+without recording, so the rolling `windowBudget` never accrued and the
+"near-exhaustion" escalation could never fire. The budget was a tested,
+documented, unenforced fiction.
+
+One-line fix in `executePayment` (record on `settlement.success` only —
+attempts that fail verify/settle must not consume budget), caught by
+re-reading the payment path end to end rather than by any test. Lesson: unit
+tests proved the engine; nothing proved the wiring. Fixed first with an
+injected-deps seam (`executePayment` accepted stub sign/verify/settle),
+then again properly in the stock-flow refactor (F22): the wiring under
+test is now the production wiring itself — `budget.test.ts` runs the
+stock client + mandate hooks + stock server against a stub facilitator
+with an ephemeral key, and asserts the budget accrues exactly once per
+successful settlement and never on failure.
+
+---
+
+## F22 — hand-rolled pay flow settled before delivery and doubled settlement · RESOLVED
+
+Re-reading the gateway's payment path during the stock-SDK audit turned up
+two latent defects in the hand-rolled flow (`proxyFetch` → `decide` →
+`executePayment`, deleted in this pass):
+
+1. **Pay before delivery.** The gateway verified + settled through the
+   facilitator and only then retried upstream with the payment header. Any
+   upstream failure after that point (5xx, timeout, changed price) left the
+   user paid with nothing delivered. The stock `exact` flow settles
+   server-side after the handler runs — the risk sits with the party that
+   can re-try, which is the correct side.
+2. **Double settlement.** Both the gateway AND the service settled the same
+   signed bytes. Hedera de-duplicates by transaction id so this was benign
+   on testnet, but it was 2× facilitator load and would double-charge on any
+   rail without tx-id dedupe.
+
+Both are fixed by deletion, not by patching: signing now delegates to the
+stock `@x402/hedera` signer, the 402/pay/retry loop is `wrapFetchWithPayment`,
+and the service is the stock `x402HTTPResourceServer`. What Mandate owns is
+exactly the judgment — reputation lookup, policy verdict, device step-up in
+`onBeforePaymentCreation`; budget accrual and HCS audit in
+`onPaymentResponse`. The F21 hermetic tests were rewritten onto the same
+loop, so the wiring under test is the production wiring: a deny creates no
+signature and calls neither `/verify` nor `/settle` (asserted by counters
+on the stub facilitator).
+
+---
+
+## F23 — TS 7.0.2 drops ambient `@types` across workspace packages · RESOLVED
+
+Probing the TypeScript 7 upgrade (native rewrite, latest stable) before
+adopting it: with four byte-identical tsconfigs, `tsc 7.0.2` passed the
+gateway and service but failed the facilitator and mandate-service with
+`TS2591: Cannot find name 'node:http'` — ambient `@types/node` was not
+included in exactly the programs that import across package boundaries.
+Bisected to the auto-inclusion: an explicit `"types": ["node"]` (the
+documented mechanism, and the more hermetic config — ambient `yargs` /
+`json-schema` globals no longer leak into the program either) goes green
+on both compilers, all four packages, zero errors.
+
+Adopted on that evidence: `typescript ~7.0.2`, `@hiero-ledger/sdk ^2.88.0`,
+`@types/node ^22.20.1` (22.x line — runtime is Node 22, so 26.x types
+would be newer than the runtime they describe). Everything else pinned was
+already latest (x402 2.25.0, DMK 1.9.0, viem 2.56.3, harness 1.2.2).
+50/50 hermetic green after the move.
+
+---
+
+## F24 — no Substreams endpoint serves Base Sepolia: module CUT · RESOLVED
+
+Probe-before-implement killed this one before a line was written. Two
+independent facts, both verified, not assumed:
+
+1. **It cannot observe our chain.** The current endpoint lists (StreamingFast
+   official + Pinax community, docs current June 2026, cross-checked against
+   the develop-branch source on GitHub) serve Base **mainnet** only. Testnet
+   coverage exists for Ethereum Sepolia, Arbitrum Sepolia, Polygon Amoy —
+   but no `base-sepolia` endpoint on either provider. Our mandate
+   settlements land on Base Sepolia, so an `x402-payments` module could not
+   see a single one of them.
+2. **It cannot be built or tested here.** Substreams modules are Rust-only
+   (official docs); the sandbox has no toolchain and none is obtainable —
+   GitHub API answers but release binaries redirect to a blocked host,
+   crates.io and rustup are blocked, apt has no egress.
+
+A module that can neither compile where we test nor observe the chain we
+settle on is theater, not product — so this is a CUT with cause, not a
+deferral. The Graph track stands on Agent0 subgraphs (live reputation) +
+the x402 payment flow + proof-of-integration, which is what the cut order
+always said.
+
+## F25 — HCS-14: SDK runtime proven, three gaps worked around · RESOLVED
+
+The `@hashgraphonline/standards-sdk` (0.1.186) runtime is genuinely the
+reference implementation: its canonical JSON for spec Test Vector 1
+matches the spec byte-for-byte, and its UAID hash matches an independent
+from-scratch SHA-384+Base58 implementation. Normalization (case,
+whitespace, skill order) verified identical output. All offline and
+deterministic — fully hermetic-testable.
+
+Three gaps found by probing, each handled without forking or hand-rolling
+the scheme:
+
+1. **Reserved skills accepted.** The spec says 40-99 SHALL be rejected; the
+   SDK accepts them. `uaid.ts` enforces the range itself (hermetic test).
+2. **Root types unresolvable.** Every `.d.ts` re-export is extensionless,
+   which fails under `moduleResolution: nodenext` (TS2834, hidden by
+   skipLibCheck) and leaves the root module type-empty — including the
+   README's own example import. Fixed with a local `standards-sdk.d.ts`
+   declaring exactly the surface used, drift-guarded by a test asserting
+   every enum value and export shape against the live runtime.
+3. **Client needs network to construct.** `HCS11Client` hangs offline, so
+   the profile payload is built purely and validated against the SDK's own
+   zod schema hermetically; `npm run uaid:register` only transports the
+   proven bytes and reads them back from the account memo.
+
+Every audit record now carries the operator's self-certifying UAID, derived
+per record from the payment's own network. Live inscription pending the
+operator run.
 
 ---
 
@@ -452,10 +634,11 @@ makes the demo look best.
 
 | Item | When | Load-bearing? |
 |---|---|---|
-| DMK device session over WebHID | Day 3 | No — browser-side |
-| ERC-7730 v2 rendering on the trusted display | Day 3 | No |
-| `upto` scheme — may map to a mandate more directly than batch-settlement | Day 1 spike | No |
-| Graph Studio API key | Day 1 | Yes — nothing reputation-related works without it |
+| DMK device session (Node HID step-up) | Day 3 | Done — `STEPUP_OK` live 09 Sep |
+| ERC-7730 descriptor draft + EIP-712 payload | Day 3 | Done — draft in repo, registry PR post-hackathon |
+| `upto` scheme — may map to a mandate more directly than batch-settlement | Day 1 spike | No — still unspiked, cut first |
+| Graph Studio API key, sealed | Day 1 | Done — `secrets/graph.enc` |
+| Mandate YAML → device-signed channel open (load-bearing minimum #1) | Day 2+ | Built — live proof pending (`mandate:open` needs Ledger + funds) |
 
 ## How to add a finding
 
@@ -465,3 +648,64 @@ changed as a result. A finding without evidence is an opinion.
 
 Cross-references: `DX.md` holds the sponsor-facing write-ups (Ledger judges
 those equally with code); this file holds everything, sponsor-facing or not.
+
+## F26 — Treasury top-up leg: three SDK footguns caught by probes · RESOLVED
+
+**Expected:** a HIP-423 time-locked top-up (treasury -> payer, `wait_for_expiry`,
+execution-fee payer = treasury) built with the stock Hiero SDK, hermetic-tested
+offline, transported by an operator script.
+
+**Observed (probe outputs):**
+1. `setPayerAccountId("0.0.11111")` with a string throws at freeze —
+   `this._payerAccountId._toProtobuf is not a function`. The setter takes an
+   `AccountId` object only (confirmed in the `.d.ts`: strictly typed, so tsc
+   enforces it once the builder converts). The builder takes strings and
+   converts, so callers cannot hit this.
+2. Reading a frozen schedule back via `getScheduleMemo` throws
+   `transaction is immutable...` — the *getter* calls `_requireNotFrozen`.
+   Fields are therefore asserted on the open transaction; the frozen bytes
+   are asserted by `fromBytes` round-trip plus wire-encoding proofs (bytes
+   change when treasury/memo/expiry change).
+3. `Client.forTestnet()` keeps gRPC channels open: the first test run never
+   exited (300 s timeout, no output). Every test client is now closed in a
+   `finally`; the suite exits in < 1 s.
+
+**Design decisions the probes forced:** execution fee on the funded treasury
+(a depleted payer would fail execution with INSUFFICIENT_PAYER_BALANCE);
+live-schedule check fails OPEN toward creating (a duplicate top-up is
+harmless, a skipped one strands the demo); HIP-423 60-day max lifetime
+enforced in the builder.
+
+**Cost:** one 300 s timeout, zero mainnet/testnet fees — all caught offline.
+**Changed:** `packages/gateway/src/treasury.ts` + 9 hermetic tests,
+`scripts/treasury-topup.mjs` (`npm run treasury:topup`), treasury stanza in
+`seal-hedera.sh`. Live mirror read from the sandbox is ECONNRESET-blocked, so
+the operator's first `treasury:topup` run is also the live read-back proof.
+
+## F27 — `upto` spike: don't adopt · RESOLVED
+
+**Hypothesis:** the x402 `upto` scheme (authorize a max, settle the actual)
+might model a mandate more directly than `exact`.
+
+**Observed (installed `@x402/*@2.25`, not docs-memory):**
+1. Stock `upto` is EVM-only and Permit2-based: `UptoEvmScheme` client +
+   facilitator in `@x402/evm`, settling through the `x402UptoPermit2Proxy`
+   contract (`caipFamily = "eip155:*"`). `@x402/hedera` exports only
+   `ExactHederaScheme` — no Hedera `upto` exists; one would have to be
+   hand-built on HTS allowances (custom scheme code, weeks, against the
+   stock-tools rule).
+2. As a *client*, the scheme is the server's choice, not ours. Our gateway
+   registers Hedera-exact only, and no merchant in our path serves `upto`
+   requirements. Registering `UptoEvmScheme` speculatively would be code
+   with nobody to talk to.
+3. As a *facilitator*, the hypothesis is true but already realized: our
+   self-hosted batch-settlement channel on Base Sepolia IS
+   authorize-max/settle-actual (deposit ceiling -> voucher actuals ->
+   settle). There is no second, better-shaped mechanism to gain.
+
+**Verdict:** don't adopt. If an `upto` merchant ever appears, the recipe is
+5 lines — register `UptoEvmScheme` with an EVM signer in `client.ts` — and
+zero policy changes: the `onBeforePaymentCreation` / `onPaymentResponse`
+hooks are scheme-agnostic.
+
+**Cost:** ~25 min spike, zero code changed.

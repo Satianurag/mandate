@@ -82,9 +82,9 @@ test("thin feedback history -> step_up", () => {
   assert.equal(e.evaluate(proposal(0.01), rep({ feedbackCount: 1 })).verdict, "step_up");
 });
 
-test("partial registry coverage -> step_up, not allow", () => {
+test("partial coverage above the gate -> step_up (hard gate)", () => {
   const e = new PolicyEngine();
-  const d = e.evaluate(proposal(0.05), rep({ chainsReachable: 6, chainsFailed: ["monad", "monad-testnet", "ethereum-sepolia"] }));
+  const d = e.evaluate(proposal(0.06), rep({ chainsReachable: 6, chainsFailed: ["monad", "monad-testnet", "ethereum-sepolia"] }));
   assert.equal(d.verdict, "step_up");
   assert.match(d.reason, /Could not read 3 of 9/);
 });
@@ -93,6 +93,37 @@ test("partial coverage is tolerated below the trivial threshold", () => {
   const e = new PolicyEngine();
   const d = e.evaluate(proposal(0.01), rep({ chainsReachable: 6, chainsFailed: ["monad"] }));
   assert.equal(d.verdict, "allow");
+});
+
+// F18 hybrid vectors — live counterparties from docs/FINDINGS.md F16,
+// re-evaluated at 0.03 (weighted band: above trivial 0.02, below gate 0.05)
+// with the measured 6/9 coverage. Reproduces the F18 simulation table
+// exactly: weighted allow=4 step_up=2 deny=2 (vs gating allow=0).
+test("F18 weighted band reproduces the live-wallet verdicts", () => {
+  const e = new PolicyEngine();
+  const partial = { chainsQueried: 9, chainsReachable: 6, chainsFailed: ["ethereum-sepolia", "monad", "monad-testnet"] };
+  const cases: [number, number, "allow" | "step_up" | "deny"][] = [
+    // [raw score, feedback entries, expected verdict]
+    [0.98, 100, "allow"],
+    [0.51, 11, "step_up"],
+    [0.99, 100, "allow"],
+    [0.53, 3, "step_up"],
+    [0.92, 85, "allow"],
+    [0.05, 1, "deny"],
+    [0.92, 100, "allow"],
+    [0.01, 100, "deny"],
+  ];
+  for (const [score, n, verdict] of cases) {
+    const d = e.evaluate(proposal(0.03), rep({ meanScore: score, feedbackCount: n, ...partial }));
+    assert.equal(d.verdict, verdict, `score=${score} n=${n}`);
+  }
+});
+
+test("discounted score is visible in the trace", () => {
+  const e = new PolicyEngine();
+  const d = e.evaluate(proposal(0.03), rep({ meanScore: 0.98, feedbackCount: 100, chainsReachable: 6, chainsFailed: ["monad"] }));
+  assert.equal(d.verdict, "allow");
+  assert.ok(d.trace.some((t) => t.startsWith("reputation:score=0.98->")), "trace shows raw->effective");
 });
 
 test("unparseable amount -> deny", () => {

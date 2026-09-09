@@ -91,30 +91,22 @@ if (readyGate.ok) {
   console.log("\n(skip e2e-payment / HCS — check-ready failed)");
 }
 
-const spikeGate = await gate("check-spike", () =>
-  run(process.execPath, [join(ROOT, "scripts/check-spike-ready.mjs")])
+const mandateGate = await gate("check-mandate", () =>
+  run(process.execPath, [join(ROOT, "scripts/check-mandate.mjs")])
 );
-log.push(spikeGate);
+log.push(mandateGate);
 
-if (spikeGate.ok) {
+if (mandateGate.ok) {
   log.push(
-    await gate("spike-envelope", () => run(process.execPath, [join(ROOT, "scripts/spike-envelope.mjs")]))
+    await gate("mandate-open", () => run(process.execPath, [join(ROOT, "scripts/mandate-open.mjs")]))
   );
 } else {
-  console.log("\n(skip spike-envelope — check-spike failed)");
+  console.log("\n(skip mandate:open — check-mandate failed)");
 }
 
 log.push(
   await gate("probe-reputation", () =>
     run(process.execPath, [join(ROOT, "scripts/probe-reputation.mjs")])
-  )
-);
-
-log.push(
-  await gate("e2e-stepup-stub", () =>
-    run(process.execPath, [join(ROOT, "scripts/e2e-stepup.mjs")], {
-      env: { ...process.env, MANDATE_STEPUP_STUB: "approve" },
-    })
   )
 );
 
@@ -137,6 +129,10 @@ log.push(
     );
     await new Promise((r) => setTimeout(r, 1500));
     try {
+      // Fail fast on the step-up: no device is attached during gates, and a
+      // real discovery cycle (5 attempts) would stall the suite for minutes.
+      process.env.MANDATE_STEPUP_DISCOVER_MS = "3000";
+      process.env.MANDATE_STEPUP_ATTEMPTS = "1";
       const { proxyFetch } = await import(`${ROOT}/packages/gateway/src/index.ts`);
       const url = "http://127.0.0.1:8411/analytics?q=%7B%20a%20%7B%20id%20%7D%20%7D";
       const res = await proxyFetch(url);

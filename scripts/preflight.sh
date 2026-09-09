@@ -28,15 +28,18 @@ if [ -z "${WALLET_PASS:-}" ]; then
 else
   ok "WALLET_PASS set"
 fi
-ring_out=$(wallet-cli ring keys 2>&1)
 ring_provisioned=0
-if printf '%s' "$ring_out" | grep -q '"ok": *true'; then
-  ring_provisioned=1
-elif printf '%s' "$ring_out" | grep -qE '^Key|^─|mandate-|graph-'; then
-  # Human table when stdout is a TTY; JSON envelope when piped (F6).
-  ring_provisioned=1
-elif ! printf '%s' "$ring_out" | grep -qi 'not initialized'; then
-  ring_provisioned=1
+if ! command -v wallet-cli >/dev/null 2>&1; then
+  ring_out=""
+elif ring_out=$(wallet-cli ring keys 2>&1); then
+  if printf '%s' "$ring_out" | grep -q '"ok": *true'; then
+    ring_provisioned=1
+  elif printf '%s' "$ring_out" | grep -qE '^Key|^─|mandate-|graph-'; then
+    # Human table when stdout is a TTY; JSON envelope when piped (F6).
+    ring_provisioned=1
+  elif ! printf '%s' "$ring_out" | grep -qi 'not initialized'; then
+    ring_provisioned=1
+  fi
 fi
 if [ "$ring_provisioned" -eq 1 ]; then
   ok "ring provisioned"
@@ -113,27 +116,17 @@ elif [ -n "${MANDATE_HEDERA_ACCOUNT_ID:-}" ]; then
   wrn "MANDATE_HEDERA_ACCOUNT_ID set but secrets/hedera.enc missing — npm run seal:keys"
 fi
 
-if [ -z "${GRAPH_API_KEY:-}" ]; then
-  if [ -f secrets/graph.enc ] && [ -n "${WALLET_PASS:-}" ]; then
-    if wallet-cli ring decrypt --key graph-gateway < secrets/graph.enc >/dev/null 2>&1; then
-      ok "secrets/graph.enc present and decryptable (F7)"
-    else
-      wrn "secrets/graph.enc present but could not decrypt — check WALLET_PASS"
-    fi
+# The sealed key is the only credential path: it is unsealed in-process and
+# never touches argv, env, or disk. There is no plaintext-key branch.
+if [ -f secrets/graph.enc ] && [ -n "${WALLET_PASS:-}" ]; then
+  if node --experimental-strip-types scripts/probe-graph.mjs 2>/dev/null; then
+    ok "Agent0 subgraph reachable with sealed key (F7)"
   else
-    wrn "GRAPH_API_KEY unset — Agent0 lookups need it (no public route, finding F7)"
-    note "Get one at https://thegraph.com/studio/apikeys/ then: npm run seal:keys"
+    wrn "sealed Graph key failed — re-check key or WALLET_PASS (finding F7)"
   fi
 else
-  body=$(curl -sS --max-time 20 -X POST "https://gateway.thegraph.com/api/subgraphs/id/$SUB" \
-    -H "authorization: Bearer $GRAPH_API_KEY" -H 'content-type: application/json' \
-    -d '{"query":"{_meta{block{number}}}"}' 2>/dev/null)
-  # NOTE: the gateway returns HTTP 200 even for auth errors — inspect the body.
-  if printf '%s' "$body" | grep -q '"errors"'; then
-    bad "Graph key rejected: $(printf '%s' "$body" | head -c 90)"
-  else
-    ok "Agent0 subgraph reachable with key"
-  fi
+  wrn "secrets/graph.enc or WALLET_PASS missing — Agent0 lookups need it (finding F7)"
+  note "Get a key at https://thegraph.com/studio/apikeys/ then: npm run seal:keys"
 fi
 
 hdr "Result"

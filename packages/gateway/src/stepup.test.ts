@@ -1,55 +1,46 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { requireDeviceApproval, StepUpDenied } from "./stepup.ts";
 
-test("step_up stub approve", async () => {
-  process.env.MANDATE_STEPUP_STUB = "approve";
-  const { requireDeviceApproval } = await import("./stepup.ts");
-  const ok = await requireDeviceApproval({
-    proposal: {
-      origin: "http://test",
-      requirements: {
-        scheme: "exact",
-        network: "hedera:testnet",
-        asset: "0.0.0",
-        amount: "1",
-        payTo: "0.0.1",
-        maxTimeoutSeconds: 60,
-        extra: { feePayer: "0.0.2" },
-      },
-      normalisedAmount: 0.01,
-      assetSymbol: "HBAR",
+const req = {
+  proposal: {
+    origin: "http://test",
+    requirements: {
+      scheme: "exact" as const,
+      network: "hedera:testnet" as const,
+      asset: "0.0.0",
+      amount: "1",
+      payTo: "0.0.1",
+      maxTimeoutSeconds: 60,
+      extra: { feePayer: "0.0.2" },
     },
-    reason: "test",
-    timeoutMs: 1000,
+    normalisedAmount: 0.01,
+    assetSymbol: "HBAR",
+  },
+  reason: "test",
+  timeoutMs: 1000,
+};
+
+test("device approval resolves true when the device signs", async () => {
+  let called = 0;
+  const ok = await requireDeviceApproval(req, {
+    signOnDevice: async () => {
+      called++;
+    },
   });
   assert.equal(ok, true);
-  delete process.env.MANDATE_STEPUP_STUB;
+  assert.equal(called, 1);
 });
 
-test("step_up stub deny", async () => {
-  process.env.MANDATE_STEPUP_STUB = "deny";
-  const { requireDeviceApproval, StepUpDenied } = await import("./stepup.ts");
+test("device failure maps to StepUpDenied with the device message", async () => {
   await assert.rejects(
     () =>
-      requireDeviceApproval({
-        proposal: {
-          origin: "http://test",
-          requirements: {
-            scheme: "exact",
-            network: "hedera:testnet",
-            asset: "0.0.0",
-            amount: "1",
-            payTo: "0.0.1",
-            maxTimeoutSeconds: 60,
-            extra: { feePayer: "0.0.2" },
-          },
-          normalisedAmount: 0.01,
-          assetSymbol: "HBAR",
+      requireDeviceApproval(req, {
+        signOnDevice: async () => {
+          throw new Error("Canceled by user (6982)");
         },
-        reason: "test",
-        timeoutMs: 1000,
       }),
-    StepUpDenied
+    (e: unknown) =>
+      e instanceof StepUpDenied && /Canceled by user/.test(e.message)
   );
-  delete process.env.MANDATE_STEPUP_STUB;
 });

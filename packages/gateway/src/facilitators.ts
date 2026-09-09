@@ -1,82 +1,43 @@
 /**
- * Facilitator registry.
+ * Facilitator addresses + a live support assertion. Nothing else.
  *
- * Every value here was read from a live `/supported` response on 2026-09-08,
- * not from documentation. Re-run `npm run preflight` before the demo: fee
- * payers and supported kinds change without notice, and a stale one produces a
- * confusing "invalid transaction" rather than a clean error.
+ * Supported-kind lists are deliberately NOT pinned here: what a facilitator
+ * supports is a live fact, so both servers assert it at boot against the
+ * facilitator's own `/supported` via the stock `HTTPFacilitatorClient`, and
+ * the stock resource servers re-validate it in `initialize()`. A pinned
+ * table would rot into a lie the day Blocky402 adds or drops a kind.
+ *
+ * Invariant 3 lives here too: never hardcode a fee payer. The Hedera
+ * feePayer is merged from the live facilitator advertisement by the stock
+ * scheme — read it from the live challenge, never from a constant.
  */
 
-export interface FacilitatorConfig {
-  name: string;
-  baseUrl: string;
-  /** Schemes and CAIP-2 networks observed live. */
-  supports: string[];
-}
+import { HTTPFacilitatorClient } from "@x402/core/http";
+
+/** Blocky402 testnet facilitator base URL (trailing slash tolerated). */
+export const BLOCKY402_URL = "https://api.testnet.blocky402.com";
 
 /**
- * Hedera's ETHOnline track explicitly requires Blocky402, so the Hedera-side
- * service uses this one. Testnet is open access -- no API key.
+ * Base Sepolia USDC + chain facts, single-sourced for the mandate service.
+ * Observed against the live chain; the service boot gate re-asserts the
+ * deployment before serving.
  */
-export const BLOCKY402_TESTNET: FacilitatorConfig = {
-  name: "blocky402-testnet",
-  baseUrl: "https://api.testnet.blocky402.com",
-  supports: ["exact@eip155:80002", "exact@hedera:testnet", "exact@solana:devnet"],
-};
-
-/**
- * The x402 Foundation facilitator. This is the ONLY public facilitator observed
- * to support `batch-settlement`, and it does so on Base Sepolia -- which makes
- * the entire mandate-envelope demo possible on testnet, with no real money.
- *
- * It also supports exact@hedera:testnet, with a DIFFERENT fee payer from
- * Blocky402 (0.0.9185802 vs 0.0.7162784).
- *
- * INVARIANT: Never hardcode a fee payer.
- * Always read it from the live challenge's `extra` -- see docs/architecture.md.
- */
-export const X402_FOUNDATION: FacilitatorConfig = {
-  name: "x402-foundation",
-  baseUrl: "https://x402.org/facilitator",
-  supports: [
-    "batch-settlement@eip155:84532",
-    "upto@eip155:84532",
-    "exact@eip155:84532",
-    "exact@hedera:testnet",
-  ],
-};
-
-/** Base Sepolia — where the mandate escrow channel lives. Testnet, free. */
 export const BASE_SEPOLIA = {
-  caip2: "eip155:84532",
   chainId: 84532,
-  rpc: "https://sepolia.base.org",
-  /** Circle's testnet USDC. totalSupply confirmed non-zero on 2026-09-08. */
-  usdc: "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
+  usdc: "0x036CbD53842c5426634e7929541eC2318f3dCF7e" as const,
 } as const;
 
-export const HEDERA_TESTNET = {
-  caip2: "hedera:testnet",
-  chainId: 296,
-  /** Hiero JSON-RPC relay. eth_chainId returned 0x128 on 2026-09-08. */
-  jsonRpc: "https://testnet.hashio.io/api",
-  mirrorNode: "https://testnet.mirrornode.hedera.com/api/v1",
-} as const;
-
-/** Confirm a facilitator still advertises what we depend on. */
-export async function assertSupports(
-  cfg: FacilitatorConfig,
-  required: string
-): Promise<void> {
-  const res = await fetch(`${cfg.baseUrl}/supported`);
-  if (!res.ok) throw new Error(`${cfg.name}: /supported returned ${res.status}`);
-  const body = (await res.json()) as {
-    kinds?: { scheme?: string; network?: string }[];
-  };
-  const live = (body.kinds ?? []).map((k) => `${k.scheme}@${k.network}`);
-  if (!live.includes(required)) {
+/**
+ * Assert the facilitator at `url` currently supports `kind`
+ * (`"<scheme>@<network>"`, e.g. `"exact@hedera:testnet"`). Throws otherwise.
+ */
+export async function assertSupports(url: string, kind: string): Promise<void> {
+  const client = new HTTPFacilitatorClient({ url });
+  const supported = await client.getSupported();
+  const kinds = supported.kinds.map((k) => `${k.scheme}@${k.network}`);
+  if (!kinds.includes(kind)) {
     throw new Error(
-      `${cfg.name} no longer advertises ${required}. Live kinds: ${live.join(", ")}`
+      `${url} no longer advertises ${kind} (saw: ${kinds.join(", ") || "none"})`
     );
   }
 }

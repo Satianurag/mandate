@@ -1,0 +1,24 @@
+# Copy to mandate.yaml (gitignored) and set the receiver. No secrets here —
+# the session key lives sealed in the Key Ring and is only NAMED below.
+#
+# Quote every hex/integer value: unquoted 0x… parses as a YAML number and the
+# strict loader rejects it. All fields are required; nothing defaults.
+version: 1
+network: "eip155:84532"
+rpcUrl: "https://sepolia.base.org"
+serviceUrl: "http://127.0.0.1:8405/analytics"
+# Lifetime spend cap in USDC base units (6 decimals): "5000000" = $5.00.
+ceilingBaseUnits: "5000000"
+# Fresh bytes32 per mandate. The channel id commits it: re-running with the
+# same salt RESUMES the channel (no new tap, no new deposit); a new salt
+# opens a new mandate (one tap, one deposit).
+salt: "0x0000000000000000000000000000000000000000000000000000000000000000"
+# The paid service's receiver. Use an address you control (claim the USDC
+# later) — NOT the payer: self-channels are rejected by the facilitator.
+receiver: "0x0000000000000000000000000000000000000000"
+# Key Ring key name sealing the voucher session key (npm run mandate:keygen).
+sessionKey: "mandate-session"
+# Ledger derivation path for the payer.
+derivationPath: "44'/60'/0'/0/0"
+# Channel records. Must survive restarts — vouchers live here, not onchain.
+storageRoot: "./state/mandate"

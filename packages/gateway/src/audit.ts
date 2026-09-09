@@ -19,7 +19,7 @@ import {
   TopicId,
   TopicMessageSubmitTransaction,
 } from "@hiero-ledger/sdk";
-import type { PolicyDecision, PaymentProposal, SettlementResponse } from "./types.ts";
+import type { PolicyDecision, PaymentProposal, SettleResponse } from "./types.ts";
 
 export interface AuditRecord {
   v: 1;
@@ -32,10 +32,22 @@ export interface AuditRecord {
   /** ERC-8004 identity of the counterparty, when one resolved. */
   agentId?: string;
   score: number | null;
+  /** Registries read for this verdict, e.g. "6/9". Verdicts under F18
+   *  discounting are meaningless without it. */
+  coverage: string;
+  /** Deployments that failed to answer, for the audit record. */
+  chainsFailed: string[];
   /** Present only once the payment actually settled. */
   txId?: string;
   /** SHA-256 of the full decision trace, kept off-topic. */
   traceHash: string;
+  /**
+   * HCS-14 UAID of the gateway agent that wrote this record. Self-certifying
+   * (recomputable from public inputs), so records correlate across protocols
+   * without trusting our word for who we are. Absent only when derivation
+   * failed — the verdict is load-bearing, the UAID is attribution.
+   */
+  operatorUaid?: string;
 }
 
 export interface HederaOperatorCredentials {
@@ -44,10 +56,60 @@ export interface HederaOperatorCredentials {
   privateKeyHex: string;
 }
 
+export interface MandateSummary {
+  channelId: string;
+  salt: string;
+  payer: string;
+  receiver: string;
+  ceilingBaseUnits: string;
+  cumulativeBaseUnits: string;
+  calls: number;
+  taps: number;
+  serviceUrl: string;
+}
+
+/**
+ * The mandate's audit record: one tap opened a channel, vouchers streamed
+ * inside it. Same topic, same shape as payment verdicts — the month-end
+ * artifact covers both rails. Coverage is honestly "0/0": mandate opens do
+ * not (yet) consult reputation registries; the ceiling is the policy.
+ */
+export function buildMandateRecord(summary: MandateSummary): AuditRecord {
+  const cumulative = Number(summary.cumulativeBaseUnits) / 1e6;
+  const ceiling = Number(summary.ceilingBaseUnits) / 1e6;
+  return {
+    v: 1,
+    ts: new Date().toISOString(),
+    origin: summary.serviceUrl,
+    verdict: "allow",
+    reason:
+      `mandate stream: ${summary.calls} calls, ${summary.taps} tap(s), ` +
+      `$${cumulative.toFixed(2)} of $${ceiling.toFixed(2)} ceiling, channel ${summary.channelId}`,
+    amount: cumulative,
+    asset: "USDC",
+    score: null,
+    coverage: "0/0",
+    chainsFailed: [],
+    traceHash: createHash("sha256")
+      .update(
+        JSON.stringify({
+          channelId: summary.channelId,
+          salt: summary.salt,
+          payer: summary.payer,
+          receiver: summary.receiver,
+          taps: summary.taps,
+          cumulativeBaseUnits: summary.cumulativeBaseUnits,
+        })
+      )
+      .digest("hex"),
+  };
+}
+
 export function buildRecord(
   proposal: PaymentProposal,
   decision: PolicyDecision,
-  settlement?: SettlementResponse
+  settlement?: SettleResponse,
+  operatorUaid?: string
 ): AuditRecord {
   return {
     v: 1,
@@ -59,7 +121,10 @@ export function buildRecord(
     asset: proposal.assetSymbol,
     agentId: decision.reputation.agentId,
     score: decision.reputation.meanScore,
-    txId: settlement?.transactionId ?? settlement?.transaction,
+    coverage: `${decision.reputation.chainsReachable}/${decision.reputation.chainsQueried}`,
+    chainsFailed: [...decision.reputation.chainsFailed],
+    txId: settlement?.transaction,
+    ...(operatorUaid ? { operatorUaid } : {}),
     traceHash: createHash("sha256")
       .update(JSON.stringify(decision.trace))
       .digest("hex"),
@@ -68,29 +133,18 @@ export function buildRecord(
 
 let queue: Promise<void> = Promise.resolve();
 
-function operatorFromEnv(): HederaOperatorCredentials | null {
-  const accountId = process.env.MANDATE_HEDERA_ACCOUNT_ID;
-  const privateKeyHex = process.env.MANDATE_HEDERA_SIGNING_KEY;
-  if (!accountId || !privateKeyHex) return null;
-  return { accountId, privateKeyHex };
-}
-
 /**
- * Submit to HCS. Never blocks the payment path — failures are queued for retry
- * in-process only (demo scope). Uses sealed Key Ring credentials when passed
- * from executePayment; falls back to MANDATE_HEDERA_ACCOUNT_ID +
- * MANDATE_HEDERA_SIGNING_KEY only for standalone probes.
+ * Submit to HCS. Never blocks the payment path — callers fire-and-forget,
+ * and failures are logged, never thrown. Credentials are REQUIRED and must
+ * come from the Key Ring via withSecret: there is deliberately no env-var
+ * fallback, per invariant 1 (no plaintext secret in the environment).
  */
 export async function submit(
   topicId: string,
   record: AuditRecord,
-  creds?: HederaOperatorCredentials
+  creds: HederaOperatorCredentials
 ): Promise<void> {
-  const op = creds ?? operatorFromEnv();
-  if (!op) {
-    console.warn("[audit] HCS credentials unset — record not submitted:", record.verdict);
-    return;
-  }
+  const op = creds;
 
   queue = queue
     .then(async () => {

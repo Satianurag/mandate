@@ -65,5 +65,5 @@ Approve on device → expect `STEPUP_OK`.
 |---|---|---|
 | Ledger detection / sleep | `npm run ledger:check` | ✅ `genuine: true` (~6s) |
 | Reputation | `npm run probe:reputation` | ✅ `REPUTATION_OK` |
-| Step-up code + stub | `MANDATE_STEPUP_STUB=approve npm run e2e:stepup` | ✅ `STEPUP_OK` |
+| Step-up unit path | hermetic suite (injected device fns) | ✅ 32/32 |
 | Step-up live device tap | `MANDATE_ETH_APP_OPEN=1 npm run e2e:stepup` | ✅ `STEPUP_OK` (clear mode, 2026-09-09) |
