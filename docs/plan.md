@@ -78,7 +78,7 @@ Running order that matches the product's logic:
 - [x] `wallet-cli ring init` with the device attached
 - [x] Prove headless `ring decrypt` works with the device unplugged (`npm run preflight`)
 - [x] **Settle finding F6**: raw plaintext from `ring decrypt` (no envelope)
-- [ ] `npx skills add ledgerhq/agent-skills`
+- [x] `npx skills add ledgerhq/agent-skills` (4 skills, project-level: `.agents/skills/` + `skills-lock.json`)
 - [x] Settle one throwaway x402 payment end to end
       (`npm run live:gates` runs all gates; or `npm run check:ready` then `npm run e2e:payment`)
 
