@@ -126,7 +126,7 @@ npm run check:mandate && npm run mandate:open
 | Device step-up (DMK) | implemented, live `STEPUP_OK` (clear mode) |
 | Mandate client (`DmkEvmSigner` + ceiling strategy) | implemented; live proof = `npm run mandate:open` |
 | Self-hosted facilitator + mandate service | implemented, strict-booting; live proof = `npm run mandate:open` |
-| HCS audit (payments + mandates) + mirror read-back | implemented — needs topic id; Key Ring creds only |
+| HCS audit (payments + mandates) + mirror read-back | implemented — every record carries the operator UAID (F25); needs topic id; Key Ring creds only |
 | Hedera paid service (Blocky402) | stock harness — fee payer merged live from the facilitator ad, boot fails fast |
 | Operator console | **not started** (per user: no UI until requested) |
 

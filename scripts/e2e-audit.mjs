@@ -30,9 +30,16 @@ if (!process.env.WALLET_PASS) {
 const { buildRecord, submit } = await import(`${ROOT}/packages/gateway/src/audit.ts`);
 const { pollTopicRecord } = await import(`${ROOT}/packages/gateway/src/evidence.ts`);
 const { withSecret } = await import(`${ROOT}/packages/gateway/src/keyring.ts`);
+const { deriveOperatorUaid } = await import(`${ROOT}/packages/gateway/src/uaid.ts`);
 const hederaEnc = await readFile(`${ROOT}/secrets/hedera.enc`);
 
 const nonce = `probe-${Date.now()}`;
+// The real operator UAID, derived — never canned. The probe record must
+// look exactly like a production record or it proves nothing.
+const operatorUaid = await deriveOperatorUaid(
+  accountId,
+  process.env.MANDATE_HEDERA_NETWORK ?? "hedera:testnet"
+);
 const record = buildRecord(
   {
     origin: "http://127.0.0.1:8403",
@@ -65,7 +72,8 @@ const record = buildRecord(
   },
   // The nonce rides in txId: the on-topic record carries only the verdict
   // plus a trace hash, so the probe marks itself where it can be found.
-  { success: true, transactionId: nonce }
+  { success: true, transaction: nonce, network: "hedera:testnet" },
+  operatorUaid
 );
 
 await withSecret("hedera-payment", hederaEnc, async (key) => {

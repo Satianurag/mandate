@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { buildRecord, buildMandateRecord } from "./audit.ts";
+import type { PaymentProposal, PolicyDecision } from "./types.ts";
 
 const reputation = {
   registered: true,
@@ -62,4 +63,32 @@ test("buildMandateRecord states the mandate truthfully: stream, taps, 0/0 covera
   assert.match(record.reason, /0xchannel/);
   assert.equal(record.txId, undefined);
   assert.equal(record.traceHash.length, 64);
+});
+
+test("buildRecord carries the operator UAID when provided, omits it otherwise", () => {
+  const proposal: PaymentProposal = {
+    origin: "http://127.0.0.1:8403",
+    requirements: {
+      scheme: "exact",
+      network: "hedera:testnet",
+      asset: "0.0.0",
+      amount: "2000000",
+      payTo: "0.0.5005",
+      maxTimeoutSeconds: 60,
+      extra: { feePayer: "0.0.7162784" },
+    },
+    normalisedAmount: 0.02,
+    assetSymbol: "HBAR",
+  };
+  const decision: PolicyDecision = { verdict: "allow", reason: "ok", trace: ["t1"], reputation };
+  const withUaid = buildRecord(
+    proposal,
+    decision,
+    undefined,
+    "uaid:aid:TEST;uid=0.0.54321;registry=mandate"
+  );
+  assert.equal(withUaid.operatorUaid, "uaid:aid:TEST;uid=0.0.54321;registry=mandate");
+  const without = buildRecord(proposal, decision);
+  assert.equal(without.operatorUaid, undefined);
+  assert.ok(!("operatorUaid" in without), "absent, not null");
 });

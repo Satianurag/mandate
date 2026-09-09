@@ -41,6 +41,13 @@ export interface AuditRecord {
   txId?: string;
   /** SHA-256 of the full decision trace, kept off-topic. */
   traceHash: string;
+  /**
+   * HCS-14 UAID of the gateway agent that wrote this record. Self-certifying
+   * (recomputable from public inputs), so records correlate across protocols
+   * without trusting our word for who we are. Absent only when derivation
+   * failed — the verdict is load-bearing, the UAID is attribution.
+   */
+  operatorUaid?: string;
 }
 
 export interface HederaOperatorCredentials {
@@ -101,7 +108,8 @@ export function buildMandateRecord(summary: MandateSummary): AuditRecord {
 export function buildRecord(
   proposal: PaymentProposal,
   decision: PolicyDecision,
-  settlement?: SettleResponse
+  settlement?: SettleResponse,
+  operatorUaid?: string
 ): AuditRecord {
   return {
     v: 1,
@@ -116,6 +124,7 @@ export function buildRecord(
     coverage: `${decision.reputation.chainsReachable}/${decision.reputation.chainsQueried}`,
     chainsFailed: [...decision.reputation.chainsFailed],
     txId: settlement?.transaction,
+    ...(operatorUaid ? { operatorUaid } : {}),
     traceHash: createHash("sha256")
       .update(JSON.stringify(decision.trace))
       .digest("hex"),

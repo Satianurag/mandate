@@ -8,6 +8,7 @@
     "test": "node --experimental-strip-types --test src/*.test.ts"
   },
   "dependencies": {
+    "@hashgraphonline/standards-sdk": "^0.1.186",
     "@hiero-ledger/sdk": "^2.88.0",
     "@ledgerhq/device-management-kit": "^1.9.0",
     "@ledgerhq/device-signer-kit-ethereum": "^1.18.0",

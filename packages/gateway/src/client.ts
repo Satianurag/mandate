@@ -27,7 +27,9 @@ import type { PaymentRequired, PaymentRequirements } from "@x402/core/types";
 import { policyEngine } from "./policy.ts";
 import { lookupCounterparty, AGENT0_SUBGRAPHS } from "./reputation.ts";
 import { normaliseAmount, createSealedHederaSigner } from "./hedera.ts";
-import { buildRecord, submit, type AuditRecord } from "./audit.ts";
+import { buildRecord, submit } from "./audit.ts";
+import { deriveOperatorUaid } from "./uaid.ts";
+import type { SettleResponse } from "./types.ts";
 import { requireDeviceApproval, StepUpDenied, type StepUpDeps } from "./stepup.ts";
 import { withSecret } from "./keyring.ts";
 import type {
@@ -182,15 +184,39 @@ export function createMandateClient(opts: MandateClientOpts): MandateClient {
   // Audit submission never blocks the payment path and never throws: the
   // record must not slow the verdict, and a logging failure must not fail
   // a payment the policy engine already allowed.
-  const submitAudit = (record: AuditRecord) => {
+  //
+  // The operator UAID is derived per record from the payment's own network,
+  // so the identity can never disagree with the rail the verdict ran on.
+  // Derivation is offline and cached; if it ever fails, the verdict is
+  // still recorded without attribution (load-bearing first, UAID second).
+  const uaidCache = new Map<string, Promise<string>>();
+  const auditVerdict = (
+    proposal: PaymentProposal,
+    decision: PolicyDecision,
+    settlement?: SettleResponse
+  ) => {
     if (!opts.hcsTopic) return;
     const topic = opts.hcsTopic;
-    void withSecret("hedera-payment", opts.hederaCiphertext, (key) =>
-      submit(topic, record, {
+    void withSecret("hedera-payment", opts.hederaCiphertext, async (key) => {
+      let operatorUaid: string | undefined;
+      try {
+        const network = proposal.requirements.network;
+        let cached = uaidCache.get(network);
+        if (!cached) {
+          cached = deriveOperatorUaid(opts.accountId, network);
+          uaidCache.set(network, cached);
+        }
+        operatorUaid = await cached;
+      } catch (e) {
+        console.warn(
+          `[audit] UAID derivation failed, recording without it: ${e instanceof Error ? e.message : e}`
+        );
+      }
+      await submit(topic, buildRecord(proposal, decision, settlement, operatorUaid), {
         accountId: opts.accountId,
         privateKeyHex: key.toString("utf8").trim(),
-      })
-    );
+      });
+    });
   };
 
   const client = x402Client.fromConfig({
@@ -220,7 +246,7 @@ export function createMandateClient(opts: MandateClientOpts): MandateClient {
       );
       last = { proposal: out.proposal, decision: out.decision };
       if (out.decision.verdict === "deny") {
-        submitAudit(buildRecord(out.proposal, out.decision));
+        auditVerdict(out.proposal, out.decision);
         return { abort: true, reason: out.decision.reason };
       }
     })
@@ -232,7 +258,7 @@ export function createMandateClient(opts: MandateClientOpts): MandateClient {
       if (ctx.settleResponse?.success) {
         policyEngine.recordSettled(last.proposal.normalisedAmount);
       }
-      submitAudit(buildRecord(last.proposal, last.decision, ctx.settleResponse));
+      auditVerdict(last.proposal, last.decision, ctx.settleResponse);
     });
 
   return { x402: client, getLastDecision: () => last };

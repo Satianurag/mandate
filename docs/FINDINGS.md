@@ -45,6 +45,8 @@ plan changes. Re-verify any time with `npm run verify` (counts itself) and
 | F21 | Settled spend was never recorded — the rolling budget never accrued | **RESOLVED** | 09 Sep |
 | F22 | Hand-rolled pay flow settled before delivery and doubled settlement — replaced by the stock flow | **RESOLVED** | 09 Sep |
 | F23 | TS 7.0.2 fails ambient `@types` inclusion across workspace packages — explicit `types: ["node"]` + toolchain to latest | **RESOLVED** | 09 Sep |
+| F24 | No Substreams endpoint serves Base Sepolia (either provider) — module CUT, not deferred | **RESOLVED** | 09 Sep |
+| F25 | HCS-14 SDK runtime proven spec-correct; three packaging gaps worked around honestly | **RESOLVED** | 09 Sep |
 
 ---
 
@@ -569,6 +571,60 @@ Adopted on that evidence: `typescript ~7.0.2`, `@hiero-ledger/sdk ^2.88.0`,
 would be newer than the runtime they describe). Everything else pinned was
 already latest (x402 2.25.0, DMK 1.9.0, viem 2.56.3, harness 1.2.2).
 50/50 hermetic green after the move.
+
+---
+
+## F24 — no Substreams endpoint serves Base Sepolia: module CUT · RESOLVED
+
+Probe-before-implement killed this one before a line was written. Two
+independent facts, both verified, not assumed:
+
+1. **It cannot observe our chain.** The current endpoint lists (StreamingFast
+   official + Pinax community, docs current June 2026, cross-checked against
+   the develop-branch source on GitHub) serve Base **mainnet** only. Testnet
+   coverage exists for Ethereum Sepolia, Arbitrum Sepolia, Polygon Amoy —
+   but no `base-sepolia` endpoint on either provider. Our mandate
+   settlements land on Base Sepolia, so an `x402-payments` module could not
+   see a single one of them.
+2. **It cannot be built or tested here.** Substreams modules are Rust-only
+   (official docs); the sandbox has no toolchain and none is obtainable —
+   GitHub API answers but release binaries redirect to a blocked host,
+   crates.io and rustup are blocked, apt has no egress.
+
+A module that can neither compile where we test nor observe the chain we
+settle on is theater, not product — so this is a CUT with cause, not a
+deferral. The Graph track stands on Agent0 subgraphs (live reputation) +
+the x402 payment flow + proof-of-integration, which is what the cut order
+always said.
+
+## F25 — HCS-14: SDK runtime proven, three gaps worked around · RESOLVED
+
+The `@hashgraphonline/standards-sdk` (0.1.186) runtime is genuinely the
+reference implementation: its canonical JSON for spec Test Vector 1
+matches the spec byte-for-byte, and its UAID hash matches an independent
+from-scratch SHA-384+Base58 implementation. Normalization (case,
+whitespace, skill order) verified identical output. All offline and
+deterministic — fully hermetic-testable.
+
+Three gaps found by probing, each handled without forking or hand-rolling
+the scheme:
+
+1. **Reserved skills accepted.** The spec says 40-99 SHALL be rejected; the
+   SDK accepts them. `uaid.ts` enforces the range itself (hermetic test).
+2. **Root types unresolvable.** Every `.d.ts` re-export is extensionless,
+   which fails under `moduleResolution: nodenext` (TS2834, hidden by
+   skipLibCheck) and leaves the root module type-empty — including the
+   README's own example import. Fixed with a local `standards-sdk.d.ts`
+   declaring exactly the surface used, drift-guarded by a test asserting
+   every enum value and export shape against the live runtime.
+3. **Client needs network to construct.** `HCS11Client` hangs offline, so
+   the profile payload is built purely and validated against the SDK's own
+   zod schema hermetically; `npm run uaid:register` only transports the
+   proven bytes and reads them back from the account memo.
+
+Every audit record now carries the operator's self-certifying UAID, derived
+per record from the payment's own network. Live inscription pending the
+operator run.
 
 ---
 

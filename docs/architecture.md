@@ -107,6 +107,6 @@ Custody of every key involved:
 |---|---|---|
 | Ledger | Key Ring CLI, device approval, x402 payment flow | custody + step-up + envelope |
 | The Graph | compose 2+ products; live data | Agent0 (reputation) + x402 (402 flow + proof-of-integration) |
-| The Graph | Subgraph MCP **or** Substreams **or** x402 | x402 path live; Substreams cut per cut order (no Base Sepolia Firehose) |
+| The Graph | Subgraph MCP **or** Substreams **or** x402 | x402 path live; Substreams cut per cut order (F24: no Base Sepolia endpoint on either provider) |
 | Hedera | live x402 service via Blocky402 | Hedera paid service |
-| Hedera | HCS audit, scheduled tx, ERC-8004/HCS-14 (bonus) | evidence layer, treasury leg, identity |
+| Hedera | HCS audit, scheduled tx, ERC-8004/HCS-14 (bonus) | evidence layer (every record carries the operator UAID, F25), treasury leg, identity (HCS-11 profile via `uaid:register`) |
