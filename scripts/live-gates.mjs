@@ -15,8 +15,10 @@ const stamp = new Date().toISOString().replace(/[:.]/g, "-");
 const outDir = join(ROOT, ".live-results", stamp);
 
 function run(cmd, args, opts = {}) {
+  const actualArgs =
+    cmd === process.execPath ? ["--experimental-strip-types", ...args] : args;
   return new Promise((resolve) => {
-    const c = spawn(cmd, args, {
+    const c = spawn(cmd, actualArgs, {
       cwd: ROOT,
       env: opts.env ?? process.env,
       shell: false,

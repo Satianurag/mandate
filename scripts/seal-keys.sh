@@ -53,6 +53,23 @@ else
   fi
 fi
 
+if [ -f "$SECRETS/tier-api.enc" ]; then
+  ok "tier-api already sealed ($SECRETS/tier-api.enc)"
+else
+  info "Paste tier.bot API token (from v2-api.tier.bot), then Ctrl-D:"
+  if printf '%s' "$(cat)" | wallet-cli ring encrypt --key tier-api > "$SECRETS/tier-api.enc"; then
+    if wallet-cli ring decrypt --key tier-api < "$SECRETS/tier-api.enc" >/dev/null 2>&1; then
+      ok "sealed tier-api → secrets/tier-api.enc (decrypt verified)"
+    else
+      rm -f "$SECRETS/tier-api.enc"
+      echo "tier-api.enc not decryptable — check WALLET_PASS"; exit 1
+    fi
+  else
+    rm -f "$SECRETS/tier-api.enc"
+    echo "tier-api seal failed"; exit 1
+  fi
+fi
+
 hdr "Next"
 info "export MANDATE_HEDERA_ACCOUNT_ID=0.0.xxxxx   # payer account"
 info "export SERVICE_PAY_TO=0.0.yyyyy            # receiver (must differ from payer)"

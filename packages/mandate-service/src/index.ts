@@ -50,6 +50,20 @@ const ERC20_MIN_ABI = [
     inputs: [],
     outputs: [{ type: "uint8" }],
   },
+  {
+    name: "name",
+    type: "function",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ type: "string" }],
+  },
+  {
+    name: "version",
+    type: "function",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ type: "string" }],
+  },
 ] as const;
 
 export interface ServiceConfig {
@@ -104,6 +118,26 @@ export async function assertUsdcDeployment(rpcUrl: string, asset: `0x${string}`)
   }
 }
 
+/**
+ * EIP-712 domain for EIP-3009 deposits. Circle FiatToken uses name() and
+ * version() as the typed-data domain — hardcoding "USD Coin" signed the
+ * wrong digest on Base Sepolia, where name() is "USDC". Read live at boot.
+ */
+export async function resolveEip712Domain(
+  rpcUrl: string,
+  asset: `0x${string}`
+): Promise<{ name: string; version: string }> {
+  const client = createPublicClient({ chain: baseSepolia, transport: http(rpcUrl) });
+  const [name, version] = await Promise.all([
+    client.readContract({ address: asset, abi: ERC20_MIN_ABI, functionName: "name" }),
+    client.readContract({ address: asset, abi: ERC20_MIN_ABI, functionName: "version" }),
+  ]);
+  if (!name || !version) {
+    throw new Error(`Asset ${asset} returned empty EIP-712 name/version.`);
+  }
+  return { name, version };
+}
+
 export interface BuiltService {
   server: Server;
   receiverAuthorizer: `0x${string}`;
@@ -116,6 +150,7 @@ export async function buildService(cfg: ServiceConfig): Promise<BuiltService> {
     ...cfg,
   };
   const receiverAuthorizer = await resolveReceiverAuthorizer(full.facilitatorUrl);
+  const eip712 = await resolveEip712Domain(full.rpcUrl, full.asset);
   const resourceServer = new x402ResourceServer(new HTTPFacilitatorClient({ url: full.facilitatorUrl }));
   resourceServer.register(
     SERVICE_NETWORK,
@@ -130,7 +165,12 @@ export async function buildService(cfg: ServiceConfig): Promise<BuiltService> {
         network: SERVICE_NETWORK,
         payTo: full.receiver,
         price: { asset: full.asset, amount: full.priceBaseUnits },
-        extra: { receiverAuthorizer },
+        extra: {
+          receiverAuthorizer,
+          // Live token EIP-712 domain (Base Sepolia USDC is name "USDC", not "USD Coin").
+          name: eip712.name,
+          version: eip712.version,
+        },
       },
       description: "Subgraph analytics — $0.01 per call inside your mandate",
     },
@@ -171,8 +211,9 @@ export async function buildService(cfg: ServiceConfig): Promise<BuiltService> {
         { request: { adapter, path, method: req.method ?? "GET" } }
       );
       if (!settled.success) {
+        console.error("mandate settle failed:", JSON.stringify(settled));
         res.writeHead(402, { "content-type": "application/json" });
-        res.end(JSON.stringify({ error: settled.errorReason }));
+        res.end(JSON.stringify({ error: settled.errorReason ?? settled }));
         return;
       }
       res.writeHead(200, { "content-type": "application/json", ...settled.headers });

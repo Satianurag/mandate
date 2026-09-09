@@ -20,6 +20,20 @@ const ROOT = new URL("..", import.meta.url).pathname;
 const FILE = process.env.MANDATE_FILE ?? `${ROOT}/mandate.yaml`;
 const CALLS = Number(process.env.MANDATE_CALLS ?? 3);
 
+async function waitForHttp(url, label, accept = (r) => r.ok) {
+  const deadline = Date.now() + 60_000;
+  while (Date.now() < deadline) {
+    try {
+      const res = await fetch(url);
+      if (accept(res)) return;
+    } catch {
+      /* child still booting */
+    }
+    await new Promise((r) => setTimeout(r, 500));
+  }
+  throw new Error(`${label} not ready (${url})`);
+}
+
 function need(name) {
   const v = process.env[name];
   if (!v) {
@@ -71,7 +85,7 @@ function start(name, pkg, env, args = []) {
   return c;
 }
 start("facilitator", "facilitator", { FACILITATOR_PORT: "8406" });
-await new Promise((r) => setTimeout(r, 2500));
+await waitForHttp("http://127.0.0.1:8406/supported", "facilitator");
 start(
   "service",
   "mandate-service",
@@ -82,7 +96,11 @@ start(
   },
   ["--receiver", mf.receiver]
 );
-await new Promise((r) => setTimeout(r, 3500));
+await waitForHttp(
+  "http://127.0.0.1:8405/analytics",
+  "mandate service",
+  (r) => r.status === 402 || r.ok
+);
 
 const { openMandate } = await import(`${ROOT}/packages/gateway/src/mandate.ts`);
 let mandate;
@@ -107,7 +125,9 @@ try {
   for (let i = 1; i <= CALLS; i++) {
     const res = await mandate.fetch(`${mf.serviceUrl}?q=${encodeURIComponent(`{ call${i} { id } }`)}`);
     const body = await res.text();
+    const payHdrs = [...res.headers.entries()].filter(([k]) => /payment/i.test(k));
     console.log(`call ${i}: HTTP ${res.status} ${body.slice(0, 160)}`);
+    if (payHdrs.length) console.log(`call ${i} payment headers: ${JSON.stringify(payHdrs).slice(0, 400)}`);
     if (res.status !== 200) throw new Error(`call ${i} failed: ${body.slice(0, 300)}`);
   }
 

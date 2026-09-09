@@ -104,16 +104,23 @@ test("live 402 -> proxy -> fail-safe deny", async (t) => {
   const dir = await mkdtemp(join(tmpdir(), "mandate-e2e-"));
   t.after(() => void rm(dir, { recursive: true, force: true }));
   const fakeKey = join(dir, "hedera.enc");
+  const fakeGraph = join(dir, "graph.enc");
   await writeFile(fakeKey, "fake-bytes-never-unsealed-on-deny");
   const savedAccount = process.env.MANDATE_HEDERA_ACCOUNT_ID;
   const savedKey = process.env.MANDATE_HEDERA_KEY_ENC;
+  const savedGraph = process.env.MANDATE_GRAPH_KEY_ENC;
   process.env.MANDATE_HEDERA_ACCOUNT_ID = "0.0.54321";
   process.env.MANDATE_HEDERA_KEY_ENC = fakeKey;
+  // Hermetic: operator hosts may have secrets/graph.enc; reputation must stay
+  // unavailable without WALLET_PASS (verify runs tests under env -i).
+  process.env.MANDATE_GRAPH_KEY_ENC = fakeGraph;
   t.after(() => {
     if (savedAccount === undefined) delete process.env.MANDATE_HEDERA_ACCOUNT_ID;
     else process.env.MANDATE_HEDERA_ACCOUNT_ID = savedAccount;
     if (savedKey === undefined) delete process.env.MANDATE_HEDERA_KEY_ENC;
     else process.env.MANDATE_HEDERA_KEY_ENC = savedKey;
+    if (savedGraph === undefined) delete process.env.MANDATE_GRAPH_KEY_ENC;
+    else process.env.MANDATE_GRAPH_KEY_ENC = savedGraph;
   });
 
   const denied = await proxyFetch(`${base}/analytics?q=${encodeURIComponent("{ agents { id } }")}`, undefined, {

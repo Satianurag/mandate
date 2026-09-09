@@ -15,7 +15,7 @@ export WALLET_PASS=$(node scripts/load-wallet-pass.mjs --print 2>/dev/null)
 [ -z "$WALLET_PASS" ] && { bad "no Key Ring password (env WALLET_PASS or OS keychain)"; exit 1; }
 
 printf '\n\033[1mKey Ring status\033[0m\n'
-keys_out=$(node --experimental-strip-types scripts/ring-status.mjs 2>&1)
+keys_out=$(node --experimental-strip-types scripts/ring-status.mjs 2>/dev/null)
 if [ $? -eq 0 ]; then
   ok "Key Ring already provisioned: $keys_out"
 else

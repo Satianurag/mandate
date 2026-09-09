@@ -92,13 +92,25 @@ export async function seal(keyName: string, plaintext: Buffer): Promise<Buffer> 
  * under the wrong identity.
  */
 export async function listKeys(): Promise<string[]> {
-  const out = (await run(["ring", "keys"], Buffer.alloc(0))).toString("utf8");
+  const out = (await run(["ring", "keys", "--output", "json"], Buffer.alloc(0))).toString(
+    "utf8"
+  );
   const env = tryEnvelope(out);
-  if (env && typeof env === "object") {
-    const data = (env as { data?: unknown }).data;
-    if (Array.isArray(data)) return data.map(String);
-    const keys = (data as { keys?: unknown })?.keys;
-    if (Array.isArray(keys)) return keys.map(String);
+  const parsed = (env && typeof env === "object" ? env : JSON.parse(out)) as {
+    data?: unknown;
+    keys?: Array<{ domain?: string; name?: string } | string>;
+  };
+  const fromData = (parsed as { data?: { keys?: unknown } }).data;
+  const candidates = [
+    parsed.keys,
+    (fromData as { keys?: unknown })?.keys,
+    Array.isArray(fromData) ? fromData : null,
+  ];
+  for (const keys of candidates) {
+    if (!Array.isArray(keys)) continue;
+    return keys.map((k) =>
+      typeof k === "string" ? k : String(k.domain ?? k.name ?? k)
+    );
   }
   throw new KeyRingError(
     `ring keys returned unparseable output (wallet-cli behaviour change): ${out.slice(0, 200)}`

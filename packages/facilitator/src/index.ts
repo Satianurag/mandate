@@ -120,6 +120,12 @@ export function createApp(core: FacilitatorCore): Server {
                 body.paymentPayload as PaymentPayload,
                 body.paymentRequirements as PaymentRequirements
               );
+        const failed =
+          ("isValid" in out && (out as { isValid?: boolean }).isValid === false) ||
+          ("success" in out && (out as { success?: boolean }).success === false);
+        if (failed) {
+          console.error(`facilitator ${url.pathname} rejected:`, JSON.stringify(out));
+        }
         res.writeHead(200, { "content-type": "application/json" });
         res.end(JSON.stringify(out));
         return;

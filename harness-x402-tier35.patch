@@ -1,0 +1,204 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Satianurag <85240125+Satianurag@users.noreply.github.com>
+Date: Wed, 9 Sep 2026 12:00:00 +0000
+Subject: [PATCH] Tier 3.5: x402Settlement assertions verify the full 402 loop
+ on the mirror node
+
+Acceptance contracts can now flag an assertion with x402Settlement. When
+set, the Tier 3.5 validator prompt gains an x402 settlement-verification
+block: 402 requirements, X-PAYMENT retry, and the settlement record fetched
+from the mirror node - including the critical x402 distinction that the
+facilitator (feePayer), not the end-user signer, is the transaction payer.
+Also adds the mirror transactions endpoint (dash-form id note) to the
+on-chain verification recipe, documents the flag in authoring-a-recipe.md,
+and covers detection + prompt rendering with tests.
+---
+ CHANGELOG.md                   | 12 ++++++++++++
+ docs/authoring-a-recipe.md     |  4 ++++
+ prompts/validator.md           | 10 ++++++++++
+ src/promptBuilder.ts           | 28 ++++++++++++++++++++++++++++
+ test/prompt-templates.test.mjs | 65 +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+ 5 files changed, 119 insertions(+)
+
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index 0000000..0000000 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -1,3 +1,15 @@
+ # Changelog
++## Unreleased
++
++### Added
++
++- Tier 3.5 understands `x402Settlement` acceptance-contract assertions. When
++  any assertion sets the flag, the validator prompt gains an x402
++  settlement-verification block: the full 402 → X-PAYMENT → settle loop is
++  checked against the mirror-node transaction record, including the critical
++  distinction that the facilitator (feePayer) — not the end-user signer — is
++  the transaction payer. The mirror transactions endpoint also joins the
++  on-chain verification recipe for all signer runs — the only prompt change
++  recipes without the flag will see.
++
+ ## 1.2.2
+diff --git a/docs/authoring-a-recipe.md b/docs/authoring-a-recipe.md
+index 0000000..0000000 100644
+--- a/docs/authoring-a-recipe.md
++++ b/docs/authoring-a-recipe.md
+@@ -138,4 +138,8 @@
+ - `walletRequired` / `verifiableWithoutCredentials`
+ - `executableWithTestSigner` when Tier 3.5 should complete a real transaction
++- `x402Settlement` when the assertion exercises a 402 pay-per-call flow —
++  Tier 3.5 then verifies the full loop (402 requirements, X-PAYMENT retry,
++  settlement record on the mirror node, facilitator as transaction payer)
++  instead of trusting the HTTP 200
+ Prefer few **critical** assertions: the app loads, the core journey is
+diff --git a/prompts/validator.md b/prompts/validator.md
+index 0000000..0000000 100644
+--- a/prompts/validator.md
++++ b/prompts/validator.md
+@@ -34,12 +34,22 @@
+ After executing an executableWithTestSigner flow:
+ - Verify effects via the Hedera testnet mirror node REST API (keyless ground truth), not only UI toasts.
+ - Base URL: https://testnet.mirrornode.hedera.com
+ - Useful endpoints:
+   - GET /api/v1/topics/{topicId}
+   - GET /api/v1/topics/{topicId}/messages
+   - GET /api/v1/tokens/{tokenId}
+   - GET /api/v1/contracts/{address}/results
+   - GET /api/v1/accounts/{accountIdOrEvm}
++  - GET /api/v1/transactions/{transactionId} (dash form: 0.0.123@456.789 becomes 0.0.123-456-789)
+ - Use browser_navigate to the JSON URL or a shell curl from the workspace. Poll up to ~30s for mirror lag.
+ - Cite the mirror response (status, relevant fields) in issue evidence when an assertion fails; include it in your reasoning for passes.
++{{#hasX402}}
++### x402 settlement verification
++Assertions flagged x402Settlement=true exercise a 402 pay-per-call flow. Verify the full loop, not just the HTTP 200:
++1. Unpaid request returns HTTP 402 with PaymentRequirements (asset, amount, payTo, feePayer). The app must build a transfer with the facilitator's feePayer as transaction payer, partially sign it (sign-only — never submit from the app), and retry with the X-PAYMENT header.
++2. Take the settlement transaction id from the success UI (or the X-PAYMENT round trip) and fetch its mirror record. It must show result SUCCESS with transfers moving the required amount from payer toward payTo.
++3. The critical x402 distinction: the transaction payer on the mirror record is the facilitator (feePayer), not the end-user signer — the facilitator co-signs and submits. If the record shows the user account as payer, the app submitted directly and the assertion fails.
++4. If the app logs an HCS sales receipt, fetch the topic messages and match payer, amount, and endpoint to the settled payment.
++5. Any HashScan link the UI shows must resolve to the same transaction id as the mirror record.
++{{/hasX402}}
+ {{/hasSigner}}
+diff --git a/src/promptBuilder.ts b/src/promptBuilder.ts
+index 0000000..0000000 100644
+--- a/src/promptBuilder.ts
++++ b/src/promptBuilder.ts
+@@ -19,10 +19,37 @@
+ interface ContractAssertion {
+   id: string;
+   journey?: string;
+   route?: string;
+   severity?: string;
+   statement?: string;
+   howToVerify?: string;
+   walletRequired?: boolean;
++  executableWithTestSigner?: boolean;
++  x402Settlement?: boolean;
+ }
++
++/**
++ * True when any contract assertion flags x402Settlement. Defensive by
++ * design: the contract is rendered verbatim into the prompt either way, so
++ * a missing or unparsable flag only withholds the x402 guidance block.
++ */
++export function contractHasX402Settlement(contractJson: string): boolean {
++  try {
++    const parsed: unknown = JSON.parse(contractJson);
++    const assertions = Array.isArray(parsed)
++      ? parsed
++      : (parsed as { assertions?: unknown })?.assertions;
++    return (
++      Array.isArray(assertions) &&
++      assertions.some(
++        assertion =>
++          typeof assertion === "object" &&
++          assertion !== null &&
++          (assertion as ContractAssertion).x402Settlement === true,
++      )
++    );
++  } catch {
++    return false;
++  }
++}
+ const ASSERTION_ID_PATTERN = /\b(C\d+)\b/i;
+@@ -240,7 +240,8 @@
+     contract: contractJson.trim(),
+     outputSchema: JSON.stringify(outputSchema, null, 2),
+     walletRule,
++    hasX402: contractHasX402Settlement(contractJson),
+     hasSigner: Boolean(chainSigner),
+     signerAccountId: chainSigner?.accountId,
+     signerEvmAddress: chainSigner?.evmAddress,
+diff --git a/test/prompt-templates.test.mjs b/test/prompt-templates.test.mjs
+index 0000000..0000000 100644
+--- a/test/prompt-templates.test.mjs
++++ b/test/prompt-templates.test.mjs
+@@ -186,1 +186,66 @@
+ });
++
++test("contractHasX402Settlement detects the flag defensively", () => {
++  const flagged = JSON.stringify({
++    assertions: [{ id: "C1", x402Settlement: true }],
++  });
++  const unflagged = JSON.stringify({
++    assertions: [{ id: "C1", executableWithTestSigner: true }],
++  });
++  assert.equal(prompts.contractHasX402Settlement(flagged), true);
++  assert.equal(prompts.contractHasX402Settlement(unflagged), false);
++  assert.equal(prompts.contractHasX402Settlement("{}"), false);
++  assert.equal(prompts.contractHasX402Settlement("not json"), false);
++  assert.equal(
++    prompts.contractHasX402Settlement(JSON.stringify([{ id: "C1", x402Settlement: true }])),
++    true,
++  );
++});
++
++test("the validator prompt gains x402 guidance only with signer + flagged assertion", async () => {
++  const root = await makeTestTempDir("prompt-validator-x402-");
++  const spec = {
++    name: "demo",
++    projectRoot: root,
++    prdPaths: [],
++    requiredFiles: [],
++    forbiddenFiles: [],
++    validators: {},
++    generator: { provider: "command", command: "agent" },
++    maxAttempts: 1,
++    logging: { jsonlPath: "x", notesPath: "y" },
++  };
++  const signer = {
++    accountId: "0.0.1234",
++    privateKeyHex: "0xdeadbeef",
++    evmAddress: "0xabc",
++    network: "testnet",
++  };
++  const flagged = JSON.stringify({
++    assertions: [{ id: "C2", x402Settlement: true, executableWithTestSigner: true }],
++  });
++
++  const full = await prompts.buildValidatorPrompt(spec, flagged, "http://localhost:3000", signer);
++  assert.match(full, /x402 settlement verification/);
++  assert.match(full, /X-PAYMENT/);
++  assert.match(full, /facilitator.*transaction payer/);
++
++  const unflagged = await prompts.buildValidatorPrompt(
++    spec,
++    JSON.stringify({ assertions: [{ id: "C2" }] }),
++    "http://localhost:3000",
++    signer,
++  );
++  assert.doesNotMatch(unflagged, /x402 settlement verification/);
++
++  const noSigner = await prompts.buildValidatorPrompt(spec, flagged, "http://localhost:3000");
++  assert.doesNotMatch(noSigner, /x402 settlement verification/);
++
++  const malformed = await prompts.buildValidatorPrompt(
++    spec,
++    "not json",
++    "http://localhost:3000",
++    signer,
++  );
++  assert.doesNotMatch(malformed, /x402 settlement verification/);
++});
+--
+2.47.0
