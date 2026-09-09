@@ -87,7 +87,7 @@ the Ledger ETHGlobal Telegram before sleeping.
 
 ## Day 2 — Wed 9 Sep — the spine
 
-- [x] `hedera.buildAndSign` via `@x402/hedera` ExactHederaScheme
+- [x] Sealed Hedera signer delegating to `@x402/hedera` ExactHederaScheme (stock client + `wrapFetchWithPayment`; judgment in SDK hooks)
 - [x] Proxy request path: intercept 402 → decide → settle → retry (`GET /proxy`)
 - [x] `audit.submit` to an HCS topic (requires `MANDATE_HCS_TOPIC_ID`; `npm run provision:hcs` then `npm run e2e:audit`)
 - [x] Stand up `packages/service` — verify + settle before serving

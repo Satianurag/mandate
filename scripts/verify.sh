@@ -83,7 +83,7 @@ PKGS
 hdr "6. Live rails"
 node --experimental-strip-types -e "
 import('./packages/gateway/src/facilitators.ts').then(async m=>{
-  await m.assertSupports(m.BLOCKY402_TESTNET,'exact@hedera:testnet');
+  await m.assertSupports(m.BLOCKY402_URL,'exact@hedera:testnet');
   process.exit(0);
 }).catch(e=>{console.error(e.message);process.exit(1)})" >/dev/null 2>&1 \
   && ok "exact@hedera:testnet live on Blocky402 (EVM leg is self-hosted; proven by mandate:open)" \

@@ -43,6 +43,7 @@ plan changes. Re-verify any time with `npm run verify` (counts itself) and
 | F19 | `envelope.ts` salt diverged from the spike's — one nibble, different channel | **RESOLVED** | 09 Sep |
 | F20 | Hedera `0.0.x` payees could never resolve reputation — always escalated | **RESOLVED** | 09 Sep |
 | F21 | Settled spend was never recorded — the rolling budget never accrued | **RESOLVED** | 09 Sep |
+| F22 | Hand-rolled pay flow settled before delivery and doubled settlement — replaced by the stock flow | **RESOLVED** | 09 Sep |
 
 ---
 
@@ -511,10 +512,42 @@ documented, unenforced fiction.
 One-line fix in `executePayment` (record on `settlement.success` only —
 attempts that fail verify/settle must not consume budget), caught by
 re-reading the payment path end to end rather than by any test. Lesson: unit
-tests proved the engine; nothing proved the wiring. Fixed properly with an injected-deps seam:
-`executePayment` accepts stub sign/verify/settle functions, and
-`budget.test.ts` asserts spend accrues exactly once per successful
-settlement and never on failure.
+tests proved the engine; nothing proved the wiring. Fixed first with an
+injected-deps seam (`executePayment` accepted stub sign/verify/settle),
+then again properly in the stock-flow refactor (F22): the wiring under
+test is now the production wiring itself — `budget.test.ts` runs the
+stock client + mandate hooks + stock server against a stub facilitator
+with an ephemeral key, and asserts the budget accrues exactly once per
+successful settlement and never on failure.
+
+---
+
+## F22 — hand-rolled pay flow settled before delivery and doubled settlement · RESOLVED
+
+Re-reading the gateway's payment path during the stock-SDK audit turned up
+two latent defects in the hand-rolled flow (`proxyFetch` → `decide` →
+`executePayment`, deleted in this pass):
+
+1. **Pay before delivery.** The gateway verified + settled through the
+   facilitator and only then retried upstream with the payment header. Any
+   upstream failure after that point (5xx, timeout, changed price) left the
+   user paid with nothing delivered. The stock `exact` flow settles
+   server-side after the handler runs — the risk sits with the party that
+   can re-try, which is the correct side.
+2. **Double settlement.** Both the gateway AND the service settled the same
+   signed bytes. Hedera de-duplicates by transaction id so this was benign
+   on testnet, but it was 2× facilitator load and would double-charge on any
+   rail without tx-id dedupe.
+
+Both are fixed by deletion, not by patching: signing now delegates to the
+stock `@x402/hedera` signer, the 402/pay/retry loop is `wrapFetchWithPayment`,
+and the service is the stock `x402HTTPResourceServer`. What Mandate owns is
+exactly the judgment — reputation lookup, policy verdict, device step-up in
+`onBeforePaymentCreation`; budget accrual and HCS audit in
+`onPaymentResponse`. The F21 hermetic tests were rewritten onto the same
+loop, so the wiring under test is the production wiring: a deny creates no
+signature and calls neither `/verify` nor `/settle` (asserted by counters
+on the stub facilitator).
 
 ---
 

@@ -19,7 +19,7 @@ import {
   TopicId,
   TopicMessageSubmitTransaction,
 } from "@hiero-ledger/sdk";
-import type { PolicyDecision, PaymentProposal, SettlementResponse } from "./types.ts";
+import type { PolicyDecision, PaymentProposal, SettleResponse } from "./types.ts";
 
 export interface AuditRecord {
   v: 1;
@@ -101,7 +101,7 @@ export function buildMandateRecord(summary: MandateSummary): AuditRecord {
 export function buildRecord(
   proposal: PaymentProposal,
   decision: PolicyDecision,
-  settlement?: SettlementResponse
+  settlement?: SettleResponse
 ): AuditRecord {
   return {
     v: 1,
@@ -115,7 +115,7 @@ export function buildRecord(
     score: decision.reputation.meanScore,
     coverage: `${decision.reputation.chainsReachable}/${decision.reputation.chainsQueried}`,
     chainsFailed: [...decision.reputation.chainsFailed],
-    txId: settlement?.transactionId ?? settlement?.transaction,
+    txId: settlement?.transaction,
     traceHash: createHash("sha256")
       .update(JSON.stringify(decision.trace))
       .digest("hex"),

@@ -2,28 +2,19 @@
  * Mandate -- a hardware trust boundary for x402 agent payments.
  *
  * Runs as a local HTTP proxy in front of the agent. The agent makes ordinary
- * requests; Mandate intercepts the 402, decides whether the payment should
- * happen, obtains a signature under the right conditions, settles, and retries.
+ * requests; Mandate pays the 402s through the stock x402 client with its
+ * judgment hooks attached (see client.ts), and maps denies to 403s.
  */
 
 import { createServer } from "node:http";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { PolicyEngine, DEFAULT_POLICY } from "./policy.ts";
-import { lookupCounterparty, AGENT0_SUBGRAPHS } from "./reputation.ts";
-import {
-  normaliseAmount,
-  buildAndSign,
-  verify,
-  settle,
-  encodePaymentHeader,
-  buildPaymentPayload,
-} from "./hedera.ts";
-import { BLOCKY402_TESTNET } from "./facilitators.ts";
-import { buildRecord, submit } from "./audit.ts";
-import { requireDeviceApproval, StepUpDenied, type StepUpDeps } from "./stepup.ts";
+import { wrapFetchWithPayment } from "@x402/fetch";
+import { DEFAULT_POLICY } from "./policy.ts";
+import { createMandateClient } from "./client.ts";
+import { BLOCKY402_URL } from "./facilitators.ts";
 import { withSecret } from "./keyring.ts";
-import type { PaymentProposal, PaymentRequiredBody, PaymentPayload, PaymentRequirements, SettlementResponse } from "./types.ts";
+import type { StepUpDeps } from "./stepup.ts";
 
 const PROJECT_ROOT = join(dirname(fileURLToPath(import.meta.url)), "../../..");
 const PORT = Number(process.env.MANDATE_PORT ?? 8402);
@@ -35,178 +26,18 @@ const GRAPH_KEY_PATH =
 const HEDERA_KEY_PATH =
   process.env.MANDATE_HEDERA_KEY_ENC ?? join(PROJECT_ROOT, "secrets/hedera.enc");
 
-/** The gateway's budget meter. Exported for tests and the future console. */
-export const policyEngine = new PolicyEngine(DEFAULT_POLICY);
-
-export async function decide(
-  origin: string,
-  challenge: PaymentRequiredBody,
-  graphApiKey: string | null,
-  deps: { stepUp?: StepUpDeps } = {}
-) {
-  const requirements = challenge.accepts[0];
-  if (!requirements) {
-    throw new Error("402 response carried no payment requirements.");
-  }
-
-  const { amount, symbol } = normaliseAmount(requirements);
-  const proposal: PaymentProposal = {
-    origin,
-    requirements,
-    normalisedAmount: amount,
-    assetSymbol: symbol,
-  };
-
-  // A null key means reputation is UNAVAILABLE (no sealed key on this host),
-  // not "unregistered". No doomed lookups are attempted; the coverage record
-  // says exactly what happened, and policy degrades to step_up.
-  const reputation =
-    graphApiKey === null
-      ? {
-          registered: false,
-          feedbackCount: 0,
-          meanScore: null,
-          revokedCount: 0,
-          validationCount: 0,
-          chainsQueried: Object.keys(AGENT0_SUBGRAPHS).length,
-          chainsReachable: 0,
-          chainsFailed: ["graph-key-missing"],
-        }
-      : await lookupCounterparty(requirements.payTo, graphApiKey, {
-          network: requirements.network,
-        }).catch((e) => {
-    // Total lookup failure (programming error, not a registry outage — those
-    // are recorded per-chain inside the reputation record). Fail safe AND
-    // say so: zero registries were read.
-    console.error(`[reputation] lookup failed: ${e instanceof Error ? e.message : e}`);
-    return {
-      registered: false,
-      feedbackCount: 0,
-      meanScore: null,
-      revokedCount: 0,
-      validationCount: 0,
-      chainsQueried: Object.keys(AGENT0_SUBGRAPHS).length,
-      chainsReachable: 0,
-      chainsFailed: ["lookup-failed"],
-    };
-  });
-
-  const decision = policyEngine.evaluate(proposal, reputation);
-
-  if (decision.verdict === "step_up") {
-    try {
-      await requireDeviceApproval(
-        {
-          proposal,
-          reason: decision.reason,
-          timeoutMs: Number(process.env.MANDATE_STEPUP_TIMEOUT_MS ?? 120_000),
-        },
-        deps.stepUp ?? {}
-      );
-    } catch (e) {
-      if (e instanceof StepUpDenied) {
-        return {
-          proposal,
-          decision: { ...decision, verdict: "deny" as const, reason: e.message },
-        };
-      }
-      throw e;
-    }
-  }
-
-  return { proposal, decision, reputation };
-}
-
-/**
- * Injected dependencies for executePayment. Production omits this and gets
- * the real Key Ring + facilitator path; tests stub it (F21 — the budget
- * wiring must be provable without secrets or network).
- */
-export interface PaymentDeps {
-  sign?: (requirements: PaymentRequirements, ciphertext: Buffer) => Promise<string>;
-  verify?: (
-    facilitator: typeof BLOCKY402_TESTNET,
-    requirements: PaymentRequirements,
-    payload: PaymentPayload
-  ) => Promise<{ isValid: boolean; invalidReason?: string }>;
-  settle?: (
-    facilitator: typeof BLOCKY402_TESTNET,
-    requirements: PaymentRequirements,
-    payload: PaymentPayload
-  ) => Promise<SettlementResponse>;
-}
-
-/** After policy allows payment, sign, verify, settle, and audit. */
-export async function executePayment(
-  out: Awaited<ReturnType<typeof decide>>,
-  hederaKeyCiphertext: Buffer,
-  facilitator = BLOCKY402_TESTNET,
-  deps: PaymentDeps = {}
-) {
-  if (out.decision.verdict === "deny") {
-    return { ok: false as const, decision: out.decision };
-  }
-
-  const sign = deps.sign ?? ((req, enc) =>
-    withSecret("hedera-payment", enc, (key) => buildAndSign(req, key))
-  );
-  const verifyFn = deps.verify ?? verify;
-  const settleFn = deps.settle ?? settle;
-
-  const requirements = out.proposal.requirements;
-  const transaction = await sign(requirements, hederaKeyCiphertext);
-
-  const payload = buildPaymentPayload(requirements, transaction, out.proposal.origin);
-
-  const check = await verifyFn(facilitator, requirements, payload);
-  if (!check.isValid) {
-    return {
-      ok: false as const,
-      decision: {
-        ...out.decision,
-        verdict: "deny" as const,
-        reason: check.invalidReason ?? "facilitator rejected payment",
-      },
-    };
-  }
-
-  const settlement = await settleFn(facilitator, requirements, payload);
-  if (settlement.success) {
-    policyEngine.recordSettled(out.proposal.normalisedAmount);
-  }
-  const record = buildRecord(out.proposal, out.decision, settlement);
-  if (HCS_TOPIC) {
-    void withSecret("hedera-payment", hederaKeyCiphertext, async (key) => {
-      const accountId = process.env.MANDATE_HEDERA_ACCOUNT_ID;
-      if (!accountId) {
-        console.warn("[audit] MANDATE_HEDERA_ACCOUNT_ID unset — record not submitted");
-        return;
-      }
-      await submit(HCS_TOPIC, record, {
-        accountId,
-        privateKeyHex: key.toString("utf8").trim(),
-      });
-    });
-  }
-
-  return {
-    ok: settlement.success,
-    decision: out.decision,
-    settlement,
-    paymentHeader: encodePaymentHeader(payload),
-    record,
-  };
-}
-
 /**
  * Unseal the Graph gateway key from the Key Ring. Returns null when no
- * sealed key exists on this host — the caller then records reputation as
+ * sealed key exists on this host — the client then records reputation as
  * unavailable (never as trusted). There is no env-var path: a plaintext
  * API key in the environment would violate invariant 1.
  */
 async function loadGraphKey(): Promise<string | null> {
   const { readFile } = await import("node:fs/promises");
-  const enc = await readFile(GRAPH_KEY_PATH).catch(() => null);
+  // Paths resolve at call time: proxyFetch is also imported by tests and
+  // scripts that set the environment after this module loads.
+  const keyPath = process.env.MANDATE_GRAPH_KEY_ENC ?? GRAPH_KEY_PATH;
+  const enc = await readFile(keyPath).catch(() => null);
   if (!enc) return null;
   return withSecret("graph-gateway", enc, (buf) =>
     Promise.resolve(buf.toString("utf8").trim())
@@ -215,25 +46,35 @@ async function loadGraphKey(): Promise<string | null> {
 
 async function loadHederaKeyEnc(): Promise<Buffer> {
   const { readFile } = await import("node:fs/promises");
-  return readFile(HEDERA_KEY_PATH);
+  return readFile(process.env.MANDATE_HEDERA_KEY_ENC ?? HEDERA_KEY_PATH);
 }
 
-/** Proxy one upstream URL through decide → pay → retry. */
-export async function proxyFetch(upstreamUrl: string, init?: RequestInit) {
-  const origin = new URL(upstreamUrl).origin;
-  let res = await fetch(upstreamUrl, init);
+/**
+ * Proxy one upstream URL through the stock paid-fetch flow.
+ *
+ * A preflight request first: resources that do not challenge pass through
+ * untouched, without loading keys or building a client. On a 402 the
+ * mandate client takes over -- judge, sign, retry -- and a denied payment
+ * becomes a 403 carrying the policy reason and trace.
+ *
+ * `init.body`, when present, must be re-readable (Buffer/string): the
+ * preflight sends it once and the paid retry sends it again. The gateway
+ * boot path always passes a Buffer.
+ */
+export async function proxyFetch(
+  upstreamUrl: string,
+  init?: RequestInit,
+  deps: { stepUp?: StepUpDeps } = {}
+) {
+  const preflight = await fetch(upstreamUrl, init);
+  if (preflight.status !== 402) return preflight;
 
-  if (res.status !== 402) return res;
-
-  const challenge = (await res.json()) as PaymentRequiredBody;
-  const graphKey = await loadGraphKey();
-  const out = await decide(origin, challenge, graphKey);
-
-  if (out.decision.verdict === "deny") {
-    return new Response(JSON.stringify({ error: out.decision.reason, trace: out.decision.trace }), {
-      status: 403,
-      headers: { "content-type": "application/json" },
-    });
+  const accountId = process.env.MANDATE_HEDERA_ACCOUNT_ID;
+  if (!accountId) {
+    return new Response(
+      JSON.stringify({ error: "MANDATE_HEDERA_ACCOUNT_ID unset — cannot sign" }),
+      { status: 503, headers: { "content-type": "application/json" } }
+    );
   }
 
   let hederaEnc: Buffer;
@@ -248,17 +89,30 @@ export async function proxyFetch(upstreamUrl: string, init?: RequestInit) {
     );
   }
 
-  const paid = await executePayment(out, hederaEnc);
-  if (!paid.ok || !paid.paymentHeader) {
-    return new Response(JSON.stringify({ error: paid.decision.reason }), {
-      status: 403,
-      headers: { "content-type": "application/json" },
-    });
-  }
+  const graphKey = await loadGraphKey();
+  const { x402, getLastDecision } = createMandateClient({
+    hederaCiphertext: hederaEnc,
+    accountId,
+    graphApiKey: graphKey,
+    hcsTopic: HCS_TOPIC,
+    stepUp: deps.stepUp,
+  });
 
-  const headers = new Headers(init?.headers);
-  headers.set("x-payment", paid.paymentHeader);
-  return fetch(upstreamUrl, { ...init, headers });
+  try {
+    return await wrapFetchWithPayment(fetch, x402)(upstreamUrl, init);
+  } catch (e) {
+    // A denial aborts payment creation inside the stock client, which
+    // surfaces as a throw. The judgment itself is stashed by the hook, so
+    // the 403 carries the real reason without parsing SDK error strings.
+    const last = getLastDecision();
+    if (last && last.decision.verdict === "deny") {
+      return new Response(
+        JSON.stringify({ error: last.decision.reason, trace: last.decision.trace }),
+        { status: 403, headers: { "content-type": "application/json" } }
+      );
+    }
+    throw e;
+  }
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
@@ -306,7 +160,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   server.listen(PORT, HOST, () => {
     console.log(`Mandate listening on ${HOST}:${PORT}`);
     console.log(`  proxy        GET /proxy → ${UPSTREAM}`);
-    console.log(`  hedera       ${BLOCKY402_TESTNET.name} · exact@hedera:testnet`);
+    console.log(`  hedera       ${BLOCKY402_URL} · exact@hedera:testnet`);
     console.log(`  per-call     ${DEFAULT_POLICY.perCallCeiling}`);
     console.log(`  window       ${DEFAULT_POLICY.windowBudget} / ${DEFAULT_POLICY.windowMs / 3.6e6}h`);
     console.log(`  custody      Ledger Key Ring (no .env secrets)`);

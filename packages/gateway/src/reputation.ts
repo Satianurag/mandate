@@ -14,15 +14,19 @@
  * MCP:   https://github.com/graphops/subgraph-mcp
  */
 
+import { HEDERA_ENTITY_ID_REGEX } from "@x402/hedera";
 import type { CounterpartyReputation } from "./types.ts";
 
 const GATEWAY = "https://gateway.thegraph.com/api";
+// Current canonical mirror endpoints. NOT the stock `@x402/hedera` mirror
+// constants -- those still point at the legacy `*-public` hosts.
 const HEDERA_MIRRORS: Record<string, string> = {
   "hedera:mainnet": "https://mainnet.mirrornode.hedera.com/api/v1",
   "hedera:testnet": "https://testnet.mirrornode.hedera.com/api/v1",
   "hedera:previewnet": "https://previewnet.mirrornode.hedera.com/api/v1",
 };
-const HEDERA_ID_RE = /^\d+\.\d+\.\d+$/;
+/** Entity-id shape, stock from `@x402/hedera` — identical to the hand-rolled regex this replaces. */
+const HEDERA_ID_RE = HEDERA_ENTITY_ID_REGEX;
 
 type FetchFn = typeof fetch;
 

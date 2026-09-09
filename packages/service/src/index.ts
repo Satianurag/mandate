@@ -4,48 +4,35 @@
  * Hedera's track requires a live x402-gated service AND a consuming platform
  * that completes real paid requests end to end. We ship both sides, so the
  * demo does not depend on a third party's endpoint staying up during judging.
+ *
+ * The x402 resource-server harness owns the 402/verify/settle flow
+ * (`x402HTTPResourceServer` + the Hedera `exact` scheme); this file is the
+ * node:http skin, the metered price, and the boot checks. The facilitator's
+ * feePayer is merged into the 402 by the stock scheme
+ * (`enhancePaymentRequirements`, invariant 3) -- never hardcoded, never
+ * pinned on the command line.
  */
 
-import { createServer } from "node:http";
+import { createServer, type Server } from "node:http";
 import {
-  verify,
-  settle,
-  encodePaymentHeader,
-  normaliseAmount,
-} from "../../gateway/src/hedera.ts";
-import { BLOCKY402_TESTNET } from "../../gateway/src/facilitators.ts";
-import type { PaymentPayload, PaymentRequirements } from "../../gateway/src/types.ts";
+  HTTPFacilitatorClient,
+  x402HTTPResourceServer,
+  x402ResourceServer,
+  type RoutesConfig,
+} from "@x402/core/server";
+import { ExactHederaScheme } from "@x402/hedera/exact/server";
+import { HBAR_ASSET_ID } from "@x402/hedera";
+import { normaliseAmount } from "../../gateway/src/hedera.ts";
+import { nodeAdapter } from "../../gateway/src/http-adapter.ts";
+import { BLOCKY402_URL } from "../../gateway/src/facilitators.ts";
+
+export const SERVICE_NETWORK = "hedera:testnet";
 
 export interface ServiceConfig {
   payTo: string;
-  feePayer: string;
+  facilitatorUrl: string;
   port: number;
   host: string;
-}
-
-/**
- * The fee payer is NEVER hardcoded (invariant 3): a rotated facilitator key
- * would otherwise produce confusing "invalid transaction" failures. It is
- * read from the facilitator's live /supported at boot, and the service
- * refuses to start if the advertisement is missing — fail fast at boot,
- * not per-request. An explicit `--fee-payer` CLI flag may pin it instead;
- * explicit operator configuration, not a silent fallback.
- */
-export async function resolveFeePayer(): Promise<string> {
-  const res = await fetch(`${BLOCKY402_TESTNET.baseUrl}/supported`);
-  if (!res.ok) throw new Error(`${BLOCKY402_TESTNET.name}: /supported returned ${res.status}`);
-  const body = (await res.json()) as {
-    kinds?: { scheme?: string; network?: string; extra?: { feePayer?: string } }[];
-  };
-  const kind = (body.kinds ?? []).find(
-    (k) => k.scheme === "exact" && k.network === "hedera:testnet"
-  );
-  if (!kind?.extra?.feePayer) {
-    throw new Error(
-      `${BLOCKY402_TESTNET.name} no longer advertises exact@hedera:testnet with a feePayer`
-    );
-  }
-  return kind.extra.feePayer;
 }
 
 function flagValue(name: string): string | undefined {
@@ -62,10 +49,9 @@ export async function loadConfig(): Promise<ServiceConfig> {
   if (!payTo || payTo === "0.0.0") {
     throw new Error("Set --pay-to (or SERVICE_PAY_TO) before starting the paid service.");
   }
-  const feePayer = flagValue("--fee-payer") ?? (await resolveFeePayer());
   return {
     payTo,
-    feePayer,
+    facilitatorUrl: process.env.MANDATE_FACILITATOR_URL ?? BLOCKY402_URL,
     port: Number(process.env.SERVICE_PORT ?? 8403),
     host: process.env.SERVICE_HOST ?? "127.0.0.1",
   };
@@ -74,114 +60,108 @@ export async function loadConfig(): Promise<ServiceConfig> {
 /** Tinybars. 1 HBAR = 1e8 tinybars. */
 const BASE_PRICE = 2_000_000n;
 
+/**
+ * Meter a GraphQL query by complexity: nesting depth plus field count.
+ * Exported so the hermetic suite can assert per-call metering directly.
+ */
 export function quote(query: string): bigint {
   const depth = (query.match(/\{/g) ?? []).length;
   const fields = (query.match(/\w+(?=\s*[\{\n])/g) ?? []).length;
   return BASE_PRICE + BigInt(depth) * 500_000n + BigInt(fields) * 100_000n;
 }
 
-export function requirementsFor(
-  url: URL,
-  amount: bigint,
-  payTo: string,
-  feePayer: string
-): PaymentRequirements {
-  return {
-    scheme: "exact",
-    network: "hedera:testnet",
-    asset: "0.0.0",
-    amount: amount.toString(),
-    payTo,
-    maxTimeoutSeconds: 60,
-    resource: `${url.origin}${url.pathname}${url.search}`,
-    description: "Subgraph analytics — metered by complexity",
-    extra: { feePayer },
+export async function buildService(cfg: ServiceConfig): Promise<Server> {
+  const resourceServer = new x402ResourceServer(
+    new HTTPFacilitatorClient({ url: cfg.facilitatorUrl })
+  );
+  resourceServer.register(SERVICE_NETWORK, new ExactHederaScheme());
+  const routes: RoutesConfig = {
+    "GET /analytics": {
+      accepts: {
+        scheme: "exact",
+        network: SERVICE_NETWORK,
+        payTo: cfg.payTo,
+        // Metered: every query is priced by its own complexity at 402 time.
+        // The same function runs again when the paid request arrives, so a
+        // client that changes the query between 402 and payment is priced
+        // for what it actually asked.
+        price: (ctx) => {
+          const raw = ctx.adapter.getQueryParams?.()?.["q"];
+          const q = (Array.isArray(raw) ? raw[0] : raw) ?? "{ agents { id } }";
+          return { asset: HBAR_ASSET_ID, amount: quote(q).toString() };
+        },
+        maxTimeoutSeconds: 60,
+      },
+      description: "Subgraph analytics — metered by complexity",
+    },
   };
-}
+  const httpServer = new x402HTTPResourceServer(resourceServer, routes);
+  // Fetches facilitator /supported and validates the route has scheme +
+  // facilitator backing. Without this, requests fail with "make sure to
+  // call initialize()" — boot must not serve a half-wired server.
+  await httpServer.initialize();
 
-function decodePaymentHeader(header: string): PaymentPayload {
-  return JSON.parse(Buffer.from(header, "base64").toString("utf8")) as PaymentPayload;
-}
-
-/** Build the server without binding — importing this module has no side effects. */
-export function createServiceServer(payTo: string, feePayer: string) {
   return createServer(async (req, res) => {
-    const url = new URL(req.url ?? "/", "http://localhost");
-    if (url.pathname !== "/analytics") {
-      res.writeHead(404).end();
-      return;
-    }
-
-    const query = url.searchParams.get("q") ?? "{ agents { id } }";
-    const amount = quote(query);
-    const requirements = requirementsFor(url, amount, payTo, feePayer);
-    const paymentHeader = req.headers["x-payment"];
-
-    if (!paymentHeader || Array.isArray(paymentHeader)) {
-      res.writeHead(402, { "content-type": "application/json" });
-      res.end(
-        JSON.stringify({
-          x402Version: 2,
-          accepts: [requirements],
-        })
-      );
-      return;
-    }
-
     try {
-      const payload = decodePaymentHeader(paymentHeader);
-      const check = await verify(BLOCKY402_TESTNET, requirements, payload);
-      if (!check.isValid) {
-        res.writeHead(402, { "content-type": "application/json" });
-        res.end(
-          JSON.stringify({
-            x402Version: 2,
-            accepts: [requirements],
-            error: check.invalidReason ?? "invalid payment",
-          })
-        );
+      const base = `http://${req.headers.host ?? "localhost"}`;
+      const adapter = nodeAdapter(req, base);
+      const path = new URL(req.url ?? "/", base).pathname;
+      const out = await httpServer.processHTTPRequest({
+        adapter,
+        path,
+        method: req.method ?? "GET",
+      });
+      if (out.type === "no-payment-required") {
+        res.writeHead(404).end();
         return;
       }
-
-      const settlement = await settle(BLOCKY402_TESTNET, requirements, payload);
-      if (!settlement.success) {
-        res.writeHead(402, { "content-type": "application/json" });
-        res.end(
-          JSON.stringify({
-            x402Version: 2,
-            accepts: [requirements],
-            error: settlement.errorReason ?? "settlement failed",
-          })
-        );
+      if (out.type === "payment-error") {
+        res.writeHead(out.response.status, out.response.headers);
+        res.end(JSON.stringify(out.response.body));
         return;
       }
-
-      const { amount: human, symbol } = normaliseAmount(requirements);
-      const txId = settlement.transactionId ?? settlement.transaction;
-      res.writeHead(200, { "content-type": "application/json" });
+      // Verified: run the handler, then settle. The PAYMENT-RESPONSE headers
+      // from processSettlement are what the mandate client accrues its
+      // budget from — dropping them would let spend go unmetered.
+      const query = new URL(req.url ?? "/", base).searchParams.get("q") ?? "{ agents { id } }";
+      const settled = await httpServer.processSettlement(
+        out.paymentPayload,
+        out.paymentRequirements,
+        out.declaredExtensions,
+        { request: { adapter, path, method: req.method ?? "GET" } }
+      );
+      if (!settled.success) {
+        res.writeHead(402, { "content-type": "application/json" });
+        res.end(JSON.stringify({ error: settled.errorReason }));
+        return;
+      }
+      const { amount: human, symbol } = normaliseAmount(out.paymentRequirements);
+      res.writeHead(200, { "content-type": "application/json", ...settled.headers });
       res.end(
         JSON.stringify({
           ok: true,
           query,
-          paid: { amount: human, asset: symbol, txId },
+          paid: { amount: human, asset: symbol, txId: settled.transaction },
           rows: [{ id: "agent-demo-1", feedbackCount: 42 }],
         })
       );
-    } catch (err) {
+    } catch (e) {
       res.writeHead(500, { "content-type": "application/json" });
-      res.end(JSON.stringify({ error: err instanceof Error ? err.message : String(err) }));
+      res.end(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }));
     }
   });
 }
-
-export { encodePaymentHeader };
 
 if (import.meta.url === `file://${process.argv[1]}`) {
   const boot: ServiceConfig = await loadConfig().catch((e: unknown): never => {
     console.error(`Cannot start paid service: ${e instanceof Error ? e.message : e}`);
     process.exit(1);
   });
-  createServiceServer(boot.payTo, boot.feePayer).listen(boot.port, boot.host, () =>
-    console.log(`paid service on ${boot.host}:${boot.port} (feePayer ${boot.feePayer})`)
+  const server = await buildService(boot).catch((e: unknown): never => {
+    console.error(`Cannot start paid service: ${e instanceof Error ? e.message : e}`);
+    process.exit(1);
+  });
+  server.listen(boot.port, boot.host, () =>
+    console.log(`paid service on ${boot.host}:${boot.port} (facilitator ${boot.facilitatorUrl})`)
   );
 }

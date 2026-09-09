@@ -127,7 +127,7 @@ npm run check:mandate && npm run mandate:open
 | Mandate client (`DmkEvmSigner` + ceiling strategy) | implemented; live proof = `npm run mandate:open` |
 | Self-hosted facilitator + mandate service | implemented, strict-booting; live proof = `npm run mandate:open` |
 | HCS audit (payments + mandates) + mirror read-back | implemented — needs topic id; Key Ring creds only |
-| Hedera paid service (Blocky402) | implemented — fee payer resolved live at boot, fails fast |
+| Hedera paid service (Blocky402) | stock harness — fee payer merged live from the facilitator ad, boot fails fast |
 | Operator console | **not started** (per user: no UI until requested) |
 
 - [`docs/sponsor-case.md`](docs/sponsor-case.md) — why each sponsor wants this

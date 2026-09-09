@@ -43,8 +43,6 @@ const record = buildRecord(
       amount: "2000000",
       payTo: accountId,
       maxTimeoutSeconds: 60,
-      resource: "probe",
-      description: "HCS audit probe",
       extra: { feePayer: "0.0.7162784" },
     },
     normalisedAmount: 0.02,

@@ -1,88 +1,29 @@
 /**
- * Wire types for the x402 `exact` scheme on Hedera.
+ * Wire types: stock `@x402/core` — Mandate never redefines the protocol.
  *
- * Source of truth:
- *   https://github.com/x402-foundation/x402/blob/main/specs/schemes/exact/scheme_exact_hedera.md
- *
- * The Hedera scheme is client-driven: the client builds and PARTIALLY signs a
- * TransferTransaction, and the facilitator -- named as `feePayer` in
- * `extra` -- completes it and pays the network fee. That split is what lets
- * Mandate keep the signing key sealed until the last possible moment.
+ * `PaymentRequirements`, `PaymentPayload`, `PaymentRequired`, `SettleResponse`,
+ * `VerifyResponse` and `SupportedResponse` are re-exported verbatim so every
+ * module speaks the exact dialect the SDK parses. Anything below the divider
+ * is Mandate's own domain (policy verdicts, reputation) and has no stock
+ * equivalent.
  */
 
-/** CAIP-2 network identifier, e.g. "hedera:testnet" | "hedera:mainnet". */
-export type HederaNetwork = `hedera:${string}`;
-
-export interface HederaExtra {
-  /** Hedera account ID that sponsors network fees. Usually the facilitator. */
-  feePayer: string;
-  /** Extra facilitator fields pass through untouched (x402 `extra` is open). */
-  [key: string]: unknown;
-}
-
-export interface PaymentRequirements {
-  scheme: "exact";
-  network: HederaNetwork;
-  /** Entity ID of the asset. "0.0.0" denotes native HBAR. */
-  asset: string;
-  /**
-   * Amount in the asset's smallest unit.
-   * HBAR is expressed in TINYBARS (1 HBAR = 1e8 tinybars); HTS tokens use the
-   * token's configured decimals. Off-by-one-decimal is the single most common
-   * integration failure here -- see docs/threat-model.md.
-   */
-  amount: string;
-  /** Hedera account ID credited by the payment. */
-  payTo: string;
-  maxTimeoutSeconds: number;
-  resource?: string;
-  description?: string;
-  extra: HederaExtra;
-}
-
-export interface ResourceInfo {
-  url: string;
-  description?: string;
-  mimeType?: string;
-}
-
-/**
- * PaymentPayload (x402 v2).
- *
- * `@x402/hedera` facilitator verify requires `accepted` to mirror
- * `paymentRequirements` — see ExactHederaScheme.validateRequirements().
- */
-export interface PaymentPayload {
-  x402Version: 1 | 2;
-  resource?: ResourceInfo;
-  accepted: PaymentRequirements;
-  payload: {
-    /** Base64-encoded, partially-signed Hedera TransferTransaction. */
-    transaction: string;
-  };
-}
-
-export interface SettlementResponse {
-  success: boolean;
-  /** Hedera transaction ID, e.g. "0.0.1234@1757280000.000000000". */
-  transactionId?: string;
-  /** Blocky402 returns `transaction` instead of `transactionId`. */
-  transaction?: string;
-  network?: HederaNetwork;
-  payer?: string;
-  errorReason?: string;
-}
-
-/** The 402 body a resource server returns when payment is required. */
-export interface PaymentRequiredBody {
-  x402Version: number;
-  accepts: PaymentRequirements[];
-  error?: string;
-}
+export type {
+  PaymentRequirements,
+  PaymentPayload,
+  PaymentRequired,
+  SettleResponse,
+  VerifyResponse,
+  SupportedResponse,
+  SupportedKind,
+  ResourceInfo,
+} from "@x402/core/types";
 
 // ---------------------------------------------------------------------------
 // Mandate's own domain types
 // ---------------------------------------------------------------------------
+
+import type { PaymentRequirements } from "@x402/core/types";
 
 export type Verdict = "allow" | "step_up" | "deny";
 
@@ -113,6 +54,7 @@ export interface CounterpartyReputation {
 export interface PaymentProposal {
   /** The origin we are about to pay, e.g. "https://data.example.com". */
   origin: string;
+  /** Stock v2 requirements, as selected by the x402 client from the 402. */
   requirements: PaymentRequirements;
   /** Amount normalised to a human unit for policy comparison. */
   normalisedAmount: number;

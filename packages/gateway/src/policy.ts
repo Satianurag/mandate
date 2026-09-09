@@ -268,3 +268,11 @@ export class PolicyEngine {
     );
   }
 }
+
+/**
+ * The gateway's budget meter: one engine per process. The client hooks accrue
+ * settled spend here; tests and the future console read from it. Budgets are
+ * inherently process-global (a per-request meter could not enforce a window),
+ * so the singleton is the honest shape, not a shortcut.
+ */
+export const policyEngine = new PolicyEngine(DEFAULT_POLICY);

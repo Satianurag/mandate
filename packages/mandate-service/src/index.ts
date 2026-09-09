@@ -14,12 +14,11 @@
  *   mandate chain (never price the wrong token).
  */
 
-import { createServer, type IncomingMessage, type Server } from "node:http";
+import { createServer, type Server } from "node:http";
 import {
   HTTPFacilitatorClient,
   x402HTTPResourceServer,
   x402ResourceServer,
-  type HTTPAdapter,
   type RoutesConfig,
 } from "@x402/core/server";
 import { BatchSettlementEvmScheme } from "@x402/evm/batch-settlement/server";
@@ -27,6 +26,7 @@ import { FileChannelStorage } from "@x402/evm/batch-settlement/server/file-stora
 import { createPublicClient, http } from "viem";
 import { baseSepolia } from "viem/chains";
 import { BASE_SEPOLIA } from "../../gateway/src/facilitators.ts";
+import { nodeAdapter } from "../../gateway/src/http-adapter.ts";
 
 export const SERVICE_NETWORK = "eip155:84532";
 export const SERVICE_CHAIN_ID = 84532;
@@ -60,22 +60,6 @@ export interface ServiceConfig {
   receiver: `0x${string}`;
   asset?: `0x${string}`;
   priceBaseUnits?: string;
-}
-
-function nodeAdapter(req: IncomingMessage, base: string): HTTPAdapter {
-  const url = new URL(req.url ?? "/", base);
-  return {
-    getHeader: (name: string) => {
-      const v = req.headers[name.toLowerCase()];
-      return Array.isArray(v) ? v[0] : v;
-    },
-    getMethod: () => req.method ?? "GET",
-    getPath: () => url.pathname,
-    getUrl: () => url.toString(),
-    getAcceptHeader: () => req.headers.accept ?? "",
-    getUserAgent: () => req.headers["user-agent"] ?? "",
-    getQueryParams: () => Object.fromEntries(url.searchParams.entries()),
-  };
 }
 
 /**

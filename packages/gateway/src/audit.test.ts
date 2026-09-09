@@ -30,7 +30,7 @@ test("buildRecord carries verdict, coverage, txId, and a trace hash", () => {
       assetSymbol: "HBAR",
     },
     { verdict: "allow", reason: "under gate, reputable", trace: ["t1"], reputation },
-    { success: true, transactionId: "0.0.5005@1.1" }
+    { success: true, transaction: "0.0.5005@1.1", network: "hedera:testnet" }
   );
   assert.equal(record.v, 1);
   assert.equal(record.verdict, "allow");

@@ -38,16 +38,26 @@ We run the scheme on our own service and hand them the reference implementation.
 agent
   │  ordinary HTTP
   ▼
-Mandate gateway ─── policy engine ──► ERC-8004 reputation (Agent0 / Subgraph MCP)
-  │                     │
-  │                     ├─ allow    ─► sign voucher (no device)      ─┐
-  │                     ├─ step_up  ─► DMK device action, ERC-7730   ─┤
-  │                     └─ deny     ─► refuse, no signature produced  │
-  │                                                                   ▼
-  │                                              facilitator /verify → /settle
-  ▼                                                                   │
-upstream service                          HCS evidence topic ◄────────┘
+Mandate gateway: stock wrapFetchWithPayment + judgment hooks
+  │  402 ──► onBeforePaymentCreation ──► reputation (Agent0 / Subgraph MCP)
+  │                                          │ policy engine
+  │                                          ├─ allow    ─► sealed sign ──────┐
+  │                                          ├─ step_up  ─► device, ERC-7730 ─┤
+  │                                          └─ deny     ─► abort, 403, HCS   │
+  │                                                                           ▼
+  │                                              stock exact flow: sign ──► upstream
+  ▼                                                service verifies, settles after
+upstream service ◄──────────────────────────────────────── its handler runs
+  │  200 + PAYMENT-RESPONSE
+  ▼
+onPaymentResponse ──► accrue budget (iff settled) ──► HCS evidence topic
 ```
+
+The payment mechanics are stock (`x402Client`, the Hedera `exact` scheme,
+`wrapFetchWithPayment`, the server harness). Mandate owns exactly the
+judgment: what the stock client cannot decide, and what the stock server
+cannot record. F22 records the two defects the hand-rolled flow it replaced
+was carrying (pay-before-delivery, double settlement).
 
 ## Mandate lifecycle
 
