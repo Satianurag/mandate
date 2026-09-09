@@ -3,7 +3,7 @@
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 SECRETS="$ROOT/secrets"
-export WALLET_PASS=$(security find-generic-password -a default -s ledger-wallet-cli -w 2>/dev/null) || true
+export WALLET_PASS=$(node scripts/load-wallet-pass.mjs --print 2>/dev/null) || true
 [ -z "${WALLET_PASS:-}" ] && { echo "WALLET_PASS missing — npm run device"; exit 1; }
 mkdir -p "$SECRETS"
 if [ -f "$SECRETS/hedera.enc" ]; then

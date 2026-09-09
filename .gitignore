@@ -16,3 +16,7 @@ dist/
 # blobs out of history to avoid confusing judges about what is sealed.
 secrets/*.enc
 secrets/.hedera-pending.json
+
+# Operator-local mandate + channel state (no secrets, but per-deployment).
+mandate.yaml
+state/

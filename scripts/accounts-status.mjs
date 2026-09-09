@@ -57,11 +57,20 @@ items.push(
   )
 );
 
+const mandateCfg = await exists(join(ROOT, "mandate.yaml"));
+const mandateKeys =
+  (await exists(join(ROOT, "secrets/mandate-session.enc"))) &&
+  (await exists(join(ROOT, "secrets/mandate-facilitator.enc"))) &&
+  (await exists(join(ROOT, "secrets/mandate-authorizer.enc")));
 items.push(
   row(
-    env("MANDATE_EVM_SIGNING_KEY") && env("MANDATE_EVM_RECEIVER"),
-    "Base Sepolia ETH + USDC wallet env",
-    "export MANDATE_EVM_SIGNING_KEY=0x… MANDATE_EVM_RECEIVER=0x…"
+    mandateCfg && mandateKeys && env("MANDATE_EVM_RPC_URL"),
+    "Mandate config + sealed EVM keys + RPC",
+    mandateCfg
+      ? mandateKeys
+        ? "export MANDATE_EVM_RPC_URL=https://…"
+        : "npm run mandate:keygen && npm run facilitator:keygen"
+      : "copy mandate.example.yaml → mandate.yaml"
   )
 );
 
@@ -86,19 +95,9 @@ items.push(
   )
 );
 
-const pass = await new Promise((resolve) => {
-  if (process.env.WALLET_PASS) return resolve(true);
-  const c = spawn("security", [
-    "find-generic-password",
-    "-a",
-    "default",
-    "-s",
-    "ledger-wallet-cli",
-    "-w",
-  ]);
-  c.on("close", (code) => resolve(code === 0));
-});
-items.push(row(pass, "Key Ring password in Keychain", "npm run device"));
+items.push(
+  row(Boolean(process.env.WALLET_PASS), "Key Ring password available", "npm run device")
+);
 
 console.log(`\n${items.filter(Boolean).length}/${items.length} ready — run npm run live:gates when all ✓`);
 process.exit(items.every(Boolean) ? 0 : 1);

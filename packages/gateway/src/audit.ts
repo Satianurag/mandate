@@ -49,6 +49,55 @@ export interface HederaOperatorCredentials {
   privateKeyHex: string;
 }
 
+export interface MandateSummary {
+  channelId: string;
+  salt: string;
+  payer: string;
+  receiver: string;
+  ceilingBaseUnits: string;
+  cumulativeBaseUnits: string;
+  calls: number;
+  taps: number;
+  serviceUrl: string;
+}
+
+/**
+ * The mandate's audit record: one tap opened a channel, vouchers streamed
+ * inside it. Same topic, same shape as payment verdicts — the month-end
+ * artifact covers both rails. Coverage is honestly "0/0": mandate opens do
+ * not (yet) consult reputation registries; the ceiling is the policy.
+ */
+export function buildMandateRecord(summary: MandateSummary): AuditRecord {
+  const cumulative = Number(summary.cumulativeBaseUnits) / 1e6;
+  const ceiling = Number(summary.ceilingBaseUnits) / 1e6;
+  return {
+    v: 1,
+    ts: new Date().toISOString(),
+    origin: summary.serviceUrl,
+    verdict: "allow",
+    reason:
+      `mandate stream: ${summary.calls} calls, ${summary.taps} tap(s), ` +
+      `$${cumulative.toFixed(2)} of $${ceiling.toFixed(2)} ceiling, channel ${summary.channelId}`,
+    amount: cumulative,
+    asset: "USDC",
+    score: null,
+    coverage: "0/0",
+    chainsFailed: [],
+    traceHash: createHash("sha256")
+      .update(
+        JSON.stringify({
+          channelId: summary.channelId,
+          salt: summary.salt,
+          payer: summary.payer,
+          receiver: summary.receiver,
+          taps: summary.taps,
+          cumulativeBaseUnits: summary.cumulativeBaseUnits,
+        })
+      )
+      .digest("hex"),
+  };
+}
+
 export function buildRecord(
   proposal: PaymentProposal,
   decision: PolicyDecision,

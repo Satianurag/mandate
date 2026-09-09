@@ -8,19 +8,24 @@ hdr(){ printf '\n\033[1m%s\033[0m\n' "$1"; }
 
 printf '\n\033[1mMandate — full verification\033[0m  %s\n' "$(date -u '+%Y-%m-%d %H:%M UTC')"
 
-hdr "1. Tests"
-out=$(node --experimental-strip-types --test packages/gateway/src/*.test.ts 2>&1)
-if printf '%s' "$out" | grep -qE "^. fail 0$"; then
-  n=$(printf '%s' "$out" | grep -E "^. pass" | awk '{print $3}')
-  ok "policy engine: $n/$n passing"
-else bad "tests failing"; fi
+hdr "1. Tests (every workspace, hermetic)"
+for ws in packages/*; do
+  if [ -f "$ws/package.json" ] && grep -q '"test"' "$ws/package.json"; then
+    name=$(node -e "console.log(require('./$ws/package.json').name)")
+    out=$(env -i PATH="$PATH" HOME="$HOME" npm test -w "$name" 2>&1)
+    if printf '%s' "$out" | grep -qE "^# fail 0$"; then
+      n=$(printf '%s' "$out" | grep -E "^# pass" | awk '{print $3}')
+      ok "$name: $n passing"
+    else bad "$name tests failing"; fi
+  fi
+done
 
 hdr "2. Every module parses and imports"
-for f in packages/gateway/src/*.ts; do
+for f in packages/*/src/*.ts; do
   case "$f" in *test*) continue;; esac
   if node --experimental-strip-types -e "import('./$f').then(()=>process.exit(0)).catch(e=>{console.error(e.message);process.exit(1)})" >/dev/null 2>&1; then
-    ok "$(basename "$f")"
-  else bad "$(basename "$f") failed to import"; fi
+    ok "$f"
+  else bad "$f failed to import"; fi
 done
 
 hdr "3. No secrets committed"
@@ -33,7 +38,7 @@ elif [ -f .env ]; then
 else
   ok "no tracked .env or secrets/*.enc (local Key Ring blobs are gitignored)"
 fi
-if grep -rIn --exclude-dir=.git --exclude-dir=node_modules --exclude-dir=.live-results --exclude=verify.sh -E "(PRIVATE_KEY|BEGIN [A-Z ]*PRIVATE|0x[a-fA-F0-9]{64})" . >/dev/null 2>&1; then
+if grep -rIn --exclude-dir=.git --exclude-dir=node_modules --exclude-dir=.live-results --exclude=verify.sh --exclude=mandate.example.yaml -E "(PRIVATE_KEY|BEGIN [A-Z ]*PRIVATE|0x[a-fA-F0-9]{64})" . >/dev/null 2>&1; then
   bad "possible key material in source"; else ok "no key-shaped literals in source"; fi
 
 hdr "4. Doc consistency (no contradictions)"

@@ -91,17 +91,17 @@ if (readyGate.ok) {
   console.log("\n(skip e2e-payment / HCS — check-ready failed)");
 }
 
-const spikeGate = await gate("check-spike", () =>
-  run(process.execPath, [join(ROOT, "scripts/check-spike-ready.mjs")])
+const mandateGate = await gate("check-mandate", () =>
+  run(process.execPath, [join(ROOT, "scripts/check-mandate.mjs")])
 );
-log.push(spikeGate);
+log.push(mandateGate);
 
-if (spikeGate.ok) {
+if (mandateGate.ok) {
   log.push(
-    await gate("spike-envelope", () => run(process.execPath, [join(ROOT, "scripts/spike-envelope.mjs")]))
+    await gate("mandate-open", () => run(process.execPath, [join(ROOT, "scripts/mandate-open.mjs")]))
   );
 } else {
-  console.log("\n(skip spike-envelope — check-spike failed)");
+  console.log("\n(skip mandate:open — check-mandate failed)");
 }
 
 log.push(

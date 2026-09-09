@@ -3,8 +3,6 @@
 # Never pass secrets on the command line — use stdin or a prompt.
 set -euo pipefail
 
-SERVICE=ledger-wallet-cli
-ACCOUNT=default
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 SECRETS="$ROOT/secrets"
 
@@ -15,11 +13,11 @@ hdr(){ printf '\n\033[1m%s\033[0m\n' "$1"; }
 hdr "Mandate — seal credentials"
 mkdir -p "$SECRETS"
 
-if ! security find-generic-password -a "$ACCOUNT" -s "$SERVICE" -w >/dev/null 2>&1; then
+if ! node scripts/load-wallet-pass.mjs >/dev/null 2>&1; then
   echo "Key Ring password missing. Run: npm run device"
   exit 1
 fi
-export WALLET_PASS=$(security find-generic-password -a "$ACCOUNT" -s "$SERVICE" -w)
+export WALLET_PASS=$(node scripts/load-wallet-pass.mjs --print)
 
 if [ -f "$SECRETS/graph.enc" ]; then
   ok "graph-gateway already sealed ($SECRETS/graph.enc)"
@@ -57,6 +55,6 @@ fi
 
 hdr "Next"
 info "export MANDATE_HEDERA_ACCOUNT_ID=0.0.xxxxx   # payer account"
-info "export SERVICE_PAY_TO=\$MANDATE_HEDERA_ACCOUNT_ID  # receiver for demo"
+info "export SERVICE_PAY_TO=0.0.yyyyy            # receiver (must differ from payer)"
 info "npm run provision:hcs   # create audit topic (optional, Day 2)"
 info "npm run e2e:payment"
