@@ -17,15 +17,43 @@ import { BLOCKY402_TESTNET } from "../../gateway/src/facilitators.ts";
 import type { PaymentPayload, PaymentRequirements } from "../../gateway/src/types.ts";
 
 const PORT = Number(process.env.SERVICE_PORT ?? 8403);
+const HOST = process.env.SERVICE_HOST ?? "127.0.0.1";
 
-/** Verified live 2026-09-08 against GET /supported. */
-const FEE_PAYER = "0.0.7162784";
+/**
+ * The fee payer is NEVER hardcoded (invariant 3): a rotated facilitator key
+ * would otherwise produce confusing "invalid transaction" failures. It is
+ * read from the facilitator's live /supported at boot, and the service
+ * refuses to start if the advertisement is missing — fail fast at boot,
+ * not per-request. SERVICE_FEE_PAYER overrides only for hermetic tests.
+ */
+async function resolveFeePayer(): Promise<string> {
+  if (process.env.SERVICE_FEE_PAYER) return process.env.SERVICE_FEE_PAYER;
+  const res = await fetch(`${BLOCKY402_TESTNET.baseUrl}/supported`);
+  if (!res.ok) throw new Error(`${BLOCKY402_TESTNET.name}: /supported returned ${res.status}`);
+  const body = (await res.json()) as {
+    kinds?: { scheme?: string; network?: string; extra?: { feePayer?: string } }[];
+  };
+  const kind = (body.kinds ?? []).find(
+    (k) => k.scheme === "exact" && k.network === "hedera:testnet"
+  );
+  if (!kind?.extra?.feePayer) {
+    throw new Error(
+      `${BLOCKY402_TESTNET.name} no longer advertises exact@hedera:testnet with a feePayer`
+    );
+  }
+  return kind.extra.feePayer;
+}
+
 const PAY_TO =
   process.env.SERVICE_PAY_TO ?? process.env.MANDATE_HEDERA_ACCOUNT_ID ?? "";
 if (!PAY_TO || PAY_TO === "0.0.0") {
   console.error("Set SERVICE_PAY_TO or MANDATE_HEDERA_ACCOUNT_ID before starting the paid service.");
   process.exit(1);
 }
+const FEE_PAYER = await resolveFeePayer().catch((e: unknown) => {
+  console.error(`Cannot start paid service: ${e instanceof Error ? e.message : e}`);
+  process.exit(1);
+});
 
 /** Tinybars. 1 HBAR = 1e8 tinybars. */
 const BASE_PRICE = 2_000_000n;
@@ -120,6 +148,6 @@ createServer(async (req, res) => {
     res.writeHead(500, { "content-type": "application/json" });
     res.end(JSON.stringify({ error: err instanceof Error ? err.message : String(err) }));
   }
-}).listen(PORT, () => console.log(`paid service on :${PORT}`));
+}).listen(PORT, HOST, () => console.log(`paid service on ${HOST}:${PORT} (feePayer ${FEE_PAYER})`));
 
 export { encodePaymentHeader, requirementsFor, quote };

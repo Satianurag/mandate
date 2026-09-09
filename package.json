@@ -7,13 +7,13 @@
     "packages/*"
   ],
   "engines": {
-    "node": ">=20"
+    "node": ">=22.6"
   },
   "scripts": {
     "preflight": "bash scripts/preflight.sh",
     "gateway": "npm run dev -w @mandate/gateway",
     "service": "npm run dev -w @mandate/service",
-    "spike:envelope": "node scripts/spike-envelope.mjs",
+    "spike:envelope": "node --experimental-strip-types scripts/spike-envelope.mjs",
     "seal:keys": "bash scripts/seal-keys.sh",
     "seal:hedera": "bash scripts/seal-hedera.sh",
     "setup:hedera": "node scripts/provision-hedera.mjs",

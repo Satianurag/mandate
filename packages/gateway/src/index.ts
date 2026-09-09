@@ -10,7 +10,7 @@ import { createServer } from "node:http";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { PolicyEngine, DEFAULT_POLICY } from "./policy.ts";
-import { lookupCounterparty } from "./reputation.ts";
+import { lookupCounterparty, AGENT0_SUBGRAPHS } from "./reputation.ts";
 import {
   normaliseAmount,
   buildAndSign,
@@ -23,10 +23,11 @@ import { BLOCKY402_TESTNET, X402_FOUNDATION } from "./facilitators.ts";
 import { buildRecord, submit } from "./audit.ts";
 import { requireDeviceApproval, StepUpDenied } from "./stepup.ts";
 import { withSecret } from "./keyring.ts";
-import type { PaymentProposal, PaymentRequiredBody, PaymentPayload } from "./types.ts";
+import type { PaymentProposal, PaymentRequiredBody, PaymentPayload, PaymentRequirements, SettlementResponse } from "./types.ts";
 
 const PROJECT_ROOT = join(dirname(fileURLToPath(import.meta.url)), "../../..");
-const PORT = Number(process.env.MANDATE_PORT ?? process.env.BREAKER_PORT ?? 8402);
+const PORT = Number(process.env.MANDATE_PORT ?? 8402);
+const HOST = process.env.MANDATE_HOST ?? "127.0.0.1";
 const UPSTREAM = process.env.MANDATE_UPSTREAM ?? "http://127.0.0.1:8403/analytics";
 const HCS_TOPIC = process.env.MANDATE_HCS_TOPIC_ID;
 const GRAPH_KEY_PATH =
@@ -34,7 +35,8 @@ const GRAPH_KEY_PATH =
 const HEDERA_KEY_PATH =
   process.env.MANDATE_HEDERA_KEY_ENC ?? join(PROJECT_ROOT, "secrets/hedera.enc");
 
-const policy = new PolicyEngine(DEFAULT_POLICY);
+/** The gateway's budget meter. Exported for tests and the future console. */
+export const policyEngine = new PolicyEngine(DEFAULT_POLICY);
 
 export async function decide(
   origin: string,
@@ -54,20 +56,26 @@ export async function decide(
     assetSymbol: symbol,
   };
 
-  const reputation = await lookupCounterparty(requirements.payTo, graphApiKey).catch(
-    () => ({
+  const reputation = await lookupCounterparty(requirements.payTo, graphApiKey, {
+    network: requirements.network,
+  }).catch((e) => {
+    // Total lookup failure (programming error, not a registry outage — those
+    // are recorded per-chain inside the reputation record). Fail safe AND
+    // say so: zero registries were read.
+    console.error(`[reputation] lookup failed: ${e instanceof Error ? e.message : e}`);
+    return {
       registered: false,
       feedbackCount: 0,
       meanScore: null,
       revokedCount: 0,
       validationCount: 0,
-      chainsQueried: 0,
+      chainsQueried: Object.keys(AGENT0_SUBGRAPHS).length,
       chainsReachable: 0,
-      chainsFailed: [] as string[],
-    })
-  );
+      chainsFailed: ["lookup-failed"],
+    };
+  });
 
-  const decision = policy.evaluate(proposal, reputation);
+  const decision = policyEngine.evaluate(proposal, reputation);
 
   if (decision.verdict === "step_up") {
     try {
@@ -90,24 +98,48 @@ export async function decide(
   return { proposal, decision, reputation };
 }
 
+/**
+ * Injected dependencies for executePayment. Production omits this and gets
+ * the real Key Ring + facilitator path; tests stub it (F21 — the budget
+ * wiring must be provable without secrets or network).
+ */
+export interface PaymentDeps {
+  sign?: (requirements: PaymentRequirements, ciphertext: Buffer) => Promise<string>;
+  verify?: (
+    facilitator: typeof BLOCKY402_TESTNET,
+    requirements: PaymentRequirements,
+    payload: PaymentPayload
+  ) => Promise<{ isValid: boolean; invalidReason?: string }>;
+  settle?: (
+    facilitator: typeof BLOCKY402_TESTNET,
+    requirements: PaymentRequirements,
+    payload: PaymentPayload
+  ) => Promise<SettlementResponse>;
+}
+
 /** After policy allows payment, sign, verify, settle, and audit. */
 export async function executePayment(
   out: Awaited<ReturnType<typeof decide>>,
   hederaKeyCiphertext: Buffer,
-  facilitator = BLOCKY402_TESTNET
+  facilitator = BLOCKY402_TESTNET,
+  deps: PaymentDeps = {}
 ) {
   if (out.decision.verdict === "deny") {
     return { ok: false as const, decision: out.decision };
   }
 
-  const requirements = out.proposal.requirements;
-  const transaction = await withSecret("hedera-payment", hederaKeyCiphertext, (key) =>
-    buildAndSign(requirements, key)
+  const sign = deps.sign ?? ((req, enc) =>
+    withSecret("hedera-payment", enc, (key) => buildAndSign(req, key))
   );
+  const verifyFn = deps.verify ?? verify;
+  const settleFn = deps.settle ?? settle;
+
+  const requirements = out.proposal.requirements;
+  const transaction = await sign(requirements, hederaKeyCiphertext);
 
   const payload = buildPaymentPayload(requirements, transaction, out.proposal.origin);
 
-  const check = await verify(facilitator, requirements, payload);
+  const check = await verifyFn(facilitator, requirements, payload);
   if (!check.isValid) {
     return {
       ok: false as const,
@@ -119,7 +151,10 @@ export async function executePayment(
     };
   }
 
-  const settlement = await settle(facilitator, requirements, payload);
+  const settlement = await settleFn(facilitator, requirements, payload);
+  if (settlement.success) {
+    policyEngine.recordSettled(out.proposal.normalisedAmount);
+  }
   const record = buildRecord(out.proposal, out.decision, settlement);
   if (HCS_TOPIC) {
     void withSecret("hedera-payment", hederaKeyCiphertext, async (key) => {
@@ -145,12 +180,22 @@ export async function executePayment(
 }
 
 async function loadGraphKey(): Promise<string> {
-  if (process.env.GRAPH_API_KEY) return process.env.GRAPH_API_KEY;
-  const { readFile } = await import("node:fs/promises");
-  const enc = await readFile(GRAPH_KEY_PATH);
-  return withSecret("graph-gateway", enc, (buf) =>
-    Promise.resolve(buf.toString("utf8").trim())
-  );
+  // Sealed Key Ring blob first — it is the production path. A plaintext env
+  // key is a local-dev fallback only, and its use is logged so it can never
+  // silently become the deployment's credential story.
+  try {
+    const { readFile } = await import("node:fs/promises");
+    const enc = await readFile(GRAPH_KEY_PATH);
+    return await withSecret("graph-gateway", enc, (buf) =>
+      Promise.resolve(buf.toString("utf8").trim())
+    );
+  } catch {
+    if (process.env.GRAPH_API_KEY) {
+      console.error("[custody] WARNING: using plaintext GRAPH_API_KEY — seal it (npm run seal:keys)");
+      return process.env.GRAPH_API_KEY;
+    }
+    throw new Error(`No Graph API key: ${GRAPH_KEY_PATH} unreadable and GRAPH_API_KEY unset.`);
+  }
 }
 
 async function loadHederaKeyEnc(): Promise<Buffer> {
@@ -212,9 +257,18 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     target.search = url.search;
 
     try {
+      // Forward the body so POST/PUT x402 flows survive the proxy; hop-by-hop
+      // and identity headers must not leak through (Host would misroute).
+      const chunks: Buffer[] = [];
+      for await (const c of req) chunks.push(c as Buffer);
+      const body = chunks.length ? Buffer.concat(chunks) : undefined;
+      const headers = { ...(req.headers as Record<string, string | string[] | undefined>) };
+      for (const h of ["host", "connection", "content-length", "transfer-encoding"]) delete headers[h];
+
       const upstream = await proxyFetch(target.toString(), {
         method: req.method ?? "GET",
-        headers: req.headers as HeadersInit,
+        headers: headers as HeadersInit,
+        body,
       });
       res.writeHead(upstream.status, {
         "content-type": upstream.headers.get("content-type") ?? "application/json",
@@ -226,8 +280,10 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     }
   });
 
-  server.listen(PORT, () => {
-    console.log(`Mandate listening on :${PORT}`);
+  // Loopback by default: this proxy spends money on whoever calls it.
+  // Bind wider only behind an authenticated front door (MANDATE_HOST=0.0.0.0).
+  server.listen(PORT, HOST, () => {
+    console.log(`Mandate listening on ${HOST}:${PORT}`);
     console.log(`  proxy        GET /proxy → ${UPSTREAM}`);
     console.log(`  envelope     ${X402_FOUNDATION.name} · batch-settlement@eip155:84532`);
     console.log(`  hedera       ${BLOCKY402_TESTNET.name} · exact@hedera:testnet`);

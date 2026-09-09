@@ -62,11 +62,10 @@ for (let i = 1; i <= attempts; i++) {
     await new Promise((r) => setTimeout(r, 4000));
   }
 
-  const { code, out } = await runCheck();
+  const { out } = await runCheck();
   if (out.includes('"genuine": true') || out.includes('"genuine":true')) {
     process.exit(0);
   }
-  if (code === 0 && out.includes('"genuine": true')) process.exit(0);
 }
 
 console.error(`

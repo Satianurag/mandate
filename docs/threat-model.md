@@ -42,6 +42,13 @@ can observe the unsealed key during its lifetime in memory. The Key Ring
 protects secrets at rest and in transit between machines. It does not create a
 TEE.
 
+**Step-up binding in clear mode.** The default step-up verifies the address on
+the device screen (presence + tap) but does not produce a signature over the
+amount and recipient — that binding exists only in message/EIP-712 mode, which
+needs blind signing until the ERC-7730 registry entry merges. On a compromised
+host, a tap obtained for one payment context could be followed by a different
+payment. The console display is the human's only check in clear mode.
+
 **The password.** `WALLET_PASS` must come from the OS keychain. Written into a
 command it lands in shell history, the process list, and CI logs — at which
 point the ciphertext is openable by whoever reads them.

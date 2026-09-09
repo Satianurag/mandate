@@ -28,15 +28,18 @@ if [ -z "${WALLET_PASS:-}" ]; then
 else
   ok "WALLET_PASS set"
 fi
-ring_out=$(wallet-cli ring keys 2>&1)
 ring_provisioned=0
-if printf '%s' "$ring_out" | grep -q '"ok": *true'; then
-  ring_provisioned=1
-elif printf '%s' "$ring_out" | grep -qE '^Key|^─|mandate-|graph-'; then
-  # Human table when stdout is a TTY; JSON envelope when piped (F6).
-  ring_provisioned=1
-elif ! printf '%s' "$ring_out" | grep -qi 'not initialized'; then
-  ring_provisioned=1
+if ! command -v wallet-cli >/dev/null 2>&1; then
+  ring_out=""
+elif ring_out=$(wallet-cli ring keys 2>&1); then
+  if printf '%s' "$ring_out" | grep -q '"ok": *true'; then
+    ring_provisioned=1
+  elif printf '%s' "$ring_out" | grep -qE '^Key|^─|mandate-|graph-'; then
+    # Human table when stdout is a TTY; JSON envelope when piped (F6).
+    ring_provisioned=1
+  elif ! printf '%s' "$ring_out" | grep -qi 'not initialized'; then
+    ring_provisioned=1
+  fi
 fi
 if [ "$ring_provisioned" -eq 1 ]; then
   ok "ring provisioned"

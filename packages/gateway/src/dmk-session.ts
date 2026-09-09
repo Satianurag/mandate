@@ -10,7 +10,7 @@ import {
 } from "./ledger-cjs.ts";
 import { formatLedgerError } from "./ledger-errors.ts";
 
-type Dmk = ReturnType<DeviceManagementKitBuilder["build"]>;
+type Dmk = ReturnType<InstanceType<typeof DeviceManagementKitBuilder>["build"]>;
 
 let dmkSingleton: Dmk | null = null;
 

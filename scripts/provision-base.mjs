@@ -13,7 +13,8 @@ const payer = privateKeyToAccount(payerKey);
 const receiverKey = generatePrivateKey();
 const receiver = privateKeyToAccount(receiverKey);
 
-console.log("Base Sepolia wallets for npm run spike:envelope\n");
+console.log("Base Sepolia wallets for npm run spike:envelope");
+console.log("TESTNET ONLY — never fund with real assets, never reuse, unset after the spike.\n");
 console.log(`export MANDATE_EVM_SIGNING_KEY=${payerKey}`);
 console.log(`export MANDATE_EVM_RECEIVER=${receiver.address}`);
 console.log(`\nPayer (needs ETH + USDC):  ${payer.address}`);

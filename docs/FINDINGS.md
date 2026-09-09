@@ -6,7 +6,7 @@ and the other doc gets fixed.
 
 **Rule: every entry is something we OBSERVED, not something we read.** Where a
 measurement contradicts published documentation, the measurement wins and the
-plan changes. Re-verify any time with `npm run verify` (26 checks) and
+plan changes. Re-verify any time with `npm run verify` (counts itself) and
 `npm run preflight` (live rails).
 
 | Status | Meaning |
@@ -39,7 +39,10 @@ plan changes. Re-verify any time with `npm run verify` (26 checks) and
 | F15 | First-chain-wins reputation lookup was a **laundering vector** | **RESOLVED** | 08 Sep |
 | F16 | All three verdicts reached from live on-chain reputation | **PROVEN** | 08 Sep |
 | F17 | 3 of 9 Agent0 deployments fail — silently, until now | **RESOLVED** | 09 Sep |
-| F18 | Fail-safe coverage vs. usability — a real tradeoff, undecided | **OPEN** | 09 Sep |
+| F18 | Fail-safe coverage vs. usability — hybrid (weighted + hard gate) | **RESOLVED** | 09 Sep |
+| F19 | `envelope.ts` salt diverged from the spike's — one nibble, different channel | **RESOLVED** | 09 Sep |
+| F20 | Hedera `0.0.x` payees could never resolve reputation — always escalated | **RESOLVED** | 09 Sep |
+| F21 | Settled spend was never recorded — the rolling budget never accrued | **RESOLVED** | 09 Sep |
 
 ---
 
@@ -252,7 +255,7 @@ Useful schema details confirmed at the same time:
 **Still to verify once a working key exists:** the exact field names in our
 query (`agents(where: {agentWallet: …})`, `feedbacks`, `validations`).
 
-## F13 — a Studio *deploy key* is not a gateway *API key* · OPEN
+## F13 — a Studio *deploy key* is not a gateway *API key* · RESOLVED
 
 Both are 32-hex strings and both live in Subgraph Studio, so they are easy to
 confuse. Symptom, with a correctly-shaped but wrong key:
@@ -443,8 +446,75 @@ meaningful amount**. Small payments flow on discounted evidence; anything that
 actually matters still needs a human while registries are dark. C's usability,
 B's guarantee where it counts, one sentence to a judge.
 
-Still not decided — and specifically, do not let it get settled by whatever
-makes the demo look best.
+### Decision (09 Sep, evening): hybrid — IMPLEMENTED
+
+Still not decided by demo-convenience — decided by the arithmetic. Gating (B)
+makes `allow` unreachable for every payment above 0.02 while three
+deployments are dark, which removes the product's core motion (metered queries
+flowing unattended). The hybrid keeps a hard gate where it matters:
+
+- amount ≤ `trivialAmount` (0.02): raw score, coverage ignored (unchanged)
+- 0.02 < amount ≤ `coverageGateAmount` (0.05): F18 shrinkage
+  (`PRIOR=0.35`, `K_MAX=40`), verdict from the effective score
+- amount > 0.05 with any unread registry: `step_up`, however good the score
+
+The thin-history rule (`minFeedbackForTrust=3`) STAYS alongside the
+shrinkage — defence in depth, not redundancy. The 8 live wallets reproduce
+the simulation table exactly (allow=4 step_up=2 deny=2), locked in as
+`policy.test.ts` vectors. The effective score is written to the decision
+trace (`score=0.98->0.90`) and the coverage (`6/9` + failed chains) to the
+HCS record, so the evidence shows the discount, not just the verdict.
+
+---
+
+## F19 — the envelope salt diverged from the spike's · RESOLVED
+
+Unifying the channel salt to a single source of truth (`envelope.ts`,
+imported by the spike) exposed that the two had already diverged:
+
+```
+spike (inline padEnd): 0x6d616e64617465…0000   left-aligned
+envelope (padHex):      0x0000…6d616e64617465   right-aligned
+```
+
+One nibble of difference derives a different `computeChannelId` — and the
+Day-1 spike channel was opened with the inline value. The odd one out was
+`envelope.ts`: Solidity `bytes32("mandate")` is left-aligned (zero
+right-padded), so the spike's value matches on-chain convention and
+`padHex` needed `dir: "right"`. Fixed, with an equality assertion as the
+regression proof. Lesson: a "cleanup" refactor of a value that already has
+on-chain state is a consensus change, not cosmetics.
+
+## F20 — Hedera payees could never resolve reputation · RESOLVED
+
+`lookupCounterparty` lowercased `requirements.payTo` and queried
+`agents(where: {agentWallet})` with it. On the Hedera path `payTo` is
+`0.0.x` — not an EVM wallet — so the lookup could never match, every Hedera
+payment resolved to "unregistered", and the metered-query path could never
+`allow`. Two independent mechanisms (this and the F18 gating) each made the
+"400 queries fly past" demo moment impossible.
+
+Fixed with mirror-node alias resolution: `0.0.x` → `evm_address` before the
+Agent0 queries, with the mirror network following the payment's CAIP-2. A
+missing alias is honestly unregistered (full coverage, nothing to read); a
+mirror outage is a coverage failure (`chainsFailed: ["hedera-mirror"]`), not
+a clean unregistered. Five hermetic tests with stub fetch.
+
+## F21 — settled spend was never recorded · RESOLVED
+
+`PolicyEngine.recordSettled` existed, was unit-tested — and was never called
+outside tests. `executePayment` settled via the facilitator and returned
+without recording, so the rolling `windowBudget` never accrued and the
+"near-exhaustion" escalation could never fire. The budget was a tested,
+documented, unenforced fiction.
+
+One-line fix in `executePayment` (record on `settlement.success` only —
+attempts that fail verify/settle must not consume budget), caught by
+re-reading the payment path end to end rather than by any test. Lesson: unit
+tests proved the engine; nothing proved the wiring. Fixed properly with an injected-deps seam:
+`executePayment` accepts stub sign/verify/settle functions, and
+`budget.test.ts` asserts spend accrues exactly once per successful
+settlement and never on failure.
 
 ---
 
@@ -452,10 +522,11 @@ makes the demo look best.
 
 | Item | When | Load-bearing? |
 |---|---|---|
-| DMK device session over WebHID | Day 3 | No — browser-side |
-| ERC-7730 v2 rendering on the trusted display | Day 3 | No |
-| `upto` scheme — may map to a mandate more directly than batch-settlement | Day 1 spike | No |
-| Graph Studio API key | Day 1 | Yes — nothing reputation-related works without it |
+| DMK device session (Node HID step-up) | Day 3 | Done — `STEPUP_OK` live 09 Sep |
+| ERC-7730 descriptor draft + EIP-712 payload | Day 3 | Done — draft in repo, registry PR post-hackathon |
+| `upto` scheme — may map to a mandate more directly than batch-settlement | Day 1 spike | No — still unspiked, cut first |
+| Graph Studio API key, sealed | Day 1 | Done — `secrets/graph.enc` |
+| Mandate YAML → device-signed channel open (load-bearing minimum #1) | Day 2+ | **Yes — the biggest remaining gap** |
 
 ## How to add a finding
 

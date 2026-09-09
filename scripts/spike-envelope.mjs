@@ -23,12 +23,14 @@ import {
   buildChannelConfig,
 } from "@x402/evm/batch-settlement/client";
 
+const ROOT = new URL("..", import.meta.url).pathname;
+const { MANDATE_CHANNEL_SALT } = await import(`${ROOT}/packages/gateway/src/envelope.ts`);
+
 const FACILITATOR = "https://x402.org/facilitator";
 const NETWORK = "eip155:84532";
 const PORT = Number(process.env.SPIKE_PORT ?? 8410);
-const SALT =
-  process.env.MANDATE_CHANNEL_SALT ??
-  (`0x${Buffer.from("mandate", "utf8").toString("hex").padEnd(64, "0")}`);
+// Single source of truth for the channel salt lives in envelope.ts.
+const SALT = process.env.MANDATE_CHANNEL_SALT ?? MANDATE_CHANNEL_SALT;
 
 function need(name) {
   const v = process.env[name];

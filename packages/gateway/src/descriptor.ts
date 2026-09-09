@@ -1,7 +1,9 @@
 /**
- * Step-up clear-sign payload — EIP-712 typed data shown field-by-field on the
- * Ethereum app (no blind-signing mode required for structured EIP-712).
- * Full ERC-7730 v2 contract descriptors are a later upgrade.
+ * Step-up clear-sign payload — EIP-712 typed data for field-by-field display.
+ * Until the descriptor is merged into Ledger's ERC-7730 registry (draft in
+ * docs/erc7730-mandate-stepup.json), signing this on-device still requires
+ * blind signing OR the address-verify presence check (see docs/STEPUP.md).
+ * This module builds the payload; it does not bypass that requirement.
  */
 import type { PaymentProposal } from "./types.ts";
 

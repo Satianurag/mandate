@@ -18,10 +18,20 @@ import type { PaymentRequiredBody } from "./types.ts";
 const PORT = 8409;
 
 function startService(): Promise<ChildProcess> {
+  // Hermetic: the suite must pass with ZERO ambient env (README's one-liner).
+  // SERVICE_FEE_PAYER pins the test double; production resolves it live.
   const child = spawn(
     process.execPath,
     ["--experimental-strip-types", new URL("../../service/src/index.ts", import.meta.url).pathname],
-    { env: { ...process.env, SERVICE_PORT: String(PORT) }, stdio: "ignore" }
+    {
+      env: {
+        ...process.env,
+        SERVICE_PORT: String(PORT),
+        SERVICE_PAY_TO: process.env.SERVICE_PAY_TO ?? "0.0.5005",
+        SERVICE_FEE_PAYER: "0.0.7162784",
+      },
+      stdio: "ignore",
+    }
   );
   return new Promise((resolve) => setTimeout(() => resolve(child), 1500));
 }

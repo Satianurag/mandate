@@ -16,6 +16,8 @@ export type HederaNetwork = `hedera:${string}`;
 export interface HederaExtra {
   /** Hedera account ID that sponsors network fees. Usually the facilitator. */
   feePayer: string;
+  /** Extra facilitator fields pass through untouched (x402 `extra` is open). */
+  [key: string]: unknown;
 }
 
 export interface PaymentRequirements {

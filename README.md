@@ -111,16 +111,16 @@ confirms the Blocky402 testnet facilitator advertises Hedera. Verified today:
 
 | Component | State |
 |---|---|
-| Policy engine | implemented, 14 tests passing |
+| Policy engine | implemented, 28 tests passing, F18 hybrid decided + locked in |
 | Key Ring custody | **provisioned and proven headless (F11)** |
-| Reputation lookup (Agent0) | implemented; needs sealed Graph key |
+| Reputation lookup (Agent0) | implemented; Hedera `0.0.x` → EVM alias resolution (F20) |
 | x402 wire types + facilitator client | implemented |
-| Mandate parser + device signing | Day 2+ (YAML → DMK Clear Sign) |
-| Batch-settlement envelope client | `envelope.ts` + `npm run spike:envelope` |
-| Gateway proxy (`/proxy`) | implemented — decide → sign → settle → retry |
+| Mandate parser + device signing | **not started** — the biggest remaining gap (YAML → DMK Clear Sign) |
+| Batch-settlement envelope client | `envelope.ts` + `npm run spike:envelope`, salt unified (F19) |
+| Gateway proxy (`/proxy`) | decide → sign → settle → retry; budget accrual wired (F21) |
 | Hedera `buildAndSign` | implemented via `@x402/hedera` |
-| HCS audit (`audit.submit`) | implemented — needs topic id + operator creds |
-| Paid service verify/settle | implemented — no longer 501 |
+| HCS audit (`audit.submit`) | implemented — needs topic id; Key Ring creds required, no env fallback |
+| Paid service verify/settle | implemented — fee payer resolved live at boot, fails fast |
 | Operator console | **not started** (per user: no UI until requested) |
 
 - [`docs/sponsor-case.md`](docs/sponsor-case.md) — why each sponsor wants this

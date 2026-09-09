@@ -2,7 +2,6 @@
   "name": "@mandate/gateway",
   "version": "0.1.0",
   "type": "module",
-  "main": "dist/index.js",
   "scripts": {
     "dev": "node --experimental-strip-types src/index.ts",
     "build": "tsc -p tsconfig.json",
@@ -13,12 +12,15 @@
     "@ledgerhq/device-management-kit": "^1.9.0",
     "@ledgerhq/device-signer-kit-ethereum": "^1.18.0",
     "@ledgerhq/device-transport-kit-node-hid": "^1.0.1",
-    "@ledgerhq/device-transport-kit-web-hid": "^1.2.4",
     "@x402/core": "^2.25.0",
     "@x402/evm": "^2.25.0",
     "@x402/fetch": "^2.25.0",
     "@x402/hedera": "^2.25.0",
     "rxjs": "^7.8.2",
     "viem": "^2.48.11"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "~5.9.3"
   }
 }

@@ -38,9 +38,17 @@ export interface PolicyConfig {
   minFeedbackForTrust: number;
   /**
    * Below this, a payment may proceed even when some reputation registries
-   * failed to answer. Above it, incomplete coverage escalates.
+   * failed to answer. Above it, incomplete coverage either discounts the
+   * score (weighted band) or escalates (hard gate).
    */
   trivialAmount: number;
+  /**
+   * Above this, incomplete registry coverage ALWAYS escalates, however good
+   * the discounted score looks. Small payments flow on partial evidence;
+   * anything that matters needs a human while registries are dark.
+   * See docs/FINDINGS.md F18.
+   */
+  coverageGateAmount: number;
 }
 
 export const DEFAULT_POLICY: PolicyConfig = {
@@ -51,7 +59,36 @@ export const DEFAULT_POLICY: PolicyConfig = {
   trustAtOrAboveScore: 0.7,
   minFeedbackForTrust: 3,
   trivialAmount: 0.02,
+  coverageGateAmount: 0.05,
 };
+
+/**
+ * Shrinkage prior for scores computed from partial registry coverage.
+ * An unread registry can only hide NEGATIVE signal, so missing coverage
+ * pulls the score toward a pessimistic prior rather than blocking outright.
+ * Calibrated in docs/FINDINGS.md F18 against 8 live counterparties.
+ */
+export const COVERAGE_PRIOR = 0.35;
+/** Pseudo-observations at zero coverage; scales linearly with the gap. */
+export const COVERAGE_K_MAX = 40;
+
+/**
+ * Discount a reputation score for unread registries (F18 hybrid).
+ *
+ *   coverage  = chainsReachable / chainsQueried
+ *   k         = K_MAX * (1 - coverage)
+ *   effective = (score*n + PRIOR*k) / (n + k)
+ *
+ * Full coverage returns the raw score untouched. Null stays null.
+ */
+export function effectiveScore(rep: CounterpartyReputation): number | null {
+  if (rep.meanScore === null) return null;
+  if (rep.chainsFailed.length === 0 || rep.chainsQueried === 0) return rep.meanScore;
+  const coverage = rep.chainsReachable / rep.chainsQueried;
+  const k = COVERAGE_K_MAX * (1 - coverage);
+  const n = rep.feedbackCount;
+  return (rep.meanScore * n + COVERAGE_PRIOR * k) / (n + k);
+}
 
 interface Spend {
   at: number;
@@ -101,12 +138,31 @@ export class PolicyEngine {
       return decide("deny", "Quoted amount could not be parsed as a positive number.");
     }
 
-    if (reputation.registered && reputation.meanScore !== null) {
+    // Discount the score for unread registries BEFORE any threshold compares
+    // against it, so the refusal floor and the trust threshold both see the
+    // same evidence-weighted number. Amounts at or below `trivialAmount`
+    // skip the discount: the exposure is too small to matter.
+    const discounted =
+      amount > cfg.trivialAmount ? effectiveScore(reputation) : reputation.meanScore;
+    if (
+      reputation.registered &&
+      reputation.meanScore !== null &&
+      discounted !== null &&
+      discounted !== reputation.meanScore
+    ) {
+      trace.push(
+        `reputation:score=${reputation.meanScore.toFixed(2)}->${discounted.toFixed(2)}` +
+          ` coverage=${reputation.chainsReachable}/${reputation.chainsQueried}`
+      );
+    } else if (reputation.registered && reputation.meanScore !== null) {
       trace.push(`reputation:score=${reputation.meanScore.toFixed(2)}`);
-      if (reputation.meanScore < cfg.denyBelowScore) {
+    }
+
+    if (reputation.registered && discounted !== null) {
+      if (discounted < cfg.denyBelowScore) {
         return decide(
           "deny",
-          `Counterparty carries a mean ERC-8004 score of ${reputation.meanScore.toFixed(2)}, ` +
+          `Counterparty carries an effective ERC-8004 score of ${discounted.toFixed(2)}, ` +
             `below the ${cfg.denyBelowScore} refusal floor.`
         );
       }
@@ -167,28 +223,28 @@ export class PolicyEngine {
 
     // An unread registry can only hide NEGATIVE signal -- nobody launders a
     // good reputation. So a high score computed from partial coverage is not
-    // the same claim as one computed from full coverage, and above a trivial
-    // amount it deserves a human. Measured 2026-09-08: 3 of 9 Agent0
-    // deployments were returning "bad indexers", so this fires in practice.
-    if (
-      reputation.chainsFailed.length > 0 &&
-      amount > cfg.trivialAmount
-    ) {
-      trace.push(`coverage:${reputation.chainsReachable}/${reputation.chainsQueried}`);
+    // the same claim as one computed from full coverage. Measured 2026-09-08:
+    // 3 of 9 Agent0 deployments were returning "bad indexers", so this fires
+    // in practice. F18 hybrid: small payments flow on the discounted score;
+    // anything above the coverage gate still needs a human while registries
+    // are dark.
+    if (reputation.chainsFailed.length > 0 && amount > cfg.coverageGateAmount) {
+      trace.push(`coverage:gate@${cfg.coverageGateAmount} ${reputation.chainsReachable}/${reputation.chainsQueried}`);
       return decide(
         "step_up",
         `Could not read ${reputation.chainsFailed.length} of ` +
           `${reputation.chainsQueried} reputation registries ` +
-          `(${reputation.chainsFailed.join(", ")}). A registry we cannot read ` +
+          `(${reputation.chainsFailed.join(", ")}), and ${amount} ${proposal.assetSymbol} ` +
+          `is above the ${cfg.coverageGateAmount} coverage gate. A registry we cannot read ` +
           `may hold negative feedback this score does not reflect.`
       );
     }
 
-    if (reputation.meanScore < cfg.trustAtOrAboveScore) {
+    if (discounted !== null && discounted < cfg.trustAtOrAboveScore) {
       trace.push("reputation:mid-band");
       return decide(
         "step_up",
-        `Counterparty scores ${reputation.meanScore.toFixed(2)}, between the refusal floor and ` +
+        `Counterparty scores ${discounted.toFixed(2)}, between the refusal floor and ` +
           `the ${cfg.trustAtOrAboveScore} autonomy threshold.`
       );
     }
@@ -204,9 +260,10 @@ export class PolicyEngine {
     }
 
     trace.push("allow:all-checks-passed");
+    const shown = (discounted ?? reputation.meanScore ?? 0).toFixed(2);
     return decide(
       "allow",
-      `Counterparty scores ${reputation.meanScore.toFixed(2)} across ` +
+      `Counterparty scores ${shown} across ` +
         `${reputation.feedbackCount} entries; ${amount} ${proposal.assetSymbol} is within ceiling and budget.`
     );
   }

@@ -25,9 +25,14 @@ import { BASE_SEPOLIA, X402_FOUNDATION } from "./facilitators.ts";
 export { computeChannelId, buildChannelConfig, InMemoryClientChannelStorage };
 export { BASE_SEPOLIA, X402_FOUNDATION };
 
-/** Fixed bytes32 salt — UTF-8 "mandate" zero-padded (not ASCII padEnd on a hex string). */
+/**
+ * Fixed bytes32 salt — UTF-8 "mandate", Solidity bytes32("mandate") convention
+ * (left-aligned, zero right-padded). This exact value opened the Day-1 spike
+ * channel; changing one nibble derives a different channel id and orphans it.
+ */
 export const MANDATE_CHANNEL_SALT = padHex(toHex(new TextEncoder().encode("mandate")), {
   size: 32,
+  dir: "right",
 }) as `0x${string}`;
 
 export interface EnvelopeClientOptions {
