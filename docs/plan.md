@@ -108,7 +108,7 @@ the Ledger ETHGlobal Telegram before sleeping.
 - [x] ~~Substreams `x402-payments` module~~ — CUT, not deferred (F24: no Base Sepolia endpoint on either provider, and no toolchain obtainable to build it — a module that can neither compile here nor observe our chain is theater)
 - [x] Scheduled-Transaction treasury top-up leg (HIP-423 wait-for-expiry; `treasury:topup`; live run pending operator)
 - [x] HCS-14 UAID registration (`uaid.ts` + `npm run uaid:register`; every audit record carries the operator UAID — live inscription pending operator run)
-- [ ] Hedera Harness Tier 3.5 x402 assertion PR — **only if the core is stable**
+- [x] Hedera Harness Tier 3.5 x402 assertion PR — code DONE, 173/173 green, patch ready; push blocked on GitHub scope (bot token 403 on hedera-dev fork) — operator runs: `gh repo fork hedera-dev/hedera-harness --clone=true`, apply `/home/user/harness-x402-tier35.patch` (`git am`), push branch, `gh pr create`
 - [ ] Deploy the gateway to a VPS; the no-device demo runs from there
 - [ ] Record a clean step-up take as insurance
 
