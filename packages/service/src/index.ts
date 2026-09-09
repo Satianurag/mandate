@@ -71,35 +71,31 @@ export async function loadConfig(): Promise<ServiceConfig> {
   };
 }
 
-const boot: ServiceConfig = await loadConfig().catch((e: unknown): never => {
-  console.error(`Cannot start paid service: ${e instanceof Error ? e.message : e}`);
-  process.exit(1);
-});
-const PAY_TO = boot.payTo;
-const FEE_PAYER = boot.feePayer;
-const PORT = boot.port;
-const HOST = boot.host;
-
 /** Tinybars. 1 HBAR = 1e8 tinybars. */
 const BASE_PRICE = 2_000_000n;
 
-function quote(query: string): bigint {
+export function quote(query: string): bigint {
   const depth = (query.match(/\{/g) ?? []).length;
   const fields = (query.match(/\w+(?=\s*[\{\n])/g) ?? []).length;
   return BASE_PRICE + BigInt(depth) * 500_000n + BigInt(fields) * 100_000n;
 }
 
-function requirementsFor(url: URL, amount: bigint): PaymentRequirements {
+export function requirementsFor(
+  url: URL,
+  amount: bigint,
+  payTo: string,
+  feePayer: string
+): PaymentRequirements {
   return {
     scheme: "exact",
     network: "hedera:testnet",
     asset: "0.0.0",
     amount: amount.toString(),
-    payTo: PAY_TO,
+    payTo,
     maxTimeoutSeconds: 60,
     resource: `${url.origin}${url.pathname}${url.search}`,
     description: "Subgraph analytics — metered by complexity",
-    extra: { feePayer: FEE_PAYER },
+    extra: { feePayer },
   };
 }
 
@@ -107,72 +103,85 @@ function decodePaymentHeader(header: string): PaymentPayload {
   return JSON.parse(Buffer.from(header, "base64").toString("utf8")) as PaymentPayload;
 }
 
-createServer(async (req, res) => {
-  const url = new URL(req.url ?? "/", `http://localhost:${PORT}`);
-  if (url.pathname !== "/analytics") {
-    res.writeHead(404).end();
-    return;
-  }
+/** Build the server without binding — importing this module has no side effects. */
+export function createServiceServer(payTo: string, feePayer: string) {
+  return createServer(async (req, res) => {
+    const url = new URL(req.url ?? "/", "http://localhost");
+    if (url.pathname !== "/analytics") {
+      res.writeHead(404).end();
+      return;
+    }
 
-  const query = url.searchParams.get("q") ?? "{ agents { id } }";
-  const amount = quote(query);
-  const requirements = requirementsFor(url, amount);
-  const paymentHeader = req.headers["x-payment"];
+    const query = url.searchParams.get("q") ?? "{ agents { id } }";
+    const amount = quote(query);
+    const requirements = requirementsFor(url, amount, payTo, feePayer);
+    const paymentHeader = req.headers["x-payment"];
 
-  if (!paymentHeader || Array.isArray(paymentHeader)) {
-    res.writeHead(402, { "content-type": "application/json" });
-    res.end(
-      JSON.stringify({
-        x402Version: 2,
-        accepts: [requirements],
-      })
-    );
-    return;
-  }
-
-  try {
-    const payload = decodePaymentHeader(paymentHeader);
-    const check = await verify(BLOCKY402_TESTNET, requirements, payload);
-    if (!check.isValid) {
+    if (!paymentHeader || Array.isArray(paymentHeader)) {
       res.writeHead(402, { "content-type": "application/json" });
       res.end(
         JSON.stringify({
           x402Version: 2,
           accepts: [requirements],
-          error: check.invalidReason ?? "invalid payment",
         })
       );
       return;
     }
 
-    const settlement = await settle(BLOCKY402_TESTNET, requirements, payload);
-    if (!settlement.success) {
-      res.writeHead(402, { "content-type": "application/json" });
+    try {
+      const payload = decodePaymentHeader(paymentHeader);
+      const check = await verify(BLOCKY402_TESTNET, requirements, payload);
+      if (!check.isValid) {
+        res.writeHead(402, { "content-type": "application/json" });
+        res.end(
+          JSON.stringify({
+            x402Version: 2,
+            accepts: [requirements],
+            error: check.invalidReason ?? "invalid payment",
+          })
+        );
+        return;
+      }
+
+      const settlement = await settle(BLOCKY402_TESTNET, requirements, payload);
+      if (!settlement.success) {
+        res.writeHead(402, { "content-type": "application/json" });
+        res.end(
+          JSON.stringify({
+            x402Version: 2,
+            accepts: [requirements],
+            error: settlement.errorReason ?? "settlement failed",
+          })
+        );
+        return;
+      }
+
+      const { amount: human, symbol } = normaliseAmount(requirements);
+      const txId = settlement.transactionId ?? settlement.transaction;
+      res.writeHead(200, { "content-type": "application/json" });
       res.end(
         JSON.stringify({
-          x402Version: 2,
-          accepts: [requirements],
-          error: settlement.errorReason ?? "settlement failed",
+          ok: true,
+          query,
+          paid: { amount: human, asset: symbol, txId },
+          rows: [{ id: "agent-demo-1", feedbackCount: 42 }],
         })
       );
-      return;
+    } catch (err) {
+      res.writeHead(500, { "content-type": "application/json" });
+      res.end(JSON.stringify({ error: err instanceof Error ? err.message : String(err) }));
     }
+  });
+}
 
-    const { amount: human, symbol } = normaliseAmount(requirements);
-    const txId = settlement.transactionId ?? settlement.transaction;
-    res.writeHead(200, { "content-type": "application/json" });
-    res.end(
-      JSON.stringify({
-        ok: true,
-        query,
-        paid: { amount: human, asset: symbol, txId },
-        rows: [{ id: "agent-demo-1", feedbackCount: 42 }],
-      })
-    );
-  } catch (err) {
-    res.writeHead(500, { "content-type": "application/json" });
-    res.end(JSON.stringify({ error: err instanceof Error ? err.message : String(err) }));
-  }
-}).listen(PORT, HOST, () => console.log(`paid service on ${HOST}:${PORT} (feePayer ${FEE_PAYER})`));
+export { encodePaymentHeader };
 
-export { encodePaymentHeader, requirementsFor, quote };
+if (import.meta.url === `file://${process.argv[1]}`) {
+  const boot: ServiceConfig = await loadConfig().catch((e: unknown): never => {
+    console.error(`Cannot start paid service: ${e instanceof Error ? e.message : e}`);
+    process.exit(1);
+  });
+  createServiceServer(boot.payTo, boot.feePayer).listen(boot.port, boot.host, () =>
+    console.log(`paid service on ${boot.host}:${boot.port} (feePayer ${boot.feePayer})`)
+  );
+}

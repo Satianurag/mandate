@@ -25,26 +25,11 @@ export const BLOCKY402_TESTNET: FacilitatorConfig = {
 };
 
 /**
- * The x402 Foundation facilitator. This is the ONLY public facilitator observed
- * to support `batch-settlement`, and it does so on Base Sepolia -- which makes
- * the entire mandate-envelope demo possible on testnet, with no real money.
- *
- * It also supports exact@hedera:testnet, with a DIFFERENT fee payer from
- * Blocky402 (0.0.9185802 vs 0.0.7162784).
- *
- * INVARIANT: Never hardcode a fee payer.
- * Always read it from the live challenge's `extra` -- see docs/architecture.md.
+ * INVARIANT: Never hardcode a fee payer. Two facilitators have advertised two
+ * different payers for the same network (Blocky402 0.0.7162784 vs x402.org
+ * 0.0.9185802 on exact@hedera:testnet, observed 2026-09-08). Always read it
+ * from the live challenge's `extra` -- see docs/architecture.md.
  */
-export const X402_FOUNDATION: FacilitatorConfig = {
-  name: "x402-foundation",
-  baseUrl: "https://x402.org/facilitator",
-  supports: [
-    "batch-settlement@eip155:84532",
-    "upto@eip155:84532",
-    "exact@eip155:84532",
-    "exact@hedera:testnet",
-  ],
-};
 
 /** Base Sepolia — where the mandate escrow channel lives. Testnet, free. */
 export const BASE_SEPOLIA = {

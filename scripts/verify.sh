@@ -83,12 +83,11 @@ PKGS
 hdr "6. Live rails"
 node --experimental-strip-types -e "
 import('./packages/gateway/src/facilitators.ts').then(async m=>{
-  await m.assertSupports(m.X402_FOUNDATION,'batch-settlement@eip155:84532');
   await m.assertSupports(m.BLOCKY402_TESTNET,'exact@hedera:testnet');
   process.exit(0);
 }).catch(e=>{console.error(e.message);process.exit(1)})" >/dev/null 2>&1 \
-  && ok "batch-settlement@base-sepolia + exact@hedera:testnet both live" \
-  || bad "a facilitator no longer advertises a required kind"
+  && ok "exact@hedera:testnet live on Blocky402 (EVM leg is self-hosted; proven by mandate:open)" \
+  || bad "Blocky402 no longer advertises exact@hedera:testnet"
 node --experimental-strip-types -e "
 import('./packages/gateway/src/graph.ts').then(async m=>{
   const r=await m.queryOrChallenge('43s9hQRurMGjuYnC1r2ZwS6xSQktbFyXMPMqGKUFJojb','{_meta{block{number}}}');

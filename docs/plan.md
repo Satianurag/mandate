@@ -68,8 +68,9 @@ Running order that matches the product's logic:
 - [x] Confirm Blocky402 testnet advertises `hedera:testnet` (done, feePayer `0.0.7162784`)
 - [x] Facilitators, chains, packages, gateway wire formats — all verified
       (`docs/FINDINGS.md`, `npm run preflight`: 8 passed, 0 failed)
-- [x] Open a batch-settlement channel on Base Sepolia via `x402.org/facilitator`
-      (testnet, free — `npm run check:spike` then `npm run spike:envelope` once funded)
+- [x] Open a batch-settlement channel on Base Sepolia via the self-hosted facilitator
+      (testnet, free — `npm run check:mandate` then `npm run mandate:open` once funded;
+      the Day-1 plaintext-key spike is deleted, superseded by the mandate flow)
 - [x] Graph Studio API key, sealed into the Key Ring — hard dependency (F7)
       (`secrets/graph.enc`; rotate in Studio before public demo — key was in chat export)
 - [ ] 30 min spike on the `upto` scheme — may map to a mandate even more directly

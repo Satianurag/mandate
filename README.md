@@ -100,27 +100,34 @@ on a VPS with no device present.
 ```bash
 npm install
 npm run preflight          # toolchain, Key Ring, facilitator, Graph key
-npm test -w @mandate/gateway
+npm test --workspaces      # hermetic suite, zero env required
 ```
 
 `preflight` seals and unseals a throwaway value with no device attached, and
-confirms the Blocky402 testnet facilitator advertises Hedera. Verified today:
+confirms the Blocky402 testnet facilitator advertises Hedera. Verified:
 `hedera:testnet`, scheme `exact`, feePayer `0.0.7162784`.
+
+The mandate demo (one tap, then vouchers):
+
+```bash
+npm run mandate:keygen && npm run facilitator:keygen
+# fund the payer with Base Sepolia USDC + the submitter with ETH (links printed)
+cp mandate.example.yaml mandate.yaml   # set salt + receiver
+npm run check:mandate && npm run mandate:open
+```
 
 ## Status
 
 | Component | State |
 |---|---|
-| Policy engine | implemented, 28 tests passing, F18 hybrid decided + locked in |
+| Policy engine | implemented, hermetic suite green, F18 hybrid locked in |
 | Key Ring custody | **provisioned and proven headless (F11)** |
 | Reputation lookup (Agent0) | implemented; Hedera `0.0.x` → EVM alias resolution (F20) |
-| x402 wire types + facilitator client | implemented |
-| Mandate parser + device signing | **not started** — the biggest remaining gap (YAML → DMK Clear Sign) |
-| Batch-settlement envelope client | `envelope.ts` + `npm run spike:envelope`, salt unified (F19) |
-| Gateway proxy (`/proxy`) | decide → sign → settle → retry; budget accrual wired (F21) |
-| Hedera `buildAndSign` | implemented via `@x402/hedera` |
-| HCS audit (`audit.submit`) | implemented — needs topic id; Key Ring creds required, no env fallback |
-| Paid service verify/settle | implemented — fee payer resolved live at boot, fails fast |
+| Device step-up (DMK) | implemented, live `STEPUP_OK` (clear mode) |
+| Mandate client (`DmkEvmSigner` + ceiling strategy) | implemented; live proof = `npm run mandate:open` |
+| Self-hosted facilitator + mandate service | implemented, strict-booting; live proof = `npm run mandate:open` |
+| HCS audit (payments + mandates) + mirror read-back | implemented — needs topic id; Key Ring creds only |
+| Hedera paid service (Blocky402) | implemented — fee payer resolved live at boot, fails fast |
 | Operator console | **not started** (per user: no UI until requested) |
 
 - [`docs/sponsor-case.md`](docs/sponsor-case.md) — why each sponsor wants this

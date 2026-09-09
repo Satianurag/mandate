@@ -19,7 +19,7 @@ import {
   encodePaymentHeader,
   buildPaymentPayload,
 } from "./hedera.ts";
-import { BLOCKY402_TESTNET, X402_FOUNDATION } from "./facilitators.ts";
+import { BLOCKY402_TESTNET } from "./facilitators.ts";
 import { buildRecord, submit } from "./audit.ts";
 import { requireDeviceApproval, StepUpDenied, type StepUpDeps } from "./stepup.ts";
 import { withSecret } from "./keyring.ts";
@@ -306,7 +306,6 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   server.listen(PORT, HOST, () => {
     console.log(`Mandate listening on ${HOST}:${PORT}`);
     console.log(`  proxy        GET /proxy → ${UPSTREAM}`);
-    console.log(`  envelope     ${X402_FOUNDATION.name} · batch-settlement@eip155:84532`);
     console.log(`  hedera       ${BLOCKY402_TESTNET.name} · exact@hedera:testnet`);
     console.log(`  per-call     ${DEFAULT_POLICY.perCallCeiling}`);
     console.log(`  window       ${DEFAULT_POLICY.windowBudget} / ${DEFAULT_POLICY.windowMs / 3.6e6}h`);

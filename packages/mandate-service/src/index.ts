@@ -26,11 +26,12 @@ import { BatchSettlementEvmScheme } from "@x402/evm/batch-settlement/server";
 import { FileChannelStorage } from "@x402/evm/batch-settlement/server/file-storage";
 import { createPublicClient, http } from "viem";
 import { baseSepolia } from "viem/chains";
+import { BASE_SEPOLIA } from "../../gateway/src/facilitators.ts";
 
 export const SERVICE_NETWORK = "eip155:84532";
 export const SERVICE_CHAIN_ID = 84532;
 /** Circle USDC on Base Sepolia — verified live at boot (never trusted). */
-export const USDC_BASE_SEPOLIA = "0x036CbD53842c5426634e7929541eC2318f3dCF7e";
+export const USDC_BASE_SEPOLIA = BASE_SEPOLIA.usdc as `0x${string}`;
 /** Flat $0.01 per call, 6 decimals. */
 export const PRICE_BASE_UNITS = "10000";
 
