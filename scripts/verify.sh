@@ -75,7 +75,7 @@ while read -r pkg want; do
 done <<PKGS
 @ledgerhq/wallet-cli 2.1.0
 @ledgerhq/device-management-kit 1.9.0
-@hiero-ledger/sdk 2.87.0
+@hiero-ledger/sdk 2.88.0
 @x402/core 2.25.0
 hedera-harness 1.2.2
 PKGS

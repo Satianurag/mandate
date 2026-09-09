@@ -8,7 +8,7 @@
     "test": "node --experimental-strip-types --test src/*.test.ts"
   },
   "dependencies": {
-    "@hiero-ledger/sdk": "^2.87.0",
+    "@hiero-ledger/sdk": "^2.88.0",
     "@ledgerhq/device-management-kit": "^1.9.0",
     "@ledgerhq/device-signer-kit-ethereum": "^1.18.0",
     "@ledgerhq/device-transport-kit-node-hid": "^1.0.1",
@@ -21,7 +21,7 @@
     "yaml": "^2.9.0"
   },
   "devDependencies": {
-    "@types/node": "^22.10.0",
-    "typescript": "~5.9.3"
+    "@types/node": "^22.20.1",
+    "typescript": "~7.0.2"
   }
 }

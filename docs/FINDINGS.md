@@ -44,6 +44,7 @@ plan changes. Re-verify any time with `npm run verify` (counts itself) and
 | F20 | Hedera `0.0.x` payees could never resolve reputation — always escalated | **RESOLVED** | 09 Sep |
 | F21 | Settled spend was never recorded — the rolling budget never accrued | **RESOLVED** | 09 Sep |
 | F22 | Hand-rolled pay flow settled before delivery and doubled settlement — replaced by the stock flow | **RESOLVED** | 09 Sep |
+| F23 | TS 7.0.2 fails ambient `@types` inclusion across workspace packages — explicit `types: ["node"]` + toolchain to latest | **RESOLVED** | 09 Sep |
 
 ---
 
@@ -548,6 +549,26 @@ exactly the judgment — reputation lookup, policy verdict, device step-up in
 loop, so the wiring under test is the production wiring: a deny creates no
 signature and calls neither `/verify` nor `/settle` (asserted by counters
 on the stub facilitator).
+
+---
+
+## F23 — TS 7.0.2 drops ambient `@types` across workspace packages · RESOLVED
+
+Probing the TypeScript 7 upgrade (native rewrite, latest stable) before
+adopting it: with four byte-identical tsconfigs, `tsc 7.0.2` passed the
+gateway and service but failed the facilitator and mandate-service with
+`TS2591: Cannot find name 'node:http'` — ambient `@types/node` was not
+included in exactly the programs that import across package boundaries.
+Bisected to the auto-inclusion: an explicit `"types": ["node"]` (the
+documented mechanism, and the more hermetic config — ambient `yargs` /
+`json-schema` globals no longer leak into the program either) goes green
+on both compilers, all four packages, zero errors.
+
+Adopted on that evidence: `typescript ~7.0.2`, `@hiero-ledger/sdk ^2.88.0`,
+`@types/node ^22.20.1` (22.x line — runtime is Node 22, so 26.x types
+would be newer than the runtime they describe). Everything else pinned was
+already latest (x402 2.25.0, DMK 1.9.0, viem 2.56.3, harness 1.2.2).
+50/50 hermetic green after the move.
 
 ---
 
