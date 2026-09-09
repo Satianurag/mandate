@@ -27,6 +27,7 @@
     "provision:hcs": "node scripts/provision-hcs.mjs",
     "e2e:audit": "node scripts/e2e-audit.mjs",
     "uaid:register": "node scripts/uaid-register.mjs",
+    "treasury:topup": "node scripts/treasury-topup.mjs",
     "live:gates": "node scripts/live-gates.mjs",
     "e2e:payment": "node scripts/e2e-payment.mjs",
     "facilitator": "npm run dev -w @mandate/facilitator",

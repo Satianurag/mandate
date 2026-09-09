@@ -106,7 +106,7 @@ the Ledger ETHGlobal Telegram before sleeping.
 ## Day 4 — Fri 11 Sep — extras, then freeze
 
 - [x] ~~Substreams `x402-payments` module~~ — CUT, not deferred (F24: no Base Sepolia endpoint on either provider, and no toolchain obtainable to build it — a module that can neither compile here nor observe our chain is theater)
-- [ ] Scheduled-Transaction treasury top-up leg
+- [x] Scheduled-Transaction treasury top-up leg (HIP-423 wait-for-expiry; `treasury:topup`; live run pending operator)
 - [x] HCS-14 UAID registration (`uaid.ts` + `npm run uaid:register`; every audit record carries the operator UAID — live inscription pending operator run)
 - [ ] Hedera Harness Tier 3.5 x402 assertion PR — **only if the core is stable**
 - [ ] Deploy the gateway to a VPS; the no-device demo runs from there

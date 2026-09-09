@@ -109,4 +109,4 @@ Custody of every key involved:
 | The Graph | compose 2+ products; live data | Agent0 (reputation) + x402 (402 flow + proof-of-integration) |
 | The Graph | Subgraph MCP **or** Substreams **or** x402 | x402 path live; Substreams cut per cut order (F24: no Base Sepolia endpoint on either provider) |
 | Hedera | live x402 service via Blocky402 | Hedera paid service |
-| Hedera | HCS audit, scheduled tx, ERC-8004/HCS-14 (bonus) | evidence layer (every record carries the operator UAID, F25), treasury leg, identity (HCS-11 profile via `uaid:register`) |
+| Hedera | HCS audit, scheduled tx, ERC-8004/HCS-14 (bonus) | evidence layer (every record carries the operator UAID, F25), treasury leg (HIP-423 time-locked top-up, `treasury:topup`, F26), identity (HCS-11 profile via `uaid:register`) |

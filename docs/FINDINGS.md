@@ -47,6 +47,7 @@ plan changes. Re-verify any time with `npm run verify` (counts itself) and
 | F23 | TS 7.0.2 fails ambient `@types` inclusion across workspace packages — explicit `types: ["node"]` + toolchain to latest | **RESOLVED** | 09 Sep |
 | F24 | No Substreams endpoint serves Base Sepolia (either provider) — module CUT, not deferred | **RESOLVED** | 09 Sep |
 | F25 | HCS-14 SDK runtime proven spec-correct; three packaging gaps worked around honestly | **RESOLVED** | 09 Sep |
+| F26 | Treasury top-up leg: three SDK footguns caught by probes before they cost a demo | **RESOLVED** | 09 Sep |
 
 ---
 
@@ -646,3 +647,36 @@ changed as a result. A finding without evidence is an opinion.
 
 Cross-references: `DX.md` holds the sponsor-facing write-ups (Ledger judges
 those equally with code); this file holds everything, sponsor-facing or not.
+
+## F26 — Treasury top-up leg: three SDK footguns caught by probes · RESOLVED
+
+**Expected:** a HIP-423 time-locked top-up (treasury -> payer, `wait_for_expiry`,
+execution-fee payer = treasury) built with the stock Hiero SDK, hermetic-tested
+offline, transported by an operator script.
+
+**Observed (probe outputs):**
+1. `setPayerAccountId("0.0.11111")` with a string throws at freeze —
+   `this._payerAccountId._toProtobuf is not a function`. The setter takes an
+   `AccountId` object only (confirmed in the `.d.ts`: strictly typed, so tsc
+   enforces it once the builder converts). The builder takes strings and
+   converts, so callers cannot hit this.
+2. Reading a frozen schedule back via `getScheduleMemo` throws
+   `transaction is immutable...` — the *getter* calls `_requireNotFrozen`.
+   Fields are therefore asserted on the open transaction; the frozen bytes
+   are asserted by `fromBytes` round-trip plus wire-encoding proofs (bytes
+   change when treasury/memo/expiry change).
+3. `Client.forTestnet()` keeps gRPC channels open: the first test run never
+   exited (300 s timeout, no output). Every test client is now closed in a
+   `finally`; the suite exits in < 1 s.
+
+**Design decisions the probes forced:** execution fee on the funded treasury
+(a depleted payer would fail execution with INSUFFICIENT_PAYER_BALANCE);
+live-schedule check fails OPEN toward creating (a duplicate top-up is
+harmless, a skipped one strands the demo); HIP-423 60-day max lifetime
+enforced in the builder.
+
+**Cost:** one 300 s timeout, zero mainnet/testnet fees — all caught offline.
+**Changed:** `packages/gateway/src/treasury.ts` + 9 hermetic tests,
+`scripts/treasury-topup.mjs` (`npm run treasury:topup`), treasury stanza in
+`seal-hedera.sh`. Live mirror read from the sandbox is ECONNRESET-blocked, so
+the operator's first `treasury:topup` run is also the live read-back proof.
