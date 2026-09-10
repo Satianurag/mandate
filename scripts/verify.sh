@@ -19,6 +19,11 @@ for ws in packages/*; do
     else bad "$name tests failing"; fi
   fi
 done
+out=$(node --experimental-strip-types --test scripts/resolve-pay-to.test.mjs 2>&1)
+if printf '%s' "$out" | grep -qE "^# fail 0$"; then
+  n=$(printf '%s' "$out" | grep -E "^# pass" | awk '{print $3}')
+  ok "scripts/resolve-pay-to: $n passing"
+else bad "scripts/resolve-pay-to tests failing"; fi
 
 hdr "2. Every module parses and imports"
 for f in packages/*/src/*.ts; do
@@ -66,6 +71,11 @@ if grep -q "returns HTTP 200" packages/gateway/src/graph.ts && grep -q "HTTP 200
   ok "Graph 200-on-error invariant in docs AND code"; else bad "Graph 200-on-error inconsistent"; fi
 if grep -rq "@mandate/gateway" package.json && ! grep -rq "@breaker" package.json packages/*/package.json; then
   ok "package names match the product name"; else bad "package naming inconsistent"; fi
+if grep -q 'SERVICE_PAY_TO=\$MANDATE_HEDERA_ACCOUNT_ID' scripts/check-ready.mjs; then
+  bad "check-ready must not recommend a self-transfer payTo"
+else
+  ok "check-ready does not recommend self-transfer payTo"
+fi
 # one findings log, not two -- two copies of the same finding is how docs drift
 if [ -f docs/FINDINGS.md ] && [ ! -f docs/verification.md ]; then
   n=$(grep -cE "^\| F[0-9]+ \|" docs/FINDINGS.md)
@@ -110,6 +120,24 @@ case $? in
   2) bad "Graph gateway UNREACHABLE from this network (re-run verify on the operator host)" ;;
   *) bad "Graph x402 challenge changed shape" ;;
 esac
+node --experimental-strip-types -e "
+import('./packages/gateway/src/graph.ts').then(async m=>{
+  const r=await m.queryOrChallenge('4yYAvQLFjBhBtdRCY7eUWo181VNoTSLLFd5M7FXQAi6u','{_meta{block{number}}}',{base:m.GRAPH_X402_TESTNET});
+  if(r.kind!=='challenge') process.exit(1);
+  process.exit(m.isSepoliaX402Challenge(r.challenge)?0:1);
+}).catch(e=>{eval(\"$netcode\")})" >/dev/null 2>&1
+case $? in
+  0) ok "Graph testnet x402 (gateway.testnet.thegraph.com) bills eip155:84532" ;;
+  2) bad "Graph testnet x402 UNREACHABLE from this network" ;;
+  *) bad "Graph testnet x402 did not offer Base Sepolia" ;;
+esac
+
+hdr "6b. ERC-7730 descriptors"
+if node --experimental-strip-types scripts/e2e-erc7730.mjs >/dev/null 2>&1; then
+  ok "ERC-7730 descriptors lint (context/metadata/display)"
+else
+  bad "ERC-7730 descriptors failed local lint"
+fi
 
 hdr "Result"
 printf '  \033[1mpassed %d   failed %d\033[0m\n\n' "$pass" "$fail"

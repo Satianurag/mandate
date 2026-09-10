@@ -4,6 +4,7 @@ dist/
 .DS_Store
 .device-results
 .live-results/
+.venv/
 
 # Never commit plaintext secrets. Breaker has no .env by design --
 # credentials live in the Ledger Key Ring. See docs/threat-model.md.

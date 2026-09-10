@@ -7,6 +7,7 @@ import { ExactEvmScheme } from "@x402/evm/exact/client";
 import { UptoEvmScheme } from "@x402/evm/upto/client";
 import { toClientEvmSigner, type ClientEvmSigner } from "@x402/evm";
 import { createPublicClient, http } from "viem";
+import { BASE_SEPOLIA } from "./facilitators.ts";
 import { viemChain } from "./chains.ts";
 
 export function createEvmX402Client(opts: {
@@ -25,5 +26,9 @@ export function createEvmX402Client(opts: {
       { network, client: new ExactEvmScheme(signer, rpc) },
       { network, client: new UptoEvmScheme(signer, rpc) },
     ],
+    spendControls: {
+      maxAmountPerPayment: false,
+      allowedAssets: [{ network, asset: BASE_SEPOLIA.usdc }],
+    },
   });
 }

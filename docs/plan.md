@@ -114,8 +114,8 @@ the Ledger ETHGlobal Telegram before sleeping.
 - [x] Substreams `x402-payments` module — F24 reopened 10 Sep (Pinax Base
       Sepolia DNS exists). Module in `substreams/x402-payments`;
       `npm run e2e:substreams`
-- [x] Scheduled-Transaction treasury top-up leg (HIP-423 wait-for-expiry; `treasury:topup`; live run pending operator)
-- [x] HCS-14 UAID registration (`uaid.ts` + `npm run uaid:register`; every audit record carries the operator UAID — live inscription pending operator run)
+- [x] Scheduled-Transaction treasury top-up leg (HIP-423 wait-for-expiry; `treasury:topup`; live `TOPUP_SCHEDULED` schedule `0.0.10456090`)
+- [x] HCS-14 UAID registration (`uaid.ts` + `npm run uaid:register`; every audit record carries the operator UAID)
 - [x] Hedera Harness Tier 3.5 x402 assertion PR —
       https://github.com/hedera-dev/hedera-harness/pull/54
 - [ ] Deploy the gateway to a VPS; the no-device demo runs from there

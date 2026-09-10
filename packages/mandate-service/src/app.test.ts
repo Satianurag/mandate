@@ -7,6 +7,7 @@ import { join } from "node:path";
 import {
   assertUsdcDeployment,
   buildService,
+  probeUsdcAsset,
   resolveEip712Domain,
   resolveReceiverAuthorizer,
   USDC_BASE_SEPOLIA,
@@ -52,7 +53,7 @@ function stubRpc(
     symbol: string;
     decimals: number;
     name?: string;
-    tokenVersion?: string;
+    tokenVersion?: string | null;
   }
 ): Promise<string> {
   const server = createServer((req, res) => {
@@ -76,6 +77,11 @@ function stubRpc(
         } else if (data.startsWith("0x06fdde03")) {
           result = abiString(opts.name ?? "USDC");
         } else if (data.startsWith("0x54fd4d50")) {
+          if (opts.tokenVersion === null) {
+            res.writeHead(200, { "content-type": "application/json" });
+            res.end(JSON.stringify({ jsonrpc: "2.0", id, error: { code: -32601, message: "nope" } }));
+            return;
+          }
           result = abiString(opts.tokenVersion ?? "2");
         } else {
           res.writeHead(200, { "content-type": "application/json" });
@@ -141,7 +147,7 @@ test("boot proves the priced asset is USDC on Base Sepolia", async (t) => {
   const wrongChain = await stubRpc(t, { chainId: 1, symbol: "USDC", decimals: 6 });
   await assert.rejects(
     () => assertUsdcDeployment(wrongChain, USDC_BASE_SEPOLIA as `0x${string}`),
-    /not Base Sepolia/
+    /priced network/
   );
   const wrongToken = await stubRpc(t, { chainId: 84532, symbol: "FAKE", decimals: 6 });
   await assert.rejects(
@@ -200,5 +206,75 @@ test("GET /analytics without payment returns the batch-settlement 402 offer", as
   assert.ok(
     usageBody.extensions && "eip2612GasSponsoring" in usageBody.extensions,
     "upto 402 must advertise eip2612GasSponsoring so Permit2 allowance can be gas-sponsored"
+  );
+});
+
+const KINDS_296 = [
+  {
+    x402Version: 2,
+    scheme: "batch-settlement",
+    network: "eip155:296",
+    extra: { receiverAuthorizer: AUTHORIZER },
+  },
+  {
+    x402Version: 2,
+    scheme: "upto",
+    network: "eip155:296",
+    extra: { facilitatorAddress: AUTHORIZER },
+  },
+];
+
+test("HTS USDC facade (no version) selects Permit2 and omits EIP-712 domain", async (t) => {
+  const rpc = await stubRpc(t, {
+    chainId: 296,
+    symbol: "USDC",
+    decimals: 6,
+    name: "USD Coin",
+    tokenVersion: null,
+  });
+  const info = await probeUsdcAsset(rpc, ASSET as `0x${string}`);
+  assert.equal(info.transferMethod, "permit2");
+  assert.equal(info.eip2612, false);
+  assert.equal(info.version, null);
+  assert.equal(await resolveEip712Domain(rpc, ASSET as `0x${string}`), null);
+});
+
+test("GET /analytics on eip155:296 offers stock permit2 batch-settlement", async (t) => {
+  const facilitatorUrl = await stubFacilitator(t, KINDS_296);
+  const rpcUrl = await stubRpc(t, {
+    chainId: 296,
+    symbol: "USDC",
+    decimals: 6,
+    name: "USD Coin",
+    tokenVersion: null,
+  });
+  const dir = await mkdtemp(join(tmpdir(), "mandate-svc-296-"));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const { server } = await buildService({
+    facilitatorUrl,
+    rpcUrl,
+    storageDir: dir,
+    receiver: RECEIVER as `0x${string}`,
+    asset: ASSET as `0x${string}`,
+    chainId: 296,
+  });
+  await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
+  t.after(() => server.close());
+  const base = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
+  const res = await fetch(`${base}/analytics`);
+  assert.equal(res.status, 402);
+  const { decodePaymentRequiredHeader } = await import("@x402/core/http");
+  const offer = decodePaymentRequiredHeader(res.headers.get("payment-required") ?? "").accepts[0]!;
+  const extra = offer.extra as { assetTransferMethod?: string; version?: string };
+  assert.equal(offer.scheme, "batch-settlement");
+  assert.equal(offer.network, "eip155:296");
+  assert.equal(extra.assetTransferMethod, "permit2");
+  assert.equal(extra.version, undefined);
+  const usage = decodePaymentRequiredHeader(
+    (await fetch(`${base}/usage`)).headers.get("payment-required") ?? ""
+  );
+  assert.ok(
+    usage.extensions && "erc20ApprovalGasSponsoring" in usage.extensions,
+    "HTS USDC has no EIP-2612; upto must advertise erc20ApprovalGasSponsoring"
   );
 });

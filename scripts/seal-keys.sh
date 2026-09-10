@@ -70,6 +70,23 @@ else
   fi
 fi
 
+if [ -f "$SECRETS/pinax.enc" ]; then
+  ok "pinax already sealed ($SECRETS/pinax.enc)"
+else
+  info "Paste Pinax API key (from https://app.pinax.network), then Ctrl-D:"
+  if printf '%s' "$(cat)" | wallet-cli ring encrypt --key pinax > "$SECRETS/pinax.enc"; then
+    if wallet-cli ring decrypt --key pinax < "$SECRETS/pinax.enc" >/dev/null 2>&1; then
+      ok "sealed pinax → secrets/pinax.enc (decrypt verified)"
+    else
+      rm -f "$SECRETS/pinax.enc"
+      echo "pinax.enc not decryptable — check WALLET_PASS"; exit 1
+    fi
+  else
+    rm -f "$SECRETS/pinax.enc"
+    echo "pinax seal failed"; exit 1
+  fi
+fi
+
 hdr "Next"
 info "export MANDATE_HEDERA_ACCOUNT_ID=0.0.xxxxx   # payer account"
 info "export SERVICE_PAY_TO=0.0.yyyyy            # receiver (must differ from payer)"

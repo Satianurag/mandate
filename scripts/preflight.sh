@@ -105,10 +105,18 @@ import sys,json; a=json.load(sys.stdin)['accepts'][0]; print(a['scheme'],a['netw
 else
   bad "Graph x402 gateway did not return the expected 402 (HTTP $code)"
 fi
-if curl -sS --max-time 10 -o /dev/null "https://testnet.gateway.thegraph.com/api/x402" 2>/dev/null; then
-  ok "Graph TESTNET x402 gateway now resolves — re-check finding F9"
+SUB_TN=4yYAvQLFjBhBtdRCY7eUWo181VNoTSLLFd5M7FXQAi6u
+tn_hdr=$(mktemp)
+tn_code=$(curl -sS -o /dev/null -D "$tn_hdr" -w '%{http_code}' --max-time 25 -X POST \
+  "https://gateway.testnet.thegraph.com/api/x402/subgraphs/id/$SUB_TN" \
+  -H 'content-type: application/json' \
+  -d '{"query":"{_meta{block{number}}}"}' 2>/dev/null)
+tn_net=$(grep -i '^payment-required:' "$tn_hdr" | awk '{print $2}' | tr -d '\r' | base64 --decode 2>/dev/null | python3 -c "import sys,json; print(json.load(sys.stdin)['accepts'][0]['network'])" 2>/dev/null || true)
+rm -f "$tn_hdr"
+if [ "$tn_code" = "402" ] && [ "$tn_net" = "eip155:84532" ]; then
+  ok "Graph TESTNET x402 gateway (gateway.testnet.thegraph.com) 402 on Base Sepolia"
 else
-  wrn "Graph testnet x402 gateway still does not resolve (finding F9, documented but not deployed)"
+  bad "Graph testnet x402 unexpected (HTTP ${tn_code:-?} network '${tn_net:-?}'; documented host is NXDOMAIN)"
 fi
 if [ -f secrets/hedera.enc ] && [ -n "${WALLET_PASS:-}" ]; then
   ok "secrets/hedera.enc present"

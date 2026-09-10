@@ -9,7 +9,7 @@
     }
   },
   "metadata": {
-    "owner": "Circle Internet Financial",
+    "owner": "Circle",
     "info": { "url": "https://www.circle.com/" }
   },
   "display": {
@@ -17,9 +17,30 @@
       "ReceiveWithAuthorization(address from,address to,uint256 value,uint256 validAfter,uint256 validBefore,bytes32 nonce)": {
         "intent": "Authorize USDC transfer",
         "fields": [
-          { "path": "from", "label": "From", "format": "addressName", "visible": "always" },
-          { "path": "to", "label": "To", "format": "addressName", "visible": "always" },
-          { "path": "value", "label": "Amount", "format": "raw", "visible": "always" },
+          {
+            "path": "from",
+            "label": "From",
+            "format": "addressName",
+            "visible": "always",
+            "params": { "types": ["eoa", "wallet"] }
+          },
+          {
+            "path": "to",
+            "label": "To",
+            "format": "addressName",
+            "visible": "always",
+            "params": { "types": ["eoa", "wallet", "contract"] }
+          },
+          {
+            "path": "value",
+            "label": "Amount",
+            "format": "tokenAmount",
+            "visible": "always",
+            "params": {
+              "token": "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
+              "chainId": 84532
+            }
+          },
           { "path": "validAfter", "label": "Valid after", "format": "raw" },
           { "path": "validBefore", "label": "Valid before", "format": "raw" },
           { "path": "nonce", "label": "Nonce", "visible": "never" }

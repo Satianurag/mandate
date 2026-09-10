@@ -23,14 +23,26 @@
  * batch-settlement vouchers, so the mandate envelope runs against our own
  * service on Base Sepolia. See docs/architecture.md.
  *
- * The README of @graphprotocol/client-x402 documents a testnet gateway at
- * testnet.gateway.thegraph.com -- that host does NOT resolve (verified
- * 2026-09-08). Filed as DX feedback.
+ * `@graphprotocol/client-x402` and Graph docs list the testnet host as
+ * `testnet.gateway.thegraph.com`. That name is NXDOMAIN (F8). The live
+ * host is the subdomain swap `gateway.testnet.thegraph.com`, which
+ * returns x402 v2 on Base Sepolia (`eip155:84532`). Production
+ * `gateway.thegraph.com` still bills `eip155:8453` even for a Sepolia
+ * subgraph ID (F31) — we never pay that challenge.
  */
 
 export const GRAPH_X402_PRODUCTION = "https://gateway.thegraph.com/api/x402";
-/** Documented but NXDOMAIN as of 2026-09-08. Kept so the preflight can re-check. */
-export const GRAPH_X402_TESTNET = "https://testnet.gateway.thegraph.com/api/x402";
+/** Hostname printed in Graph docs / client-x402 README. NXDOMAIN (F8). */
+export const GRAPH_X402_TESTNET_DOCUMENTED = "https://testnet.gateway.thegraph.com/api/x402";
+/** Live Graph testnet x402 gateway (Base Sepolia USDC). */
+export const GRAPH_X402_TESTNET = "https://gateway.testnet.thegraph.com/api/x402";
+/**
+ * Subgraph published on Graph Network *testnet* with live indexer allocations
+ * (F34). Agent0 Base Sepolia (`4yYAvQLF…`) lives on the production Graph
+ * Network; the testnet x402 gateway 402s it, then returns subgraph-not-found
+ * after payment.
+ */
+export const GRAPH_X402_TESTNET_SUBGRAPH = "ErqkB52VhmToVRxAWLaJ3cTDiwQMk93VKDEGtSSDB1yP";
 export const GRAPH_GATEWAY_AUTHENTICATED = "https://gateway.thegraph.com/api";
 
 export interface GraphChallenge {
@@ -57,6 +69,12 @@ export function parseChallenge(headers: Headers): GraphChallenge | null {
   } catch {
     return null;
   }
+}
+
+/** True when the 402 is the testnet rail (Base Sepolia), not mainnet USDC. */
+export function isSepoliaX402Challenge(challenge: GraphChallenge): boolean {
+  const net = challenge.accepts[0]?.network;
+  return net === "eip155:84532" || net === "base-sepolia";
 }
 
 /**

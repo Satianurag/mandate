@@ -14,7 +14,8 @@
  * actually return (x402 `.register(caip2, scheme)`). Envelope merchants
  * stay on Base Sepolia (`eip155:84532`). Hedera EVM `eip155:296` is
  * registered when Hashio has the CREATE2 vanity stack (F28) and
- * `secrets/hedera.enc` can submit HBAR gas.
+ * `secrets/hedera.enc` can submit HBAR gas. Paid HTS deposits into that
+ * escrow are blocked by Hedera association (F28); do not invent a wrapper.
  *
  * Keys (sealed in the Key Ring, never on disk or in env):
  * - mandate-facilitator: Base Sepolia settlement txs (needs testnet ETH).
@@ -209,6 +210,13 @@ export async function buildCore(
     chain,
     transport: http(rpcUrl),
   });
+  const hederaGas = chainId === 296;
+  const withHederaGas = <T extends { gas?: bigint }>(args: T): T => {
+    if (!hederaGas) return args;
+    const min = 2_000_000n;
+    if (!args.gas || args.gas < min) return { ...args, gas: min };
+    return args;
+  };
   const signer = toFacilitatorEvmSigner(
     {
       address: submitter.address,
@@ -239,9 +247,11 @@ export async function buildCore(
       },
       verifyTypedData: (args) => publicClient.verifyTypedData(args as never),
       writeContract: (args) =>
-        walletClient.writeContract(args as never) as Promise<`0x${string}`>,
+        walletClient.writeContract(withHederaGas(args) as never) as Promise<`0x${string}`>,
       sendTransaction: (args) =>
-        walletClient.sendTransaction({ ...args, account: submitter, chain }),
+        walletClient.sendTransaction(
+          withHederaGas({ ...args, account: submitter, chain })
+        ),
       waitForTransactionReceipt: async (args) => {
         const receipt = await publicClient.waitForTransactionReceipt(args);
         return { status: receipt.status, logs: receipt.logs };

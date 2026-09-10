@@ -15,7 +15,18 @@ import {
   type ClientHederaSigner,
 } from "@x402/hedera";
 import type { PaymentRequirements } from "@x402/core/types";
+import { BASE_SEPOLIA, CIRCLE_HEDERA_TESTNET_USDC_HTS } from "./facilitators.ts";
 import { withSecret } from "./keyring.ts";
+
+/** Circle Hedera testnet USDC (6 decimals). Stock ExactHederaScheme asset. */
+export const DEFAULT_HTS_DECIMALS: Record<string, number> = {
+  [CIRCLE_HEDERA_TESTNET_USDC_HTS]: 6,
+};
+
+/** Circle Base Sepolia USDC (6 decimals). Graph testnet x402 + upto@84532. */
+export const DEFAULT_EVM_DECIMALS: Record<string, number> = {
+  [BASE_SEPOLIA.usdc.toLowerCase()]: 6,
+};
 
 /** Tinybars per HBAR. Exact integer; normalisation divides by this. */
 export const TINYBARS_PER_HBAR = 100_000_000;
@@ -36,17 +47,26 @@ export function normaliseAmount(
   if (requirements.asset === HBAR_ASSET_ID) {
     return { amount: Number(requirements.amount) / TINYBARS_PER_HBAR, symbol: "HBAR" };
   }
-  const decimals = htsDecimals?.[requirements.asset];
-  if (decimals === undefined) {
-    throw new Error(
-      `cannot normalise amount for unknown HTS asset ${requirements.asset} ` +
-        `on ${requirements.network}: no decimals configured`
-    );
+  const decimals = htsDecimals?.[requirements.asset] ?? DEFAULT_HTS_DECIMALS[requirements.asset];
+  if (decimals !== undefined) {
+    return {
+      amount: Number(requirements.amount) / 10 ** decimals,
+      symbol: requirements.asset,
+    };
   }
-  return {
-    amount: Number(requirements.amount) / 10 ** decimals,
-    symbol: requirements.asset,
-  };
+  if (requirements.network.startsWith("eip155:")) {
+    const evm = DEFAULT_EVM_DECIMALS[requirements.asset.toLowerCase()];
+    if (evm !== undefined) {
+      return {
+        amount: Number(requirements.amount) / 10 ** evm,
+        symbol: "USDC",
+      };
+    }
+  }
+  throw new Error(
+    `cannot normalise amount for unknown asset ${requirements.asset} ` +
+      `on ${requirements.network}: no decimals configured`
+  );
 }
 
 /**

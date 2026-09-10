@@ -1,15 +1,28 @@
 /**
  * Graph x402 testnet adapter.
  *
- * `@graphprotocol/client-x402` is the payment client; the signer is a Key Ring
- * session key passed in-process — never `X402_PRIVATE_KEY` in the environment
- * (invariant 1). The documented testnet host was NXDOMAIN on 8 Sep and still
- * NXDOMAIN on 10 Sep (F8). Calling `queryGraphX402Testnet` probes the host
- * first and throws a FINDING rather than falling through to mainnet USDC (F31).
+ * `@graphprotocol/client-x402` is the payment client Graph publishes; it
+ * wants a `privateKey` / `X402_PRIVATE_KEY`. We never put a key in env
+ * (invariant 1). Settlement uses stock `ExactEvmScheme` with a Key Ring or
+ * Ledger signer — the same exact rail Graph's 402 advertises.
+ *
+ * Live host is `gateway.testnet.thegraph.com` (F8). Docs print the hostname
+ * backwards. Production `gateway.thegraph.com` bills mainnet even for a
+ * Sepolia subgraph (F31); this module refuses that challenge.
  */
 
-import { GRAPH_X402_TESTNET, parseChallenge, queryOrChallenge, type GraphChallenge } from "./graph.ts";
-import { withSecret } from "./keyring.ts";
+import { wrapFetchWithPayment } from "@x402/fetch";
+import { decodePaymentResponseHeader } from "@x402/core/http";
+import type { x402Client } from "@x402/core/client";
+import type { ClientEvmSigner } from "@x402/evm";
+import {
+  GRAPH_X402_TESTNET,
+  isSepoliaX402Challenge,
+  parseChallenge,
+  queryOrChallenge,
+  type GraphChallenge,
+} from "./graph.ts";
+import { createEvmX402Client } from "./evm-client.ts";
 
 export interface GraphX402QueryResult {
   data: unknown;
@@ -26,8 +39,8 @@ export async function probeGraphX402Testnet(subgraphId: string): Promise<
       base: GRAPH_X402_TESTNET,
     });
     if (r.kind === "challenge") {
-      const net = r.challenge.accepts[0]?.network;
-      if (net && net !== "eip155:84532" && net !== "base-sepolia") {
+      if (!isSepoliaX402Challenge(r.challenge)) {
+        const net = r.challenge.accepts[0]?.network ?? "unknown";
         return {
           ok: false,
           reason: `testnet gateway advertised ${net}, not Base Sepolia (F31)`,
@@ -50,40 +63,55 @@ export async function probeGraphX402Testnet(subgraphId: string): Promise<
 }
 
 /**
- * Pay a Graph testnet x402 challenge with a Key Ring session key.
- * Throws when the testnet host is down — callers must record a FINDING, not
- * retry against production/mainnet.
+ * Pay a Graph testnet x402 challenge with a Ledger / Key Ring EVM signer.
+ * Throws when the testnet host is down or bills mainnet — never retries
+ * against production.
  */
 export async function queryGraphX402Testnet(
   subgraphId: string,
   query: string,
-  sealedSessionKey: Buffer,
-  sessionKeyName = "mandate-session"
+  opts: { signer: ClientEvmSigner; rpcUrl: string; x402?: x402Client }
 ): Promise<GraphX402QueryResult> {
   const probe = await probeGraphX402Testnet(subgraphId);
   if (!probe.ok) {
     throw new Error(`FINDING F8: Graph x402 testnet unavailable: ${probe.reason}`);
   }
-  const { createGraphQuery } = await import("@graphprotocol/client-x402");
-  return withSecret(sessionKeyName, sealedSessionKey, async (key) => {
-    const hex = key.toString("hex");
-    const privateKey = hex.startsWith("0x") ? hex : `0x${hex}`;
-    const endpoint = `${GRAPH_X402_TESTNET}/subgraphs/id/${subgraphId}`;
-    const run = createGraphQuery({
-      endpoint,
-      chain: "base-sepolia",
-      privateKey,
+  const x402 =
+    opts.x402 ??
+    createEvmX402Client({
+      signer: opts.signer,
+      rpcUrl: opts.rpcUrl,
+      chainId: 84532,
     });
-    const result = (await run(query)) as { data?: unknown; errors?: { message: string }[] };
-    if (result?.errors?.length) {
-      throw new Error(result.errors.map((e) => e.message).join("; "));
-    }
-    return {
-      data: result.data,
-      network: probe.challenge.accepts[0]?.network ?? "eip155:84532",
-      gateway: GRAPH_X402_TESTNET,
-    };
+  const endpoint = `${GRAPH_X402_TESTNET}/subgraphs/id/${subgraphId}`;
+  const paid = await wrapFetchWithPayment(fetch, x402)(endpoint, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ query }),
   });
+  const text = await paid.text();
+  if (paid.status !== 200) {
+    throw new Error(`Graph x402 paid query failed: HTTP ${paid.status} ${text.slice(0, 400)}`);
+  }
+  const body = JSON.parse(text) as { data?: unknown; errors?: { message: string }[] };
+  if (body.errors?.length) {
+    throw new Error(body.errors.map((e) => e.message).join("; "));
+  }
+  let settlementId: string | undefined;
+  const pr = paid.headers.get("payment-response");
+  if (pr) {
+    try {
+      settlementId = decodePaymentResponseHeader(pr).transaction;
+    } catch {
+      /* Graph may omit a stock payment-response; data+200 still proves access */
+    }
+  }
+  return {
+    data: body.data,
+    settlementId,
+    network: probe.challenge.accepts[0]?.network ?? "eip155:84532",
+    gateway: GRAPH_X402_TESTNET,
+  };
 }
 
 export { parseChallenge };

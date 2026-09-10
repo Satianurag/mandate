@@ -13,10 +13,18 @@
  * Exit verdicts: TOPUP_NOT_NEEDED | TOPUP_PENDING | TOPUP_SCHEDULED
  */
 
-import { readFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { ensureWalletPass } from "./load-wallet-pass.mjs";
 
 const ROOT = new URL("..", import.meta.url).pathname;
+const RESULT = `${ROOT}/.live-results/treasury-topup.txt`;
+
+async function writeLive(payload) {
+  const line = JSON.stringify(payload, null, 2);
+  await mkdir(`${ROOT}/.live-results`, { recursive: true });
+  await writeFile(RESULT, line + "\n");
+  return line;
+}
 
 function need(name) {
   const v = process.env[name];
@@ -73,6 +81,16 @@ const balance = await fetchPayerBalanceTinybars(payerId, { network: sdkNetwork }
 console.log(`payer ${payerId} balance: ${balance} tinybars (threshold ${thresholdTinybars})`);
 if (!needsTopUp(balance, thresholdTinybars)) {
   console.log("TOPUP_NOT_NEEDED");
+  await writeLive({
+    ok: true,
+    verdict: "TOPUP_NOT_NEEDED",
+    treasuryId,
+    payerId,
+    balance: String(balance),
+    thresholdTinybars: String(thresholdTinybars),
+    hbars,
+    inDays,
+  });
   process.exit(0);
 }
 
@@ -80,6 +98,15 @@ const live = await fetchLiveTopUp(treasuryId, memo, { network: sdkNetwork });
 if (live !== null) {
   console.log(`live schedule ${live.scheduleId} executes ${live.expirationTime}`);
   console.log("TOPUP_PENDING");
+  await writeLive({
+    ok: true,
+    verdict: "TOPUP_PENDING",
+    treasuryId,
+    payerId,
+    scheduleId: live.scheduleId,
+    expirationTime: live.expirationTime,
+    memo,
+  });
   process.exit(0);
 }
 
@@ -108,8 +135,20 @@ await withSecret("treasury", treasuryEnc, async (secret) => {
     ).sign(treasuryKey);
     const resp = await signed.execute(client);
     const receipt = await resp.getReceipt(client);
-    console.log(`schedule ${String(receipt.scheduleId)} executes ${executeAt.toISOString()}`);
+    const scheduleId = String(receipt.scheduleId);
+    console.log(`schedule ${scheduleId} executes ${executeAt.toISOString()}`);
     console.log("TOPUP_SCHEDULED");
+    await writeLive({
+      ok: true,
+      verdict: "TOPUP_SCHEDULED",
+      treasuryId,
+      payerId,
+      scheduleId,
+      executes: executeAt.toISOString(),
+      memo,
+      hbars,
+      waitForExpiry: true,
+    });
   } finally {
     await client.close();
   }

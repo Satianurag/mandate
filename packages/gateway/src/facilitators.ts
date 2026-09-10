@@ -27,6 +27,9 @@ export const BASE_SEPOLIA = {
   usdc: "0x036CbD53842c5426634e7929541eC2318f3dCF7e" as const,
 } as const;
 
+/** Circle Hedera testnet USDC HTS id (https://developers.circle.com/stablecoins/usdc-contract-addresses). */
+export const CIRCLE_HEDERA_TESTNET_USDC_HTS = "0.0.429274" as const;
+
 /**
  * Assert the facilitator at `url` currently supports `kind`
  * (`"<scheme>@<network>"`, e.g. `"exact@hedera:testnet"`). Throws otherwise.

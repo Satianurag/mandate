@@ -39,7 +39,7 @@ const results = {};
 
 // 1. Graph x402 testnet
 {
-  const host = "https://testnet.gateway.thegraph.com/api/x402";
+  const host = "https://gateway.testnet.thegraph.com/api/x402";
   const subgraph = "4yYAvQLFjBhBtdRCY7eUWo181VNoTSLLFd5M7FXQAi6u";
   try {
     const res = await fetch(`${host}/subgraphs/id/${subgraph}`, {

@@ -5,7 +5,7 @@
  * never happened — this gate proves the evidence path, not just the call.
  */
 
-import { readFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { ensureWalletPass } from "./load-wallet-pass.mjs";
 
 const ROOT = new URL("..", import.meta.url).pathname;
@@ -88,3 +88,8 @@ const found = await pollTopicRecord(topicId, (r) => r?.txId === nonce, {
   timeoutMs: 90_000,
 });
 console.log(`HCS_AUDIT_OK seq=${found.sequence} consensus=${found.consensusTimestamp}`);
+await mkdir(`${ROOT}/.live-results`, { recursive: true });
+await writeFile(
+  `${ROOT}/.live-results/e2e-audit.txt`,
+  `HCS_AUDIT_OK seq=${found.sequence} consensus=${found.consensusTimestamp} txId=${nonce}\n`
+);

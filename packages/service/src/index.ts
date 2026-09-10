@@ -24,7 +24,7 @@ import { ExactHederaScheme } from "@x402/hedera/exact/server";
 import { HBAR_ASSET_ID } from "@x402/hedera";
 import { normaliseAmount } from "../../gateway/src/hedera.ts";
 import { nodeAdapter } from "../../gateway/src/http-adapter.ts";
-import { BLOCKY402_URL } from "../../gateway/src/facilitators.ts";
+import { BLOCKY402_URL, CIRCLE_HEDERA_TESTNET_USDC_HTS } from "../../gateway/src/facilitators.ts";
 import { liveAnalyticsBody, type Agent0Row } from "../../gateway/src/analytics.ts";
 import { assertFacilitatorKinds } from "../../gateway/src/discovery.ts";
 
@@ -96,6 +96,16 @@ export async function buildService(cfg: ServiceConfig): Promise<Server> {
         maxTimeoutSeconds: 60,
       },
       description: "Subgraph analytics — metered by complexity",
+    },
+    "GET /usdc-analytics": {
+      accepts: {
+        scheme: "exact",
+        network: SERVICE_NETWORK,
+        payTo: cfg.payTo,
+        price: { asset: CIRCLE_HEDERA_TESTNET_USDC_HTS, amount: "10000" },
+        maxTimeoutSeconds: 60,
+      },
+      description: "Subgraph analytics — Circle HTS USDC exact@hedera:testnet",
     },
   };
   const httpServer = new x402HTTPResourceServer(resourceServer, routes);

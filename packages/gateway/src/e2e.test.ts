@@ -227,3 +227,22 @@ test("complexity metering prices a bigger query higher", async (t) => {
   const large = await price("{ agents { id feedbacks { value revoked } validations { response } } }");
   assert.ok(large > small, `per-call metering: ${large} should exceed ${small}`);
 });
+
+test("GET /usdc-analytics offers stock exact@hedera:testnet Circle USDC", async (t) => {
+  const stub = await startStubFacilitator(t);
+  const base = await startInProcessService(t, stub.url);
+  const res = await fetch(`${base}/usdc-analytics?q=${encodeURIComponent("{ agents { id } }")}`);
+  assert.equal(res.status, 402);
+  const header = res.headers.get("payment-required");
+  assert.ok(header);
+  const body = JSON.parse(Buffer.from(header, "base64").toString("utf8")) as PaymentRequired;
+  const offer = body.accepts[0];
+  assert.ok(offer);
+  assert.equal(offer.scheme, "exact");
+  assert.equal(offer.network, "hedera:testnet");
+  assert.equal(offer.asset, "0.0.429274");
+  assert.equal(offer.amount, "10000");
+  const { amount, symbol } = normaliseAmount(offer);
+  assert.equal(symbol, "0.0.429274");
+  assert.equal(amount, 0.01);
+});

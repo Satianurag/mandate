@@ -1,27 +1,31 @@
 # Architecture — which rail does what
 
 Locked after live verification on 2026-09-08 (`docs/FINDINGS.md`).
-**Everything runs on testnet.** No mainnet dependency except one optional
-$0.01 proof-of-integration payment.
+**Everything runs on testnet.** Graph production x402 bills Base mainnet (F31);
+we do not pay it. Testnet Graph x402 is `gateway.testnet.thegraph.com` (F8).
 
 ## Rails
 
 | Purpose | Scheme / network | Facilitator | Cost |
 |---|---|---|---|
 | **The mandate envelope** | `batch-settlement@eip155:84532` (Base Sepolia) | self-hosted (`@mandate/facilitator`) | testnet, free |
-| **Hedera EVM batch (advertised)** | `batch-settlement@eip155:296` | self-hosted when `hedera.enc` present (F28) | HBAR gas; paid E2E blocked on 0 HTS USDC |
+| **Hedera paid rail** | `exact@hedera:testnet` (HBAR + Circle USDC `0.0.429274`); merchant (`SERVICE_PAY_TO`) must differ from the Key Ring payer | Blocky402 | testnet |
+| **Hedera EVM batch (advertised, not paid)** | `batch-settlement@eip155:296` | self-hosted when `hedera.enc` present (F28) | 402+Permit2 live; HTS deposit blocked on CREATE2 escrow |
 | **Evidence log** | HCS topic, Hedera testnet | — | testnet, free |
-| Graph proof-of-integration | Subgraph MCP + Agent0 (testnet data). Documented Graph x402 **testnet** host is NXDOMAIN (F8); production x402 bills Base **mainnet** even for a Sepolia subgraph (F31) — we do not pay it | — | testnet, Studio key |
+| Graph proof-of-integration | Subgraph MCP + Agent0 + testnet x402 (`gateway.testnet.thegraph.com`, F8) against a Graph Network **testnet** subgraph (F34). Production x402 bills Base **mainnet** even for a Sepolia subgraph (F31) — we do not pay it | — | testnet |
 | Graph bulk reads | authenticated gateway, API key sealed in Key Ring | — | free tier |
-| Graph Substreams | Pinax `basesepolia.substreams.pinax.network` (F24 reopened) | — | Pinax key if required |
+| Graph Substreams | Pinax `basesepolia.substreams.pinax.network` (F24 PROVEN, Key Ring `pinax`) | — | Pinax testnet |
 
 ### Why the envelope is not on Hedera
 
 Official x402 vanity contracts now have code on Hedera EVM 296 (F28). Circle
 USDC there is HTS `0.0.429274` (EVM alias from Hiero `TokenId.toEvmAddress()`),
-and x402's documented Hedera *exact* rail is still `hedera:testnet` + token ID.
-The mandate envelope stays `batch-settlement@eip155:84532` (Base Sepolia USDC)
-until a payer holds that HTS and a paid E2E on `eip155:296` is measured.
+with no EIP-3009 — stock x402 therefore uses `assetTransferMethod: permit2`.
+CREATE2 escrow accounts are Hedera lazy-created immutables
+(`max_automatic_token_associations=0`); a Permit2 `deposit` reverts
+`TOKEN_NOT_ASSOCIATED_TO_ACCOUNT`. x402's documented Hedera *paid* rail is
+still `exact@hedera:testnet` + token ID (Blocky402). The mandate envelope stays
+`batch-settlement@eip155:84532` (Base Sepolia USDC).
 
 **This is a feature, not a compromise.** The mandate layer is rail-agnostic by
 design: the same policy engine and the same device signature govern a
@@ -109,6 +113,6 @@ Custody of every key involved:
 |---|---|---|
 | Ledger | Key Ring CLI, device approval, x402 payment flow | custody + step-up + envelope |
 | The Graph | compose 2+ products; live data | Agent0 (reputation, paid 200s) + Subgraph MCP (discovery) + Substreams module (Base Sepolia) |
-| The Graph | Subgraph MCP **or** Substreams **or** x402 | MCP wired for discovery; Substreams module in `substreams/x402-payments`; x402 testnet host still NXDOMAIN (F8) — no mainnet payment |
-| Hedera | live x402 service via Blocky402 | Hedera paid service |
+| The Graph | Subgraph MCP **or** Substreams **or** x402 | MCP discovery; Substreams `x402-payments`; testnet x402 at `gateway.testnet.thegraph.com` (`e2e:graph-x402`). Docs hostname is NXDOMAIN (F8) |
+| Hedera | live x402 service via Blocky402 | stock `exact@hedera:testnet` (`e2e:payment` HBAR, `e2e:hedera-usdc` Circle USDC). EVM batch@296 is advertised, not the paid rail (F28) |
 | Hedera | HCS audit, scheduled tx, ERC-8004/HCS-14 (bonus) | evidence layer (every record carries the operator UAID, F25), treasury leg (HIP-423 time-locked top-up, `treasury:topup`, F26), identity (HCS-11 profile via `uaid:register`) |

@@ -29,7 +29,7 @@ plan changes. Re-verify any time with `npm run verify` (counts itself) and
 | F5 | Blocky402 rejects the payload shape its own spec publishes | **RESOLVED** | 08 Sep |
 | F6 | `wallet-cli` JSON-envelopes output over a pipe | **RESOLVED** | 08 Sep |
 | F7 | Agent0 subgraphs need a Studio API key — no public route | **RESOLVED** | 08 Sep |
-| F8 | The Graph's documented *testnet* x402 gateway does not resolve | **OPEN** (re-probed 10 Sep: still NXDOMAIN) | 08 Sep |
+| F8 | The Graph's documented testnet x402 hostname is NXDOMAIN; the live host is the subdomain swap | **PROVEN** (`gateway.testnet.thegraph.com`, `eip155:84532`) | 08 Sep |
 | F9 | The fail-safe chain holds under a real dependency failure | **PROVEN** | 08 Sep |
 | F10 | `ring init` needs the Ledger Sync device app — undocumented | **RESOLVED** | 08 Sep |
 | F11 | Headless seal + decrypt work with the device physically gone | **PROVEN** | 08 Sep |
@@ -45,7 +45,7 @@ plan changes. Re-verify any time with `npm run verify` (counts itself) and
 | F21 | Settled spend was never recorded — the rolling budget never accrued | **RESOLVED** | 09 Sep |
 | F22 | Hand-rolled pay flow settled before delivery and doubled settlement — replaced by the stock flow | **RESOLVED** | 09 Sep |
 | F23 | TS 7.0.2 fails ambient `@types` inclusion across workspace packages — explicit `types: ["node"]` + toolchain to latest | **RESOLVED** | 09 Sep |
-| F24 | Substreams Base Sepolia: module packs; Pinax `substreams run` needs a sealed API key | **OPEN** (re-probed 10 Sep: pack OK, Pinax Unauthenticated without `pinax.enc`) | 09 Sep |
+| F24 | Substreams Base Sepolia: module packs; Pinax `substreams run` needs a sealed API key | **PROVEN** (authenticated `substreams run` on `basesepolia.substreams.pinax.network` saw the mandate deposit) | 09 Sep |
 | F25 | HCS-14 SDK runtime proven spec-correct; three packaging gaps worked around honestly | **RESOLVED** | 09 Sep |
 | F26 | Treasury top-up leg: three SDK footguns caught by probes before they cost a demo | **RESOLVED** | 09 Sep |
 | F27 | `upto` spike: the mapping we wanted already exists where we control the scheme — don't adopt | **RESOLVED** (Hedera `upto` still does not exist; Base Sepolia `upto` adopted under F29) | 09 Sep |
@@ -55,6 +55,7 @@ plan changes. Re-verify any time with `npm run verify` (counts itself) and
 | F31 | Graph production x402 still bills `eip155:8453` even for a Base Sepolia subgraph ID | **OPEN** (theirs) | 10 Sep |
 | F32 | ERC-7730 verifying contracts collected live; MandateStepUp has no on-chain verifier | **OPEN** | 10 Sep |
 | F33 | Ledger Proof of You has no separate PoH SDK — shipping surface is DMK + UAID | **PROVEN** | 10 Sep |
+| F34 | Graph testnet x402 402s any id; paid queries need a Graph Network *testnet* subgraph with allocations | **PROVEN** | 10 Sep |
 
 ---
 
@@ -161,7 +162,7 @@ it in the Key Ring:
 printf '%s' "$KEY" | wallet-cli ring encrypt --key graph-gateway > secrets/graph.enc
 ```
 
-## F8 — The Graph's testnet x402 gateway does not resolve · OPEN
+## F8 — Graph's documented testnet x402 host is a subdomain swap · PROVEN
 
 `@graphprotocol/client-x402`'s README documents:
 
@@ -170,23 +171,32 @@ printf '%s' "$KEY" | wallet-cli ring encrypt --key graph-gateway > secrets/graph
 | production | `gateway.thegraph.com/api/x402` | base |
 | testnet | `testnet.gateway.thegraph.com/api/x402` | base-sepolia |
 
-The testnet host is **NXDOMAIN**. Documented, not deployed. We do not need it —
-the envelope runs on Base Sepolia and their track accepts MCP or Substreams —
-but do not build a demo path assuming it appears. Good DX report for them.
-`preflight` re-checks it each run in case it lands.
+`testnet.gateway.thegraph.com` is **NXDOMAIN** (measured 8 Sep and 10 Sep).
+That is a documentation bug, not a missing product.
 
-**Re-probe 10 Sep 2026 (Phase 0):** `dig` and `curl` still fail with
-`NXDOMAIN` / `Could not resolve host: testnet.gateway.thegraph.com`. Production
-`gateway.thegraph.com/api/x402` still returns a decodable 402 (control). Graph
-PoI therefore cannot move fully to testnet until they publish a resolving host.
-See also F31 (even a Base Sepolia subgraph ID is billed as `eip155:8453`).
+**Live 10 Sep:** `https://gateway.testnet.thegraph.com/api/x402` resolves
+(Cloudflare anycast, same edge as `gateway.thegraph.com`) and returns HTTP 402
+x402 v2:
 
-**Re-probe 10 Sep (docs + public resolvers):** Graph docs
-(https://thegraph.com/docs/en/subgraphs/tooling/x402-payments/) and
-`@graphprotocol/client-x402` README still list only
-`https://testnet.gateway.thegraph.com`. `dig @8.8.8.8` and `dig @1.1.1.1`
-return no A record (NXDOMAIN). No alternate testnet x402 host is documented.
-F8 stays OPEN. We do not pay production `eip155:8453`.
+```
+scheme  exact
+network eip155:84532
+asset   0x036CbD53842c5426634e7929541eC2318f3dCF7e  (USDC Base Sepolia)
+amount  42
+extra   { assetTransferMethod: "eip3009", name: "USDC", version: "2" }
+```
+
+Retry header is `Payment-Signature`. Production `gateway.thegraph.com/api/x402`
+still bills `eip155:8453` even for a Sepolia subgraph ID (F31) — we do not pay
+that challenge. Testnet PoI is `npm run e2e:graph-x402` against the live host.
+
+**Live 10 Sep (Mandate policy + HCS, not a bare Graph 200):**
+`createMandateEvmClient` → unpaid `exact@eip155:84532` amount 42 → policy
+`step_up` (Graph payTo has no ERC-8004 identity) → one Ledger EIP-3009 tap →
+subgraph `_meta.block.number` **25945967**, tx
+`0xaf484c1a…a73aaf2d` (full hash in `.live-results/e2e-graph-x402.txt`), HCS
+seq **11** verdict `step_up`. Subgraph
+`ErqkB52VhmToVRxAWLaJ3cTDiwQMk93VKDEGtSSDB1yP` (F34). Never `eip155:8453`.
 
 ## F9 — The fail-safe chain holds under a real failure · PROVEN
 
@@ -595,7 +605,7 @@ already latest (x402 2.25.0, DMK 1.9.0, viem 2.56.3, harness 1.2.2).
 
 ---
 
-## F24 — Substreams Base Sepolia: module packs; Pinax run needs API key · OPEN
+## F24 — Substreams Base Sepolia: module packs; Pinax run needs API key · PROVEN
 
 Probe-before-implement killed this one before a line was written. Two
 independent facts, both verified, not assumed:
@@ -627,9 +637,13 @@ The `x402-payments` module **compiles and packs**
 `Unauthenticated` without a Pinax API key. F24 is therefore: the chain is
 served, the module is stock, the remaining gate is a sealed Pinax key.
 Official Pinax CLI uses `SUBSTREAMS_API_KEY` from https://app.pinax.network
-(https://app.pinax.network/docs/substreams). `e2e:substreams` accepts that
-env or `PINAX_API_KEY` / `secrets/pinax.enc`. None is present in this
-workspace — no fake stream.
+(https://app.pinax.network/docs/substreams). `e2e:substreams` unseals
+`secrets/pinax.enc` (Key Ring name `pinax`) into that env — never a tracked
+`.env`.
+
+**Live 10 Sep (`npm run e2e:substreams`):** Pinax Base Sepolia authenticated.
+Blocks 46605367–46605369 included the mandate deposit
+`0x60c8b5d6…8c18` plus USDC / batch-settlement log hits. `SUBSTREAMS_OK`.
 
 ## F25 — HCS-14: SDK runtime proven, three gaps worked around · RESOLVED
 
@@ -666,10 +680,10 @@ operator run.
 
 | Item | When | Load-bearing? |
 |---|---|---|
-| Graph testnet x402 host (`testnet.gateway.thegraph.com`) | F8 / F31 | Theirs — still NXDOMAIN; production x402 bills mainnet USDC even for Sepolia subgraph IDs |
-| Substreams Base Sepolia gRPC | F24 reopened | Pinax DNS exists; CLI + authenticated `substreams run` is the remaining gate |
-| Hedera `batch-settlement@eip155:296` paid E2E | F28 | `/supported` lists 296; payer HTS USDC balance is 0; Ledger address is not a Hedera account |
-| ERC-7730 registry ingest | F32 | Descriptors use live verifyingContracts; MandateStepUp has no on-chain verifier |
+| Graph docs hostname `testnet.gateway.thegraph.com` | F8 | Docs typo — live rail is `gateway.testnet.thegraph.com` (`npm run e2e:graph-x402`) |
+| Graph production x402 bills `eip155:8453` | F31 | Theirs — do not pay mainnet; testnet host is the Sepolia rail |
+| Hedera `batch-settlement@eip155:296` paid deposit | F28 | Protocol — CREATE2 escrow cannot hold HTS. Hedera paid rail is stock `exact@hedera:testnet` |
+| ERC-7730 registry ingest | F32 | Local lint + tester path; production labeled fields wait on merge |
 | Operator-gated leftover | Phase 5 | VPS host, narrated video, ETHGlobal form, Graph key rotation |
 
 ## How to add a finding
@@ -713,6 +727,11 @@ enforced in the builder.
 `scripts/treasury-topup.mjs` (`npm run treasury:topup`), treasury stanza in
 `seal-hedera.sh`. Live mirror read from the sandbox is ECONNRESET-blocked, so
 the operator's first `treasury:topup` run is also the live read-back proof.
+
+**Live 10 Sep:** `npm run treasury:topup` with HIP-423 `wait_for_expiry`
+(`MANDATE_TOPUP_HBARS=1`, threshold above current payer balance) →
+`TOPUP_SCHEDULED` schedule `0.0.10456090` treasury `0.0.10455999` → payer
+`0.0.10440893`, executes `2026-09-11T08:56:24.012Z` (`.live-results/treasury-topup.txt`).
 
 ## F27 — `upto` spike: don't adopt · RESOLVED
 
@@ -779,10 +798,41 @@ Live `eth_call` `name()` = `USD Coin`, `decimals()` = 6, `getCode` = 147 bytes.
 x402's Hedera exact rail is still `hedera:testnet` + token ID, not this EVM
 address. **Live 10 Sep (`npm run e2e:hedera-batch`):** facilitator
 `/supported` lists `batch-settlement@eip155:296` and `upto@eip155:296`
-(stock `.register` on Hashio). Hedera Key Ring payer
-`0x4F52C6Ec1f7B12e0f3260dC457ab36345BBFeA33` holds **0** Circle USDC.
-Ledger `0x57a2…` is not a Hedera account (`INVALID_ACCOUNT_ID`). Paid
-`mandate:open` on 296 is blocked on HTS funding — no stub deposit.
+(stock `.register` on Hashio). Ledger `0x57a2…` is not a Hedera account
+(`INVALID_ACCOUNT_ID` / `0x494e5641` on Hashio `balanceOf`). Do not send
+USDC to the Ledger Ethereum address.
+
+**10 Sep associate:** `npm run hedera:associate-usdc` →
+`USDC_ASSOCIATED account=0.0.10440893 status=SUCCESS`.
+
+**10 Sep faucet (live re-check):** Circle Hedera Testnet USDC on
+`0.0.10440893` / `0x4F52C6Ec1f7B12e0f3260dC457ab36345BBFeA33` is **20 USDC**
+(HTS `0.0.429274`, raw `20000000`, 6 decimals). Mirror
+`balance.tinybars` ≈ 79 HBAR. `npm run e2e:hedera-batch` →
+`HEDERA_BATCH_HTS_BLOCKED` (CREATE2 escrow `max_automatic_token_associations=0`).
+
+**10 Sep paid path (stock, not a stub):**
+- HTS USDC has no `version()` / `DOMAIN_SEPARATOR` / EIP-3009. Merchant 402
+  sets `extra.assetTransferMethod=permit2` (`HEDERA_BATCH_OFFER_OK`).
+- Payer is Key Ring `hedera-payment` (`0x4F52…`), not the Ledger.
+- `USDC.approve(Permit2)` tx `0x4147c417…bd0422` status `success`.
+- Facilitator `/verify` then simulates `batch.deposit` and reverts:
+
+```
+TRANSFER_FROM_FAILED, TOKEN_NOT_ASSOCIATED_TO_ACCOUNT
+```
+
+Escrow `0.0.10454274` (batch) / `0.0.10454304` (Permit2 collector) are
+`memo=lazy-created account`, `max_automatic_token_associations=0`.
+`TokenAssociateTransaction` → `INVALID_SIGNATURE`.
+`ContractUpdateTransaction.setMaxAutomaticTokenAssociations(-1)` →
+`MODIFYING_IMMUTABLE_CONTRACT`. HIP-904 `TokenAirdrop` of 1 unit to the
+batch contract is **pending** and unclaimable (the contract has no claim
+entry point). Do not wrap x402 bytecode to associate — that would be a
+custom scheme.
+
+Hedera's load-bearing paid rail remains `exact@hedera:testnet` (Blocky402).
+The mandate envelope remains `batch-settlement@eip155:84532`.
 
 No custom Hedera `upto` / batch scheme.
 
@@ -805,15 +855,14 @@ Stock `UptoEvmScheme` from `@x402/evm/upto` is therefore a real merchant
 path on Base Sepolia. Hedera `upto` remains absent (`@x402/hedera` still
 exports only `ExactHederaScheme`).
 
-**Paid E2E 10 Sep (`npm run e2e:upto`):** HTTP 200, scheme `upto`, authorised
-max `50000`, settled actual `10000` (strictly less). Two Ledger typed-data
-taps (Permit2 + USDC EIP-2612). Payload carried `eip2612GasSponsoring` with
-`v=0x1c`. Facilitator `eth_call` `from` must be the submitter (Friction 07)
-or `/verify` lies with `permit2_allowance_required`. Paid body was live
-Agent0 (no `agent-demo-1`).
+**Paid E2E 10 Sep (`npm run e2e:upto`, re-run with `.live-results/e2e-upto.txt`):**
+HTTP 200, scheme `upto`, authorised max `50000`, settled actual `10000`
+(strictly less). Two Ledger typed-data taps (Permit2 + USDC EIP-2612). Payload
+carried `eip2612GasSponsoring` with `v=0x1c`. Paid body was live Agent0 (no
+`agent-demo-1`).
 
 - payer `0x57a2a47Ca22AE52867c5313c4d9ab43070D7C202`
-- tx `0x16ac0090…f3a8b5` (Base Sepolia `upto`; full hash in `.live-results/e2e-upto.txt`)
+- tx `0xdaa07bf6…1c71027b` (full hash in `.live-results/e2e-upto.txt`)
 - network `eip155:84532`
 
 ## F30 — Subgraph MCP is the hosted SSE server, not an npm package · PROVEN
@@ -844,9 +893,9 @@ asset   0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913  (USDC Base mainnet)
 amount  10000
 ```
 
-Paying that challenge would be a **mainnet** $0.01 transfer. Combined with
-F8 (testnet host NXDOMAIN), there is no stock testnet Graph x402 rail today.
-We will not route a demo payment onto mainnet USDC.
+Paying that challenge would be a **mainnet** $0.01 transfer. The testnet rail
+is `gateway.testnet.thegraph.com` (F8 PROVEN). We will not route a demo
+payment onto mainnet USDC.
 
 ## F32 — ERC-7730 verifying contracts from live getCode · OPEN
 
@@ -867,8 +916,19 @@ above. Registry PR: https://github.com/ethereum/clear-signing-erc7730-registry/p
 (submitted 10 Sep 2026). Docs must say "submitted, pending registry" — never
 "device shows fields" — until ingest is observed on a device.
 
+**Re-probe 10 Sep 14:00 UTC:** PR
+https://github.com/ethereum/clear-signing-erc7730-registry/pull/2972 is still
+**OPEN** (not merged). GitHub checks are green (descriptor validate, Sourcify +
+Rust tests for `mandate/eip712-x402-BatchSettlement`). Ingest has not happened.
+Device path remains address-verify. Official local lint: `npm run e2e:erc7730`.
+
 **Live 10 Sep:** `npm run e2e:stepup` → `STEPUP_OK` via address-verify. The
-device did not show labeled MandateStepUp fields.
+device did not show labeled MandateStepUp fields. Official CLI:
+`python3.12` venv `erc7730 lint` on `docs/erc7730/*.json` →
+`checked 2 v2 descriptor files, no errors found` (`npm run e2e:erc7730`).
+`docs/erc7730-mandate-stepup.json` is local-lint only — it is not a registry
+descriptor (MandateStepUp has no verifying contract). Preview on a signer:
+https://app.devicesdk.ledger.com/clear-signing-tools
 
 ## F33 — Proof of You is DMK presence + UAID, not a uniqueness oracle · PROVEN
 
@@ -883,3 +943,16 @@ Screen. Shipping surface:
    registration (`uaid.ts` / `npm run uaid:register`).
 
 We will not fake a uniqueness oracle. Replay without the device must fail.
+
+## F34 — Graph testnet x402 serves Graph Network testnet subgraphs, not production IDs · PROVEN
+
+**Observed 10 Sep.** `gateway.testnet.thegraph.com` returns `exact@eip155:84532`
+for any subgraph id, including Agent0 Base Sepolia `4yYAvQLF…`. After a real
+Ledger EIP-3009 payment, that id returns `subgraph not found`. Authenticated
+probes: Agent0 / Graph Network / TAP ids exist on `gateway.thegraph.com` and
+are missing on the testnet gateway.
+
+The testnet x402 gateway looks up Graph Network **testnet** (Arbitrum Sepolia)
+allocations. Live allocated subgraph `ErqkB52VhmToVRxAWLaJ3cTDiwQMk93VKDEGtSSDB1yP`
+returns `_meta.block.number` on `gateway.testnet.thegraph.com`. Paid proof:
+`npm run e2e:graph-x402`. Never pay production `eip155:8453` (F31).

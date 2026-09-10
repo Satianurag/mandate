@@ -113,17 +113,18 @@ item 1.
 
 ---
 
-## Friction 04 — Graph's documented x402 *testnet* gateway is NXDOMAIN
+## Friction 04 — Graph docs print the testnet x402 hostname backwards
 
 **Docs page:** `@graphprotocol/client-x402` README (Environments table)
 **Expected:** `https://testnet.gateway.thegraph.com/api/x402` with `chain: base-sepolia`.
-**Observed (8 Sep and re-probed 10 Sep 2026):** `NXDOMAIN` /
-`Could not resolve host: testnet.gateway.thegraph.com`. Production
-`gateway.thegraph.com/api/x402` returns 402, but even a Base Sepolia Agent0
-subgraph ID is billed as `eip155:8453` mainnet USDC (F31).
-**Cost:** ~40 minutes across two days assuming a testnet PoI rail existed.
-**Fix:** publish the testnet host, or document that x402 is mainnet-only and
-MCP/Substreams are the testnet path.
+**Observed:** that name is NXDOMAIN. The live host is
+`https://gateway.testnet.thegraph.com/api/x402` — HTTP 402, `exact@eip155:84532`,
+Circle Sepolia USDC, amount 42 (measured 10 Sep 2026). Production
+`gateway.thegraph.com/api/x402` still bills `eip155:8453` for a Sepolia subgraph
+ID (F31).
+**Cost:** days assuming the documented host was the product.
+**Fix:** publish the swapped hostname (or a CNAME). Mandate pays the live host
+(`npm run e2e:graph-x402`), never mainnet.
 
 ---
 
@@ -161,4 +162,29 @@ nonce. After that, all `0x4020…` vanity addresses have code (F28).
 **Observed 10 Sep (live Base Sepolia, two Ledger EIP-712 taps):** `/verify` returned `permit2_allowance_required` even after the client attached `eip2612GasSponsoring`. The proxy reverts `UnauthorizedFacilitator` unless `msg.sender == witness.facilitator`. viem `eth_call` defaults `from` to `0x0`, the sim always fails, and the stock diagnostic then reports missing Permit2 allowance (which is still 0 until the sponsored permit lands).
 **Cost:** two full device sessions (~15 minutes) chasing a Permit2 allowance that EIP-2612 is supposed to replace.
 **Fix:** pass `account: submitter.address` on facilitator `readContract` so simulation runs as the advertised facilitator. x402's `UptoEvmScheme` itself is correct; the signer wiring is the footgun.
+
+---
+
+## Friction 08 — CREATE2 x402 escrow on Hedera cannot receive HTS USDC
+
+**Docs page:** https://docs.hedera.com/learn/core-concepts/tokens/airdrops
+and x402 `contracts/evm/README.md` (CREATE2 vanity addresses)
+**Expected:** after Circle faucet USDC on the payer, stock
+`BatchSettlementEvmScheme` deposits via Permit2 into the canonical
+`0x4020…0003` escrow on `eip155:296`.
+**Observed 10 Sep:** payer `0.0.10440893` holds 20 USDC. Merchant 402 correctly
+advertises `assetTransferMethod=permit2` (HTS facade has no EIP-3009).
+`USDC.approve(Permit2)` succeeds (`0x4147c417…bd0422`). Facilitator `/verify`
+simulates `deposit` and Hashio returns
+`TRANSFER_FROM_FAILED, TOKEN_NOT_ASSOCIATED_TO_ACCOUNT`. The escrow account
+`0.0.10454274` is `memo=lazy-created account`,
+`max_automatic_token_associations=0`. `TokenAssociateTransaction` →
+`INVALID_SIGNATURE`. `ContractUpdateTransaction` →
+`MODIFYING_IMMUTABLE_CONTRACT`. HIP-904 airdrop is pending and unclaimable
+by bytecode that has no HTS associate/claim function.
+**Cost:** one Circle faucet wait + three live `/verify` rounds after funding.
+**Fix (Hedera / x402):** CREATE2-deployed EVM contracts that must hold HTS
+need `maxAutomaticTokenAssociations=-1` at lazy-create time, or an official
+associate path that does not require an admin key. Do not ship a wrapper
+scheme.
 

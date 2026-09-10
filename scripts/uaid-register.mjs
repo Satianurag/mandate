@@ -246,6 +246,12 @@ if (existingTopic) {
     if (existing?.uaid === uaid) {
       console.log(`profile topic: ${existingTopic} via existing-memo`);
       console.log(`UAID_OK topic=${existingTopic}`);
+      const { mkdir, writeFile } = await import("node:fs/promises");
+      await mkdir(`${ROOT}/.live-results`, { recursive: true });
+      await writeFile(
+        `${ROOT}/.live-results/uaid-register.txt`,
+        JSON.stringify({ ok: true, uaid, topic: existingTopic, path: "existing-memo" }, null, 2) + "\n"
+      );
       process.exit(0);
     }
   } catch {
@@ -347,4 +353,20 @@ await withSecret("hedera-payment", hederaEnc, async (key) => {
     process.exit(1);
   }
   console.log(`UAID_OK topic=${inscribed.profileTopicId}`);
+  const { mkdir, writeFile } = await import("node:fs/promises");
+  await mkdir(`${ROOT}/.live-results`, { recursive: true });
+  await writeFile(
+    `${ROOT}/.live-results/uaid-register.txt`,
+    JSON.stringify(
+      {
+        ok: true,
+        uaid,
+        topic: inscribed.profileTopicId,
+        path,
+        transactionId: inscribed.transactionId ?? null,
+      },
+      null,
+      2
+    ) + "\n"
+  );
 });

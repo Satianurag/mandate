@@ -16,7 +16,7 @@
     }
   },
   "metadata": {
-    "owner": "x402 Foundation / Mandate",
+    "owner": "Mandate",
     "info": {
       "url": "https://www.x402.org/"
     }
@@ -24,14 +24,14 @@
   "display": {
     "formats": {
       "Voucher(bytes32 channelId,uint128 maxClaimableAmount)": {
-        "intent": "Authorize a batch-settlement voucher",
+        "intent": "Authorize voucher",
         "fields": [
           { "path": "channelId", "label": "Channel", "format": "raw", "visible": "always" },
           { "path": "maxClaimableAmount", "label": "Max claimable", "format": "raw", "visible": "always" }
         ]
       },
       "Refund(bytes32 channelId,uint256 nonce,uint128 amount)": {
-        "intent": "Refund unspent mandate deposit",
+        "intent": "Refund deposit",
         "fields": [
           { "path": "channelId", "label": "Channel", "format": "raw", "visible": "always" },
           { "path": "nonce", "label": "Nonce", "format": "raw" },

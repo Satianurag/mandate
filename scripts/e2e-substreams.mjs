@@ -14,18 +14,22 @@ import { ensureWalletPass } from "./load-wallet-pass.mjs";
 
 const ROOT = new URL("..", import.meta.url).pathname;
 await ensureWalletPass();
-if (!process.env.PINAX_API_KEY && process.env.SUBSTREAMS_API_KEY) {
-  process.env.PINAX_API_KEY = process.env.SUBSTREAMS_API_KEY;
+const { withSecret } = await import(`${ROOT}/packages/gateway/src/keyring.ts`);
+
+async function loadSealed(name, file, destEnv) {
+  if (process.env[destEnv]) return;
+  if (!existsSync(file)) return;
+  process.env[destEnv] = await withSecret(name, await readFile(file), (b) =>
+    Promise.resolve(b.toString("utf8").trim())
+  );
 }
-if (!process.env.PINAX_API_KEY) {
-  const pinaxEnc = `${ROOT}/secrets/pinax.enc`;
-  if (existsSync(pinaxEnc)) {
-    const { withSecret } = await import(`${ROOT}/packages/gateway/src/keyring.ts`);
-    process.env.PINAX_API_KEY = await withSecret("pinax", await readFile(pinaxEnc), (b) =>
-      Promise.resolve(b.toString("utf8").trim())
-    );
-  }
+
+if (!process.env.SUBSTREAMS_API_KEY && process.env.PINAX_API_KEY) {
+  process.env.SUBSTREAMS_API_KEY = process.env.PINAX_API_KEY;
 }
+await loadSealed("pinax", `${ROOT}/secrets/pinax.enc`, "SUBSTREAMS_API_KEY");
+await loadSealed("pinax-jwt", `${ROOT}/secrets/pinax-jwt.enc`, "SUBSTREAMS_API_TOKEN");
+if (process.env.SUBSTREAMS_API_KEY) process.env.PINAX_API_KEY = process.env.SUBSTREAMS_API_KEY;
 const HOST = process.env.SUBSTREAMS_ENDPOINT ?? "basesepolia.substreams.pinax.network:443";
 const TX = (
   process.env.SUBSTREAMS_TX ??
@@ -57,8 +61,11 @@ if (pack.status !== 0) {
   process.exit(2);
 }
 
-const start = process.env.SUBSTREAMS_START_BLOCK ?? "0";
-const stop = process.env.SUBSTREAMS_STOP_BLOCK ?? "+1";
+const start = process.env.SUBSTREAMS_START_BLOCK ?? String(await (async () => {
+  const tx = await client.getTransaction({ hash: TX });
+  return tx?.blockNumber != null ? String(tx.blockNumber) : "0";
+})());
+const stop = process.env.SUBSTREAMS_STOP_BLOCK ?? (start === "0" ? "+1" : String(BigInt(start) + 2n));
 const args = [
   "run",
   "-e",
@@ -72,7 +79,12 @@ const args = [
   "--stop-block",
   stop,
 ];
-if (process.env.PINAX_API_KEY) args.push("-H", `X-Api-Key: ${process.env.PINAX_API_KEY}`);
+if (!process.env.SUBSTREAMS_API_KEY && !process.env.SUBSTREAMS_API_TOKEN) {
+  console.error(
+    "FINDING F24: no Pinax credential. Seal secrets/pinax.enc (Key Ring name pinax) or set SUBSTREAMS_API_KEY from https://app.pinax.network"
+  );
+  process.exit(2);
+}
 
 const logArgs = args.map((a) => (a.startsWith("X-Api-Key:") ? "X-Api-Key: <redacted>" : a));
 console.log("substreams", logArgs.join(" "));

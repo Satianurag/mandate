@@ -3,7 +3,7 @@
  * Phase 2b: MCP discovery + reputation lookup for an EVM wallet and a Hedera 0.0.x payee.
  * Prints the MCP tool names actually used.
  */
-import { readFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { ensureWalletPass } from "./load-wallet-pass.mjs";
 
 const ROOT = new URL("..", import.meta.url).pathname;
@@ -45,3 +45,8 @@ if (evmRep.chainsReachable === 0 && hRep.chainsReachable === 0) {
   process.exit(1);
 }
 console.log("REPUTATION_OK");
+await mkdir(`${ROOT}/.live-results`, { recursive: true });
+await writeFile(
+  `${ROOT}/.live-results/probe-reputation.txt`,
+  `REPUTATION_OK tools=${discovered.toolsUsed.join(",")} evmReachable=${evmRep.chainsReachable} hederaReachable=${hRep.chainsReachable}\n`
+);

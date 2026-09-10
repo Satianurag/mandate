@@ -156,6 +156,12 @@ try {
 } catch (e) {
   console.error("UPTO_FAILED:", e instanceof Error ? e.message : e);
 } finally {
+  try {
+    const { resetDmk } = await import(`${ROOT}/packages/gateway/src/dmk-session.ts`);
+    resetDmk();
+  } catch {
+    /* device already released */
+  }
   for (const k of kids) k.kill("SIGTERM");
 }
 process.exit(code);

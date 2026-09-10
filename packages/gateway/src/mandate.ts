@@ -25,7 +25,7 @@
 import { x402Client } from "@x402/core/client";
 import type { PaymentRequirements } from "@x402/core/types";
 import { wrapFetchWithPayment } from "@x402/fetch";
-import { toClientEvmSigner, type ChannelConfig } from "@x402/evm";
+import { toClientEvmSigner, type ChannelConfig, type ClientEvmSigner } from "@x402/evm";
 import {
   BatchSettlementEvmScheme,
   computeChannelId,
@@ -37,8 +37,9 @@ import { createPublicClient, http } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { DmkEvmSigner } from "./dmksigner.ts";
 import { unseal } from "./keyring.ts";
+import { caip2ForChainId } from "./chains.ts";
 
-/** Mandates settle on Base Sepolia. No other chain has been tested. */
+/** Envelope mandates settle on Base Sepolia. Hedera EVM 296 uses `openKeyRingMandate`. */
 export const MANDATE_CHAIN_ID = 84532;
 export const MANDATE_NETWORK = "eip155:84532";
 
@@ -62,6 +63,18 @@ export interface MandateConfig {
   salt: `0x${string}`;
   derivationPath?: string;
   deviceTimeoutMs?: number;
+}
+
+export interface KeyRingMandateConfig extends MandateConfig {
+  /** Live `eth_chainId` — Base Sepolia or Hedera testnet EVM. */
+  chainId: number;
+  /** Already composed (`toClientEvmSigner`). Deposits + ERC-20 approval extensions. */
+  payer: ClientEvmSigner;
+  /**
+   * Non-default assets (HTS USDC on `eip155:296` is not in x402 DEFAULT_ASSETS).
+   * Stock spendControls allowlist — not a disabled safety rail.
+   */
+  allowedAssets: Array<{ network: string; asset: string; maxAmountPerPayment?: string }>;
 }
 
 export interface Mandate {
@@ -115,10 +128,74 @@ function assertSalt(salt: string): asserts salt is `0x${string}` {
   }
 }
 
+function unsealSession(cfg: MandateConfig) {
+  return unseal(cfg.sessionKeyName, cfg.sealedSessionKey);
+}
+
+async function assembleMandate(opts: {
+  chainId: number;
+  rpcUrl: string;
+  payer: ClientEvmSigner;
+  sessionBuf: Buffer;
+  storageRoot: string;
+  salt: `0x${string}`;
+  strategy: ReturnType<typeof makeCeilingStrategy>;
+  taps: () => number;
+  allowedAssets?: Array<{ network: string; asset: string; maxAmountPerPayment?: string }>;
+}): Promise<Mandate> {
+  const network = caip2ForChainId(opts.chainId);
+  const publicClient = createPublicClient({ transport: http(opts.rpcUrl) });
+  const live = await publicClient.getChainId();
+  if (live !== opts.chainId) {
+    throw new Error(
+      `RPC chain ${live} is not the mandate network (${opts.chainId}); refusing to sign.`
+    );
+  }
+  if (opts.sessionBuf.length !== 32) {
+    opts.sessionBuf.fill(0);
+    throw new Error(`Session key unsealed to ${opts.sessionBuf.length} bytes, want 32.`);
+  }
+  const account = privateKeyToAccount(`0x${opts.sessionBuf.toString("hex")}`);
+  const voucherSigner = toClientEvmSigner(account, publicClient);
+  const storage = new FileClientChannelStorage({ directory: opts.storageRoot });
+  const scheme = new BatchSettlementEvmScheme(opts.payer, {
+    storage,
+    voucherSigner,
+    salt: opts.salt,
+    depositStrategy: opts.strategy,
+    rpcUrl: opts.rpcUrl,
+  });
+  const client = x402Client.fromConfig({
+    schemes: [{ network, client: scheme }],
+    ...(opts.allowedAssets?.length
+      ? { spendControls: { allowedAssets: opts.allowedAssets } }
+      : {}),
+  });
+  let closed = false;
+  return {
+    payer: opts.payer.address,
+    session: account.address,
+    fetch: wrapFetchWithPayment(globalThis.fetch, client),
+    channelIdFor: (requirements: PaymentRequirements): `0x${string}` => {
+      const config: ChannelConfig = scheme.buildChannelConfig(requirements);
+      return computeChannelId(config, opts.chainId);
+    },
+    refund: (url: string) => scheme.refund(url),
+    get taps() {
+      return opts.taps();
+    },
+    close: () => {
+      if (!closed) {
+        closed = true;
+        opts.sessionBuf.fill(0);
+      }
+    },
+  };
+}
+
 export async function openMandate(cfg: MandateConfig): Promise<Mandate> {
   assertSalt(cfg.salt);
   const strategy = makeCeilingStrategy(cfg.ceilingBaseUnits);
-
   const publicClient = createPublicClient({ transport: http(cfg.rpcUrl) });
   const chainId = await publicClient.getChainId();
   if (chainId !== MANDATE_CHAIN_ID) {
@@ -132,49 +209,47 @@ export async function openMandate(cfg: MandateConfig): Promise<Mandate> {
     timeoutMs: cfg.deviceTimeoutMs,
   });
 
-  // Session key: unsealed once, held for the mandate's lifetime, wiped on
-  // close. viem needs it as hex, so V8 string copies exist until GC — the
-  // same caveat keyring.withSecret documents; the wipe covers our Buffer.
-  const sessionBuf = await unseal(cfg.sessionKeyName, cfg.sealedSessionKey);
-  if (sessionBuf.length !== 32) {
+  const sessionBuf = await unsealSession(cfg);
+  try {
+    return await assembleMandate({
+      chainId,
+      rpcUrl: cfg.rpcUrl,
+      payer: toClientEvmSigner(device, publicClient),
+      sessionBuf,
+      storageRoot: cfg.storageRoot,
+      salt: cfg.salt,
+      strategy,
+      taps: () => device.signCalls,
+    });
+  } catch (e) {
     sessionBuf.fill(0);
-    throw new Error(
-      `Session key ${cfg.sessionKeyName} unsealed to ${sessionBuf.length} bytes, want 32.`
-    );
+    throw e;
   }
-  const account = privateKeyToAccount(`0x${sessionBuf.toString("hex")}`);
+}
 
-  const signer = toClientEvmSigner(device, publicClient);
-  const voucherSigner = toClientEvmSigner(account, publicClient);
-  const storage = new FileClientChannelStorage({ directory: cfg.storageRoot });
-  const scheme = new BatchSettlementEvmScheme(signer, {
-    storage,
-    voucherSigner,
-    salt: cfg.salt,
-    depositStrategy: strategy,
-  });
-  const client = x402Client.fromConfig({
-    schemes: [{ network: MANDATE_NETWORK, client: scheme }],
-  });
-
-  let closed = false;
-  return {
-    payer: device.address,
-    session: account.address,
-    fetch: wrapFetchWithPayment(globalThis.fetch, client),
-    channelIdFor: (requirements: PaymentRequirements): `0x${string}` => {
-      const config: ChannelConfig = scheme.buildChannelConfig(requirements);
-      return computeChannelId(config, MANDATE_CHAIN_ID);
-    },
-    refund: (url: string) => scheme.refund(url),
-    get taps() {
-      return device.signCalls;
-    },
-    close: () => {
-      if (!closed) {
-        closed = true;
-        sessionBuf.fill(0);
-      }
-    },
-  };
+/**
+ * Same ceiling strategy and voucher session key as `openMandate`, but the
+ * deposit signer is a Key Ring EOA (Hedera ECDSA). The Ledger is not a
+ * Hedera account; using it here would fail Hashio `INVALID_ACCOUNT_ID`.
+ */
+export async function openKeyRingMandate(cfg: KeyRingMandateConfig): Promise<Mandate> {
+  assertSalt(cfg.salt);
+  const strategy = makeCeilingStrategy(cfg.ceilingBaseUnits);
+  const sessionBuf = await unsealSession(cfg);
+  try {
+    return await assembleMandate({
+      chainId: cfg.chainId,
+      rpcUrl: cfg.rpcUrl,
+      payer: cfg.payer,
+      sessionBuf,
+      storageRoot: cfg.storageRoot,
+      salt: cfg.salt,
+      strategy,
+      taps: () => 0,
+      allowedAssets: cfg.allowedAssets,
+    });
+  } catch (e) {
+    sessionBuf.fill(0);
+    throw e;
+  }
 }

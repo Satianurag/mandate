@@ -2,9 +2,10 @@
  * Mandate's x402 client: stock payment flow, Mandate judgment.
  *
  * The payment mechanics are entirely stock -- `x402Client` + the Hedera
- * `exact` scheme + `wrapFetchWithPayment` handle the 402, payload assembly,
- * signing, header encoding, retry, and settlement parsing. Mandate plugs in
- * at the two hook points the SDK provides for exactly this:
+ * `exact` scheme (and, for Graph/upto, stock `ExactEvmScheme` via
+ * `createMandateEvmClient`) + `wrapFetchWithPayment` handle the 402,
+ * payload assembly, signing, header encoding, retry, and settlement
+ * parsing. Mandate plugs in at the two hook points the SDK provides:
  *
  * - `onBeforePaymentCreation` runs `decide()`: reputation lookup, policy
  *   evaluation, device step-up. A deny aborts creation (no key is ever
@@ -26,6 +27,7 @@ import {
 import type { PaymentRequired, PaymentRequirements } from "@x402/core/types";
 import { policyEngine } from "./policy.ts";
 import { lookupCounterparty, AGENT0_SUBGRAPHS } from "./reputation.ts";
+import { CIRCLE_HEDERA_TESTNET_USDC_HTS } from "./facilitators.ts";
 import { normaliseAmount, createSealedHederaSigner } from "./hedera.ts";
 import { buildRecord, submit } from "./audit.ts";
 import { deriveOperatorUaid } from "./uaid.ts";
@@ -33,6 +35,8 @@ import type { SettleResponse } from "./types.ts";
 import { requireDeviceApproval, StepUpDenied, type StepUpDeps } from "./stepup.ts";
 import { withSecret } from "./keyring.ts";
 import { assertFreshPresence, type PresenceAttestation } from "./presence.ts";
+import { createEvmX402Client } from "./evm-client.ts";
+import type { ClientEvmSigner } from "@x402/evm";
 import type {
   CounterpartyReputation,
   PaymentProposal,
@@ -194,6 +198,12 @@ export interface MandateClientOpts {
   signer?: ClientHederaSigner;
 }
 
+export interface MandateEvmClientOpts extends MandateClientOpts {
+  evmSigner: ClientEvmSigner;
+  rpcUrl: string;
+  chainId?: number;
+}
+
 export interface MandateClient {
   x402: x402Client;
   /**
@@ -204,19 +214,10 @@ export interface MandateClient {
   getLastDecision: () => { proposal: PaymentProposal; decision: PolicyDecision } | undefined;
 }
 
-export function createMandateClient(opts: MandateClientOpts): MandateClient {
-  const signer = opts.signer ?? createSealedHederaSigner(opts.hederaCiphertext, opts.accountId);
+export function attachMandateHooks(client: x402Client, opts: MandateClientOpts): MandateClient {
   let last: { proposal: PaymentProposal; decision: PolicyDecision } | undefined;
   let audited = false;
 
-  // Audit submission never blocks the payment path and never throws: the
-  // record must not slow the verdict, and a logging failure must not fail
-  // a payment the policy engine already allowed.
-  //
-  // The operator UAID is derived per record from the payment's own network,
-  // so the identity can never disagree with the rail the verdict ran on.
-  // Derivation is offline and cached; if it ever fails, the verdict is
-  // still recorded without attribution (load-bearing first, UAID second).
   const uaidCache = new Map<string, Promise<string>>();
   const auditVerdict = (
     proposal: PaymentProposal,
@@ -228,7 +229,9 @@ export function createMandateClient(opts: MandateClientOpts): MandateClient {
     void withSecret("hedera-payment", opts.hederaCiphertext, async (key) => {
       let operatorUaid: string | undefined;
       try {
-        const network = proposal.requirements.network;
+        const network = proposal.requirements.network.startsWith("hedera:")
+          ? proposal.requirements.network
+          : "hedera:testnet";
         let cached = uaidCache.get(network);
         if (!cached) {
           cached = deriveOperatorUaid(opts.accountId, network);
@@ -249,23 +252,6 @@ export function createMandateClient(opts: MandateClientOpts): MandateClient {
     });
   };
 
-  const client = x402Client.fromConfig({
-    schemes: [
-      { network: "hedera:testnet", client: new ExactHederaScheme(signer) },
-      { network: "hedera:mainnet", client: new ExactHederaScheme(signer) },
-    ],
-    // HBAR is not a stock default asset, so without this opt-in the SDK
-    // would filter every HBAR requirement before our hook ever sees it.
-    // Uncapped here on purpose: the policy engine owns the ceiling, because
-    // an over-ceiling payment must ESCALATE (step_up) rather than hard-deny.
-    spendControls: {
-      allowedAssets: [
-        { network: "hedera:testnet", asset: HBAR_ASSET_ID },
-        { network: "hedera:mainnet", asset: HBAR_ASSET_ID },
-      ],
-    },
-  });
-
   client
     .onBeforePaymentCreation(async (ctx) => {
       const out = await decide(
@@ -281,8 +267,6 @@ export function createMandateClient(opts: MandateClientOpts): MandateClient {
       }
     })
     .onPaymentResponse(async (ctx) => {
-      // Exactly once per payment: the accrual and the audit record must
-      // exist if and only if a payment was actually created.
       if (!last || audited) return;
       audited = true;
       if (ctx.settleResponse?.success) {
@@ -292,4 +276,32 @@ export function createMandateClient(opts: MandateClientOpts): MandateClient {
     });
 
   return { x402: client, getLastDecision: () => last };
+}
+
+export function createMandateClient(opts: MandateClientOpts): MandateClient {
+  const signer = opts.signer ?? createSealedHederaSigner(opts.hederaCiphertext, opts.accountId);
+  const client = x402Client.fromConfig({
+    schemes: [
+      { network: "hedera:testnet", client: new ExactHederaScheme(signer) },
+      { network: "hedera:mainnet", client: new ExactHederaScheme(signer) },
+    ],
+    spendControls: {
+      allowedAssets: [
+        { network: "hedera:testnet", asset: HBAR_ASSET_ID },
+        { network: "hedera:mainnet", asset: HBAR_ASSET_ID },
+        { network: "hedera:testnet", asset: CIRCLE_HEDERA_TESTNET_USDC_HTS },
+      ],
+    },
+  });
+  return attachMandateHooks(client, opts);
+}
+
+/** Stock ExactEvmScheme / UptoEvmScheme with the same policy + HCS hooks. */
+export function createMandateEvmClient(opts: MandateEvmClientOpts): MandateClient {
+  const client = createEvmX402Client({
+    signer: opts.evmSigner,
+    rpcUrl: opts.rpcUrl,
+    chainId: opts.chainId ?? 84532,
+  });
+  return attachMandateHooks(client, opts);
 }

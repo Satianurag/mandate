@@ -1,17 +1,10 @@
 #!/usr/bin/env node
 /**
- * Live end-to-end payment: real 402 → real reputation → real policy →
- * real device step-up when escalated → real facilitator settlement →
- * real HCS record, verified by reading it back from the mirror node.
+ * Live end-to-end: stock ExactHederaScheme with Circle HTS USDC
+ * (`exact@hedera:testnet`, asset 0.0.429274). Not EVM batch-settlement@296.
  *
- * Nothing is bypassed. If policy escalates, tap the Ledger when prompted.
- * If policy allows headlessly, the record still lands on HCS either way.
- *
- * Requires: secrets/hedera.enc (+ secrets/graph.enc for reputation),
- *   MANDATE_HEDERA_ACCOUNT_ID (payer), SERVICE_PAY_TO (receiver, distinct),
- *   MANDATE_HCS_TOPIC_ID, WALLET_PASS.
+ * Requires the same env as `npm run e2e:payment`.
  */
-
 import { spawn } from "node:child_process";
 import { mkdir, writeFile } from "node:fs/promises";
 import { ensureWalletPass } from "./load-wallet-pass.mjs";
@@ -72,7 +65,9 @@ const svc = spawn(
     stdio: "inherit",
   }
 );
-await waitHttp(`http://127.0.0.1:${SERVICE_PORT}/analytics?q=${encodeURIComponent("{ agents { id } }")}`);
+await waitHttp(
+  `http://127.0.0.1:${SERVICE_PORT}/usdc-analytics?q=${encodeURIComponent("{ agents { id } }")}`
+);
 
 await (async () => {
 let code = 0;
@@ -80,8 +75,8 @@ try {
   const { proxyFetch } = await import(`${ROOT}/packages/gateway/src/index.ts`);
   const { pollTopicRecord } = await import(`${ROOT}/packages/gateway/src/evidence.ts`);
 
-  const url = `http://127.0.0.1:${SERVICE_PORT}/analytics?q=${encodeURIComponent("{ agents { id } }")}`;
-  console.log(`e2e payment → ${url} payTo=${payTo}`);
+  const url = `http://127.0.0.1:${SERVICE_PORT}/usdc-analytics?q=${encodeURIComponent("{ agents { id } }")}`;
+  console.log(`e2e hedera USDC exact → ${url} payTo=${payTo}`);
   console.log("(tap the Ledger if policy escalates to step_up)");
 
   const res = await proxyFetch(url);
@@ -90,7 +85,7 @@ try {
   console.log(body.slice(0, 600));
 
   if (res.status !== 200) {
-    console.error("E2E_FAILED: payment did not settle");
+    console.error("E2E_FAILED: USDC exact payment did not settle");
     code = 1;
     return;
   }
@@ -101,23 +96,21 @@ try {
     code = 1;
     return;
   }
+  if (parsed.paid?.asset && parsed.paid.asset !== "0.0.429274") {
+    console.error(`E2E_FAILED: expected Circle USDC asset, got ${parsed.paid.asset}`);
+    code = 1;
+    return;
+  }
   console.log(`settled: ${txId}`);
 
-  // The audit record is part of the payment. A submit that never becomes
-  // readable never happened — poll the mirror until it lands.
-  const found = await pollTopicRecord(
-    topicId,
-    (r) => r?.txId === txId,
-    { timeoutMs: 90_000 }
-  );
+  const found = await pollTopicRecord(topicId, (r) => r?.txId === txId, { timeoutMs: 90_000 });
   console.log(
     `HCS verified: seq=${found.sequence} consensus=${found.consensusTimestamp} verdict=${found.record.verdict}`
   );
-  const line = `HEDERA_EXACT_OK txId=${txId} hcsSeq=${found.sequence} payTo=${payTo}`;
-  console.log(`E2E_OK txId=${txId} hcsSeq=${found.sequence}`);
+  const line = `HEDERA_USDC_EXACT_OK txId=${txId} hcsSeq=${found.sequence} asset=0.0.429274`;
   console.log(line);
   await mkdir(`${ROOT}/.live-results`, { recursive: true });
-  await writeFile(`${ROOT}/.live-results/e2e-payment.txt`, line + "\n");
+  await writeFile(`${ROOT}/.live-results/e2e-hedera-usdc.txt`, line + "\n");
 } catch (e) {
   console.error(e instanceof Error ? e.message : e);
   code = 1;
