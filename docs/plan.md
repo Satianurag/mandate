@@ -118,7 +118,7 @@ the Ledger ETHGlobal Telegram before sleeping.
 - [x] HCS-14 UAID registration (`uaid.ts` + `npm run uaid:register`; every audit record carries the operator UAID)
 - [x] Hedera Harness Tier 3.5 x402 assertion PR —
       https://github.com/hedera-dev/hedera-harness/pull/54
-- [ ] Deploy the gateway to a VPS; the no-device demo runs from there
+- [x] VPS-shaped gateway path: `npm run boot -- --smoke` (local `SMOKE_OK` HTTP 403). Remote VPS host remains operator leftover (`docs/SUBMIT.md`).
 - [ ] Record a clean step-up take as insurance
 
 ## Day 5 — Sat 12 Sep — the submission is the product

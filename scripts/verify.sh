@@ -9,21 +9,33 @@ hdr(){ printf '\n\033[1m%s\033[0m\n' "$1"; }
 printf '\n\033[1mMandate — full verification\033[0m  %s\n' "$(date -u '+%Y-%m-%d %H:%M UTC')"
 
 hdr "1. Tests (every workspace, hermetic)"
+# Exit code is the contract. Do not grep TAP `# fail 0`: Node 26's default
+# spec reporter prints `ℹ fail 0` (F35), which false-failed green suites.
+pass_count() { printf '%s' "$1" | grep -Eo '(^# pass |pass )[0-9]+' | tail -1 | grep -Eo '[0-9]+$' || echo "?"; }
 for ws in packages/*; do
   if [ -f "$ws/package.json" ] && grep -q '"test"' "$ws/package.json"; then
     name=$(node -e "console.log(require('./$ws/package.json').name)")
+    set +e
     out=$(env -i PATH="$PATH" HOME="$HOME" npm test -w "$name" 2>&1)
-    if printf '%s' "$out" | grep -qE "^# fail 0$"; then
-      n=$(printf '%s' "$out" | grep -E "^# pass" | awk '{print $3}')
-      ok "$name: $n passing"
-    else bad "$name tests failing"; fi
+    code=$?
+    set -u
+    if [ "$code" -eq 0 ]; then
+      ok "$name: $(pass_count "$out") passing"
+    else
+      bad "$name tests failing (exit $code)"
+      printf '    \033[2m%s\033[0m\n' "$(printf '%s' "$out" | tail -8 | tr '\n' ' ' | cut -c1-160)"
+    fi
   fi
 done
-out=$(node --experimental-strip-types --test scripts/resolve-pay-to.test.mjs 2>&1)
-if printf '%s' "$out" | grep -qE "^# fail 0$"; then
-  n=$(printf '%s' "$out" | grep -E "^# pass" | awk '{print $3}')
-  ok "scripts/resolve-pay-to: $n passing"
-else bad "scripts/resolve-pay-to tests failing"; fi
+set +e
+out=$(env -i PATH="$PATH" HOME="$HOME" node --experimental-strip-types --test scripts/resolve-pay-to.test.mjs 2>&1)
+code=$?
+set -u
+if [ "$code" -eq 0 ]; then
+  ok "scripts/resolve-pay-to: $(pass_count "$out") passing"
+else
+  bad "scripts/resolve-pay-to tests failing (exit $code)"
+fi
 
 hdr "2. Every module parses and imports"
 for f in packages/*/src/*.ts; do

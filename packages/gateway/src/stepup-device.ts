@@ -34,9 +34,9 @@ function enrichStepUpError(message: string): string {
       `See docs/STEPUP.md (interim path until ERC-7730 registry merge).`
     );
   }
-  if (/Unexpected device exchange|Device is locked/i.test(message)) {
+  if (/6901|Unexpected device exchange|Device is locked/i.test(message)) {
     return (
-      `${message} — unlock Ledger, keep Ethereum app open, quit Ledger Wallet desktop, retry.`
+      `${message} — enter PIN, keep Ethereum app open, quit Ledger Wallet desktop, retry.`
     );
   }
   return message;

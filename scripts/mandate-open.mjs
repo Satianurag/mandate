@@ -121,7 +121,10 @@ try {
     throw new Error("receiver equals the payer — self-channels are rejected; edit mandate.yaml.");
   }
 
-  console.log(`\nTap the Ledger ONCE to authorize the $${Number(mf.ceilingBaseUnits) / 1e6} USDC mandate…`);
+  console.log(
+    `\nIf this is a new salt: tap the Ledger ONCE to authorize the $${Number(mf.ceilingBaseUnits) / 1e6} USDC mandate.`
+  );
+  console.log("Same salt + funded channel resumes with session vouchers (0 new taps).\n");
   for (let i = 1; i <= CALLS; i++) {
     const res = await mandate.fetch(`${mf.serviceUrl}?q=${encodeURIComponent(`{ call${i} { id } }`)}`);
     const body = await res.text();
@@ -130,12 +133,6 @@ try {
     if (payHdrs.length) console.log(`call ${i} payment headers: ${JSON.stringify(payHdrs).slice(0, 400)}`);
     if (res.status !== 200) throw new Error(`call ${i} failed: ${body.slice(0, 300)}`);
   }
-
-  // The demo's load-bearing claim.
-  if (mandate.taps !== 1) {
-    throw new Error(`expected exactly 1 device tap, observed ${mandate.taps}`);
-  }
-  console.log(`\ntaps: ${mandate.taps} for ${CALLS} paid calls — vouchers covered the rest.`);
 
   // The persisted channel record: cumulative spend, on disk, restart-proof.
   const { decodePaymentRequiredHeader } = await import("@x402/core/http");
@@ -146,8 +143,20 @@ try {
   const channelId = mandate.channelIdFor(offer.accepts[0]);
   const recordPath = `${mf.storageRoot.startsWith("/") ? mf.storageRoot : `${ROOT}/${mf.storageRoot}`}/client/${channelId.toLowerCase()}.json`;
   const record = JSON.parse(await readFile(recordPath, "utf8"));
+  const cumulative = String(record.chargedCumulativeAmount ?? "0");
   console.log(`channel: ${channelId}`);
-  console.log(`cumulative: ${record.chargedCumulativeAmount} base units across ${CALLS} calls`);
+  console.log(`cumulative: ${cumulative} base units across ${CALLS} calls`);
+
+  // First open: exactly one EIP-3009 tap. Resume of a funded channel: zero new taps.
+  if (mandate.taps === 1) {
+    console.log(`\ntaps: 1 for ${CALLS} paid calls — vouchers covered the rest.`);
+  } else if (mandate.taps === 0 && BigInt(cumulative) > 0n) {
+    console.log(`\ntaps: 0 — resumed existing channel; session vouchers paid ${CALLS} calls.`);
+  } else {
+    throw new Error(
+      `expected 1 tap on first open or 0 on resume with spend, observed taps=${mandate.taps} cumulative=${cumulative}`
+    );
+  }
 
   // HCS evidence: the mandate's financial truth lives on Base Sepolia, but
   // the cross-rail audit trail lives here. Skipped loudly — never silently —
@@ -181,8 +190,16 @@ try {
   } else {
     console.log("HCS skipped loudly: MANDATE_HCS_TOPIC_ID/MANDATE_HEDERA_ACCOUNT_ID unset.");
   }
-  console.log(`\nMANDATE_OK channel=${channelId} taps=1 cumulative=${record.chargedCumulativeAmount}`);
+  const tag = mandate.taps === 1 ? "MANDATE_OK" : "MANDATE_RESUMED";
+  console.log(`\n${tag} channel=${channelId} taps=${mandate.taps} cumulative=${cumulative}`);
+} catch (e) {
+  console.error(e instanceof Error ? e.message : e);
+  process.exitCode = 1;
 } finally {
   mandate?.close();
   for (const c of children) c.kill();
+  const { resetDmk } = await import(`${ROOT}/packages/gateway/src/dmk-session.ts`);
+  resetDmk();
+  // HID keep-alive can pin the event loop after DMK close().
+  setTimeout(() => process.exit(process.exitCode ?? 0), 400);
 }

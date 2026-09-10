@@ -18,14 +18,21 @@ environment. Start there; believe nothing else first.
 3. Fund the payer with Base Sepolia USDC and the submitter with ETH (the
    scripts print the funding links).
 4. `npm run check:mandate && npm run mandate:open` — **one device tap**
-   opens the on-chain escrow channel (EIP-3009 USDC). Live Nano S+ proof:
-   `npm run e2e:erc7730-device` → structured EIP-712 (`clear-basic`), **not**
-   labeled ERC-7730 (`calFilters=error` without a partner `originToken`; F32).
-   Local descriptor lint: `npm run e2e:erc7730`. Preview: [ERC-7730 Tester](https://app.devicesdk.ledger.com/clear-signing-tools).
+   opens the on-chain escrow channel (EIP-3009 USDC). Same `mandate.yaml` salt
+   on an already-funded channel prints `MANDATE_RESUMED` with **zero** new taps.
+   Live Nano S+ proof: `npm run e2e:erc7730-device` → structured EIP-712
+   (`clear-basic`), **not** labeled ERC-7730 (`calFilters=error` without a
+   partner `originToken`; F32). Local descriptor lint: `npm run e2e:erc7730`.
+   Preview: [ERC-7730 Tester](https://app.devicesdk.ledger.com/clear-signing-tools).
    **Do not claim production labeled Clear Signing until `e2e:erc7730-device` prints `ERC7730_DEVICE_CLEAR`.**
+   Ethereum app must stay open (`MANDATE_ETH_APP_OPEN=1` skips the dashboard
+   genuine-check). `npm run wait:eth` polls that path; `npm run wait:ledger`
+   is dashboard-only.
 5. The agent now pays per request with off-chain vouchers, each capped by
    the mandate. Breach the envelope and the device is consulted again
    (`npm run e2e:stepup`, proven live — see `docs/STEPUP.md`).
+   `npm run e2e:verdicts` proves allow / step_up / deny against live Agent0
+   **without** a device.
 6. `npm run mandate:refund` — unspent budget returns through the channel's
    refund path. Revocation is a transaction, not a support ticket.
 
@@ -81,6 +88,13 @@ an authorization story that survives contact with a finance team.
 What the developer gets: a reconstructable evidence trail (HCS), a
 resolvable operator identity (HCS-14/ERC-8004-shaped), and liveness (the
 treasury leg) — three separate Hedera primitives doing what each does best.
+
+## Operator boot (laptop or VPS, no USB)
+
+1. `npm run boot` — paid service + gateway; Key Ring unseals in-process.
+2. `npm run boot -- --smoke` — same boot, then asserts fail-closed HTTP 403
+   when the merchant is unregistered (the VPS-shaped proof). Copy
+   `secrets/*.enc` + `mandate.yaml`; never a `.env`.
 
 ## Invariants the DX rests on
 

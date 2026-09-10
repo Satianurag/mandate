@@ -56,6 +56,7 @@ plan changes. Re-verify any time with `npm run verify` (counts itself) and
 | F32 | ERC-7730 labeled fields still wait on CAL `originToken` + registry ingest; live Nano S+ takes BASIC EIP-712 | **OPEN** | 10 Sep |
 | F33 | Ledger Proof of You has no separate PoH SDK — shipping surface is DMK + UAID | **PROVEN** | 10 Sep |
 | F34 | Graph testnet x402 402s any id; paid queries need a Graph Network *testnet* subgraph with allocations | **PROVEN** | 10 Sep |
+| F35 | Node 26 `node --test` default reporter is spec (`ℹ fail 0`), so `verify.sh` grepping TAP `# fail 0` false-failed green suites | **RESOLVED** | 10 Sep |
 
 ---
 
@@ -974,3 +975,13 @@ The testnet x402 gateway looks up Graph Network **testnet** (Arbitrum Sepolia)
 allocations. Live allocated subgraph `ErqkB52VhmToVRxAWLaJ3cTDiwQMk93VKDEGtSSDB1yP`
 returns `_meta.block.number` on `gateway.testnet.thegraph.com`. Paid proof:
 `npm run e2e:graph-x402`. Never pay production `eip155:8453` (F31).
+
+## F35 — Node 26 test reporter is spec, not TAP · RESOLVED
+
+**Observed 10 Sep.** `npm run verify` section 1 grepped `^# fail 0$` from TAP.
+On Node v26.7.0, `node --test` defaults to the spec reporter (`ℹ fail 0`,
+`ℹ pass 94`). Four workspace suites and `scripts/resolve-pay-to` were all
+green under `env -i` (94/94 gateway) but verify printed five reds.
+
+Fix: `scripts/verify.sh` uses the test process **exit code** (0 = green).
+Do not grep TAP `# fail 0` — Node 26's default spec reporter prints `ℹ fail 0`.

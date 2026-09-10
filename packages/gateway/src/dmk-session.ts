@@ -26,6 +26,7 @@ export function getDmk(): Dmk {
 /** Release HID so wallet-cli can talk to the device again. */
 export function resetDmk(): void {
   if (dmkSingleton) {
+    void dmkSingleton.stopDiscovering().catch(() => {});
     dmkSingleton.close();
     dmkSingleton = null;
   }

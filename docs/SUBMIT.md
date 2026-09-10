@@ -27,7 +27,8 @@ On the VPS (no Ledger attached):
 export WALLET_PASS=$(# from your password manager — not disk)
 npm ci
 npm run verify
-# then the same mandate:open / gateway processes as local
+npm run boot                 # paid service + gateway; Key Ring unseals in-process
+# or: npm run boot -- --smoke
 ```
 
 Key Ring decrypt works with the device unplugged (F11). Do **not** copy

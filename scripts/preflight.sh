@@ -22,11 +22,15 @@ fi
 
 hdr "Ledger Key Ring  (Ledger track requirement)"
 if [ -z "${WALLET_PASS:-}" ]; then
+  WALLET_PASS=$(security find-generic-password -a default -s ledger-wallet-cli -w 2>/dev/null || true)
+  export WALLET_PASS
+fi
+if [ -z "${WALLET_PASS:-}" ]; then
   wrn "WALLET_PASS unset — cannot test headless decrypt"
-  note "macOS: export WALLET_PASS=\$(security find-generic-password -a default -s ledger-wallet-cli -w)"
+  note "macOS: npm run device  (stores the Key Ring password in the OS keychain)"
   note "Never write the password literally into a command."
 else
-  ok "WALLET_PASS set"
+  ok "WALLET_PASS loaded from OS keychain"
 fi
 ring_provisioned=0
 if ! command -v wallet-cli >/dev/null 2>&1; then

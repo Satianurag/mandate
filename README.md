@@ -139,7 +139,7 @@ npm run check:mandate && npm run mandate:open
 | HCS audit (payments + mandates) + mirror read-back | implemented — every record carries the operator UAID (F25); needs topic id; Key Ring creds only |
 | Treasury top-up (HIP-423 time-locked schedule) | live `TOPUP_SCHEDULED` `0.0.10456090` (`npm run treasury:topup`, F26) |
 | Hedera paid service (Blocky402) | stock `exact@hedera:testnet` (HBAR + Circle USDC); distinct merchant via `npm run setup:merchant` |
-| Operator console | **not started** (per user: no UI until requested) |
+| Operator console | HTML+CSS at [`console/`](console/) — Fleet · Mandate · Approvals · Evidence |
 
 - [`docs/DX.md`](docs/DX.md) — the developer journey per sponsor, command by command
 - [`docs/sponsor-case.md`](docs/sponsor-case.md) — why each sponsor wants this

@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#ffffff">
+  <title>Envelope · Mandate</title>
+  <link rel="icon" href="../favicon.svg">
+  <link rel="stylesheet" href="../css/app.css?v=3">
+</head>
+<body class="onboard">
+  <header class="onboard-top">
+    <a class="mark" href="../index.html">
+      <svg viewBox="0 0 32 32" width="26" height="26" aria-hidden="true"><rect width="32" height="32" rx="9" fill="#3B82F6"/><rect x="8.2" y="11" width="15.6" height="10.8" rx="1.6" fill="none" stroke="#fff" stroke-width="1.7"/><path d="M9 12.4 16 17l7-4.6" fill="none" stroke="#fff" stroke-width="1.7" stroke-linecap="round"/></svg>
+      <span class="mark-name">Mandate</span>
+    </a>
+    <nav class="steps"><span>Device</span><span class="sep">›</span><span class="on">Envelope</span><span class="sep">›</span><span>Policy</span><span class="sep">›</span><span>Sign</span></nav>
+    <div class="onboard-help"><a href="../app/evidence.html">Help</a></div>
+  </header>
+  <div class="progress"><i style="width:50%"></i></div>
+  <div class="split">
+    <section class="split-form">
+      <a class="back" href="device.html">← Back</a>
+      <h1>Set the signed envelope</h1>
+      <p class="sub">Ceiling, chain, and payee. No secrets. The agent cannot widen what you sign.</p>
+
+      <div class="field">
+        <label for="ceil">Ceiling</label>
+        <input id="ceil" value="$5.00 USDC" inputmode="decimal">
+      </div>
+      <div class="field">
+        <label for="net">Network</label>
+        <input id="net" value="Base Sepolia" readonly>
+      </div>
+      <div class="field">
+        <label for="recv">Pay to</label>
+        <input id="recv" class="mono" value="0x3D4A-5d71" readonly>
+      </div>
+      <div class="field">
+        <label for="salt">Envelope id</label>
+        <input id="salt" class="mono" value="0xa38c-155c" readonly>
+      </div>
+
+      <div class="split-foot">
+        <a class="btn btn-blue btn-wide" href="policy.html">Continue</a>
+      </div>
+    </section>
+    <aside class="split-scene">
+      <div class="summary">
+        <h2>Envelope</h2>
+        <div class="big">
+          <div><span>Ceiling</span><b>$5.00</b></div>
+          <div><span>Asset</span><b>USDC</b></div>
+        </div>
+        <div class="kv">
+          <div class="kv-row"><span>Network</span><strong>Base Sepolia</strong></div>
+          <div class="kv-row"><span>Receiver</span><strong class="mono">0x3D4A-5d71</strong></div>
+          <div class="kv-row"><span>Session</span><strong>mandate-session</strong></div>
+          <div class="kv-row"><span>Window</span><strong>$5.00 / 1h</strong></div>
+        </div>
+      </div>
+    </aside>
+  </div>
+</body>
+</html>

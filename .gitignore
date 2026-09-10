@@ -22,6 +22,12 @@ secrets/.hedera-pending.json
 mandate.yaml
 state/
 
+# Third-party Mobbin screenshots — local stitch refs, not ours to publish.
+console/refs/*.jpg
+console/refs/*.jpeg
+console/refs/*.png
+console/refs/*.webp
+
 # Substreams build artifacts
 substreams/**/target/
 substreams/**/*.spkg
