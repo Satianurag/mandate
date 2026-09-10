@@ -32,6 +32,15 @@ async function startService(t: { after: (fn: () => void) => void }, facilitatorU
     facilitatorUrl,
     port: 0,
     host: "127.0.0.1",
+    fetchRows: async () => [
+      {
+        id: "0xagent0fixture",
+        agentId: "1",
+        agentWallet: "0x0000000000000000000000000000000000000001",
+        totalFeedback: "3",
+        sampleMean: 90,
+      },
+    ],
   });
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   t.after(() => server.close());

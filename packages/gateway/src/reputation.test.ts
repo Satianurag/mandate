@@ -48,7 +48,11 @@ test("Hedera account ID resolves to its EVM alias before reputation lookup", asy
     mirror: { account: "0.0.1234", evm_address: evm },
     agents: { [baseId]: agent(evm, [90, 95]) },
   });
-  const rep = await lookupCounterparty("0.0.1234", "key", { network: "hedera:testnet", fetchFn: fn });
+  const rep = await lookupCounterparty("0.0.1234", "key", {
+    network: "hedera:testnet",
+    fetchFn: fn,
+    subgraphs: AGENT0_SUBGRAPHS,
+  });
   assert.equal(rep.registered, true);
   assert.equal(rep.feedbackCount, 2);
   assert.ok(Math.abs((rep.meanScore ?? 0) - 0.925) < 1e-9);
@@ -60,7 +64,7 @@ test("Hedera account ID resolves to its EVM alias before reputation lookup", asy
 
 test("Hedera account without an EVM alias is honestly unregistered", async () => {
   const { fn } = stubFetch({ mirror: { account: "0.0.9999", evm_address: null } });
-  const rep = await lookupCounterparty("0.0.9999", "key", { fetchFn: fn });
+  const rep = await lookupCounterparty("0.0.9999", "key", { fetchFn: fn, subgraphs: AGENT0_SUBGRAPHS });
   assert.equal(rep.registered, false);
   assert.equal(rep.chainsReachable, rep.chainsQueried);
   assert.deepEqual(rep.chainsFailed, []);
@@ -68,7 +72,7 @@ test("Hedera account without an EVM alias is honestly unregistered", async () =>
 
 test("mirror outage is a coverage failure, not a clean unregistered", async () => {
   const { fn } = stubFetch({ mirror: new Error("socket hang up") });
-  const rep = await lookupCounterparty("0.0.1234", "key", { fetchFn: fn });
+  const rep = await lookupCounterparty("0.0.1234", "key", { fetchFn: fn, subgraphs: AGENT0_SUBGRAPHS });
   assert.equal(rep.registered, false);
   assert.equal(rep.chainsReachable, 0);
   assert.deepEqual(rep.chainsFailed, ["hedera-mirror"]);
@@ -77,7 +81,7 @@ test("mirror outage is a coverage failure, not a clean unregistered", async () =
 test("plain EVM payees never touch the mirror", async () => {
   const evm = "0xf9d1d63f362bd9c98d0d9a1a2b3c4d5e6f70819";
   const { fn, seen } = stubFetch({ agents: {} });
-  const rep = await lookupCounterparty(evm, "key", { fetchFn: fn });
+  const rep = await lookupCounterparty(evm, "key", { fetchFn: fn, subgraphs: AGENT0_SUBGRAPHS });
   assert.equal(rep.registered, false);
   assert.ok(!seen.some((s) => s.url.includes("mirrornode")), "mirror must not be queried");
 });

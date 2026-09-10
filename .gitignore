@@ -20,3 +20,11 @@ secrets/.hedera-pending.json
 # Operator-local mandate + channel state (no secrets, but per-deployment).
 mandate.yaml
 state/
+
+# Substreams build artifacts
+substreams/**/target/
+substreams/**/*.spkg
+substreams/**/src/pb/
+substreams/**/buf.gen.yaml
+
+

@@ -113,4 +113,52 @@ item 1.
 
 ---
 
-<!-- Entries 04+ land as they happen. Do not batch these on Saturday. -->
+## Friction 04 — Graph's documented x402 *testnet* gateway is NXDOMAIN
+
+**Docs page:** `@graphprotocol/client-x402` README (Environments table)
+**Expected:** `https://testnet.gateway.thegraph.com/api/x402` with `chain: base-sepolia`.
+**Observed (8 Sep and re-probed 10 Sep 2026):** `NXDOMAIN` /
+`Could not resolve host: testnet.gateway.thegraph.com`. Production
+`gateway.thegraph.com/api/x402` returns 402, but even a Base Sepolia Agent0
+subgraph ID is billed as `eip155:8453` mainnet USDC (F31).
+**Cost:** ~40 minutes across two days assuming a testnet PoI rail existed.
+**Fix:** publish the testnet host, or document that x402 is mainnet-only and
+MCP/Substreams are the testnet path.
+
+---
+
+## Friction 05 — Substreams Base Sepolia: Pinax lists it, StreamingFast markdown does not
+
+**Docs page:** Pinax app network list vs StreamingFast supported-chains markdown
+**Expected:** one canonical gRPC host for `base-sepolia` and a named `substreams run` example.
+**Observed 10 Sep:** `basesepolia.substreams.pinax.network` resolves
+(`64.203.83.125`, `209.249.216.189`); `base-sepolia.substreams.pinax.network`
+is ENOTFOUND. StreamingFast docs still show Base **mainnet** only.
+**Cost:** ~25 minutes.
+**Fix:** one row in both providers' chain tables: host, TLS port, auth header.
+
+---
+
+## Friction 06 — Hashio rejects Foundry's 32-byte hash as `eth_getCode` block tag
+
+**Docs page:** https://ethereum.org/en/developers/docs/apis/json-rpc/#eth_getcode
+and https://github.com/hashgraph/hedera-docs/blob/main/evm/differences/json-rpc-differences.mdx
+**Expected:** `forge script --broadcast` against Hashio deploys CREATE2 vanity
+contracts (x402 `contracts/evm/README.md`).
+**Observed 10 Sep:** Foundry sent `eth_getCode [CREATE2, 0x<32-byte hash>]`.
+Hashio `-39012` (QUANTITY|TAG is `"latest"` / `"0x<number>"`, not a hash).
+Adapter maps that slot; `--slow` waits for Hashio confirmation before the next
+nonce. After that, all `0x4020…` vanity addresses have code (F28).
+**Cost:** one documented RPC rewrite + sequential broadcast; no custom scheme.
+**Fix:** keep the Hashio adapter; never invent a Hedera `upto` scheme.
+
+---
+
+## Friction 07 — upto `settleWithPermit` simulation must eth_call *as* the facilitator
+
+**Docs page:** https://github.com/x402-foundation/x402/blob/main/contracts/evm/src/x402UptoPermit2Proxy.sol
+**Expected:** wiring `toFacilitatorEvmSigner` with a viem `publicClient.readContract` is enough for `/verify` to simulate `settle` / `settleWithPermit`.
+**Observed 10 Sep (live Base Sepolia, two Ledger EIP-712 taps):** `/verify` returned `permit2_allowance_required` even after the client attached `eip2612GasSponsoring`. The proxy reverts `UnauthorizedFacilitator` unless `msg.sender == witness.facilitator`. viem `eth_call` defaults `from` to `0x0`, the sim always fails, and the stock diagnostic then reports missing Permit2 allowance (which is still 0 until the sponsored permit lands).
+**Cost:** two full device sessions (~15 minutes) chasing a Permit2 allowance that EIP-2612 is supposed to replace.
+**Fix:** pass `account: submitter.address` on facilitator `readContract` so simulation runs as the advertised facilitator. x402's `UptoEvmScheme` itself is correct; the signer wiring is the footgun.
+

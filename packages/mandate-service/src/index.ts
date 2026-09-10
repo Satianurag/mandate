@@ -23,10 +23,13 @@ import {
 } from "@x402/core/server";
 import { BatchSettlementEvmScheme } from "@x402/evm/batch-settlement/server";
 import { FileChannelStorage } from "@x402/evm/batch-settlement/server/file-storage";
+import { UptoEvmScheme } from "@x402/evm/upto/server";
 import { createPublicClient, http } from "viem";
 import { baseSepolia } from "viem/chains";
 import { BASE_SEPOLIA } from "../../gateway/src/facilitators.ts";
 import { nodeAdapter } from "../../gateway/src/http-adapter.ts";
+import { liveAnalyticsBody, type Agent0Row } from "../../gateway/src/analytics.ts";
+import { assertFacilitatorKinds } from "../../gateway/src/discovery.ts";
 
 export const SERVICE_NETWORK = "eip155:84532";
 export const SERVICE_CHAIN_ID = 84532;
@@ -74,6 +77,7 @@ export interface ServiceConfig {
   receiver: `0x${string}`;
   asset?: `0x${string}`;
   priceBaseUnits?: string;
+  fetchRows?: (query: string) => Promise<Agent0Row[]>;
 }
 
 /**
@@ -150,6 +154,10 @@ export async function buildService(cfg: ServiceConfig): Promise<BuiltService> {
     ...cfg,
   };
   const receiverAuthorizer = await resolveReceiverAuthorizer(full.facilitatorUrl);
+  await assertFacilitatorKinds(full.facilitatorUrl, [
+    `batch-settlement@${SERVICE_NETWORK}`,
+    `upto@${SERVICE_NETWORK}`,
+  ]);
   const eip712 = await resolveEip712Domain(full.rpcUrl, full.asset);
   const resourceServer = new x402ResourceServer(new HTTPFacilitatorClient({ url: full.facilitatorUrl }));
   resourceServer.register(
@@ -158,6 +166,7 @@ export async function buildService(cfg: ServiceConfig): Promise<BuiltService> {
       storage: new FileChannelStorage({ directory: full.storageDir }),
     })
   );
+  resourceServer.register(SERVICE_NETWORK, new UptoEvmScheme());
   const routes: RoutesConfig = {
     "GET /analytics": {
       accepts: {
@@ -173,6 +182,26 @@ export async function buildService(cfg: ServiceConfig): Promise<BuiltService> {
         },
       },
       description: "Subgraph analytics — $0.01 per call inside your mandate",
+    },
+    "GET /usage": {
+      accepts: {
+        scheme: "upto",
+        network: SERVICE_NETWORK,
+        payTo: full.receiver,
+        // Max authorised. The handler settles a smaller actual via SettlementOverrides.
+        price: { asset: full.asset, amount: "50000" },
+        extra: {
+          name: eip712.name,
+          version: eip712.version,
+        },
+      },
+      description: "Usage-priced Agent0 sample — authorize up to $0.05, settle actual",
+      // Stock x402: when Permit2 allowance is missing, the client signs an
+      // EIP-2612 permit and the facilitator sponsors it. No on-chain approve,
+      // no X402_PRIVATE_KEY, no ETH on the Ledger.
+      extensions: {
+        eip2612GasSponsoring: {},
+      },
     },
   };
   const httpServer = new x402HTTPResourceServer(resourceServer, routes);
@@ -204,11 +233,14 @@ export async function buildService(cfg: ServiceConfig): Promise<BuiltService> {
       // from processSettlement are what advance the client's vouchers —
       // dropping them would fork the channel state from the chain.
       const query = new URL(req.url ?? "/", base).searchParams.get("q") ?? "{ agents { id } }";
+      const actual =
+        path === "/usage" ? { amount: full.priceBaseUnits } : undefined;
       const settled = await httpServer.processSettlement(
         out.paymentPayload,
         out.paymentRequirements,
         out.declaredExtensions,
-        { request: { adapter, path, method: req.method ?? "GET" } }
+        { request: { adapter, path, method: req.method ?? "GET" } },
+        actual
       );
       if (!settled.success) {
         console.error("mandate settle failed:", JSON.stringify(settled));
@@ -216,15 +248,23 @@ export async function buildService(cfg: ServiceConfig): Promise<BuiltService> {
         res.end(JSON.stringify({ error: settled.errorReason ?? settled }));
         return;
       }
-      res.writeHead(200, { "content-type": "application/json", ...settled.headers });
-      res.end(
-        JSON.stringify({
-          ok: true,
+      try {
+        const body = await liveAnalyticsBody(
           query,
-          paid: { amount: full.priceBaseUnits, asset: full.asset, txHash: settled.transaction },
-          rows: [{ id: "agent-demo-1", feedbackCount: 42 }],
-        })
-      );
+          {
+            amount: actual?.amount ?? full.priceBaseUnits,
+            asset: full.asset,
+            txHash: settled.transaction,
+            scheme: path === "/usage" ? "upto" : "batch-settlement",
+          },
+          { fetchRows: cfg.fetchRows }
+        );
+        res.writeHead(200, { "content-type": "application/json", ...settled.headers });
+        res.end(JSON.stringify(body));
+      } catch (e) {
+        res.writeHead(503, { "content-type": "application/json" });
+        res.end(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }));
+      }
     } catch (e) {
       res.writeHead(500, { "content-type": "application/json" });
       res.end(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }));

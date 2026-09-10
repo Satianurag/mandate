@@ -59,6 +59,7 @@ async function startInProcessService(
     facilitatorUrl,
     port: 0,
     host: "127.0.0.1",
+    fetchRows: async () => [],
   });
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   t.after(() => server.close());
@@ -109,11 +110,11 @@ test("live 402 -> proxy -> fail-safe deny", async (t) => {
   const savedAccount = process.env.MANDATE_HEDERA_ACCOUNT_ID;
   const savedKey = process.env.MANDATE_HEDERA_KEY_ENC;
   const savedGraph = process.env.MANDATE_GRAPH_KEY_ENC;
+  const savedTopic = process.env.MANDATE_HCS_TOPIC_ID;
   process.env.MANDATE_HEDERA_ACCOUNT_ID = "0.0.54321";
   process.env.MANDATE_HEDERA_KEY_ENC = fakeKey;
-  // Hermetic: operator hosts may have secrets/graph.enc; reputation must stay
-  // unavailable without WALLET_PASS (verify runs tests under env -i).
   process.env.MANDATE_GRAPH_KEY_ENC = fakeGraph;
+  delete process.env.MANDATE_HCS_TOPIC_ID;
   t.after(() => {
     if (savedAccount === undefined) delete process.env.MANDATE_HEDERA_ACCOUNT_ID;
     else process.env.MANDATE_HEDERA_ACCOUNT_ID = savedAccount;
@@ -121,6 +122,8 @@ test("live 402 -> proxy -> fail-safe deny", async (t) => {
     else process.env.MANDATE_HEDERA_KEY_ENC = savedKey;
     if (savedGraph === undefined) delete process.env.MANDATE_GRAPH_KEY_ENC;
     else process.env.MANDATE_GRAPH_KEY_ENC = savedGraph;
+    if (savedTopic === undefined) delete process.env.MANDATE_HCS_TOPIC_ID;
+    else process.env.MANDATE_HCS_TOPIC_ID = savedTopic;
   });
 
   const denied = await proxyFetch(`${base}/analytics?q=${encodeURIComponent("{ agents { id } }")}`, undefined, {
@@ -141,7 +144,7 @@ test("live 402 -> proxy -> fail-safe deny", async (t) => {
   assert.equal(stub.calls.settle, 0, "a deny settles nothing");
 });
 
-test("decide() judges the selected requirements directly", async () => {
+test("decide() denies when Proof of You is required and missing", async () => {
   const out = await decide(
     "http://127.0.0.1:8403",
     {
@@ -155,14 +158,15 @@ test("decide() judges the selected requirements directly", async () => {
     },
     null,
     {
-      stepUp: {
-        signOnDevice: async () => {
-          throw new Error("no device in test");
-        },
+      presence: {
+        attestation: null,
+        operator: "0x57a2a47Ca22AE52867c5313c4d9ab43070D7C202",
+        uaid: "uaid:test",
       },
     }
   );
   assert.equal(out.decision.verdict, "deny");
+  assert.match(out.decision.reason, /Proof of You/);
 });
 
 test("service re-challenges a malformed PAYMENT-SIGNATURE", async (t) => {

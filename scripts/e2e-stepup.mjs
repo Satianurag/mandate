@@ -66,9 +66,16 @@ try {
     timeoutMs: Number(process.env.MANDATE_STEPUP_TIMEOUT_MS ?? 120_000),
   });
   console.log("STEPUP_OK");
+  const { mkdir, writeFile } = await import("node:fs/promises");
+  await mkdir(`${ROOT}/.live-results`, { recursive: true });
+  await writeFile(`${ROOT}/.live-results/e2e-stepup.txt`, "STEPUP_OK mode=address-verify (F32 pending registry ingest)\n");
 } catch (e) {
   console.error("STEPUP_FAILED:", e instanceof Error ? e.message : e);
-  process.exit(1);
+  process.exitCode = 1;
 } finally {
-  spawnSync(process.execPath, [join(ROOT, "scripts/ledger-reset.mjs")], { stdio: "ignore" });
+  spawnSync(process.execPath, [join(ROOT, "scripts/ledger-reset.mjs")], {
+    stdio: "ignore",
+    timeout: 8_000,
+  });
 }
+process.exit(process.exitCode ?? 0);

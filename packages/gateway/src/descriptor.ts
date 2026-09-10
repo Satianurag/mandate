@@ -47,7 +47,9 @@ export function buildStepUpTypedData(proposal: PaymentProposal, reason: string):
       name: "Mandate",
       version: "1",
       chainId: 1,
-      verifyingContract: "0x0000000000000000000000000000000000000000",
+      verifyingContract: /^0x[0-9a-fA-F]{40}$/.test(recipient)
+        ? recipient
+        : undefined,
     },
     types: {
       EIP712Domain: [

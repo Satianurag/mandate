@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
 import { createServer } from "node:http";
-import { buildCore, createApp, type FacilitatorCore } from "./index.ts";
+import { buildCore, createApp, ecdsa32, type FacilitatorCore } from "./index.ts";
 
 // The wire skin over an injected core: proves the facilitator speaks exactly
 // the protocol HTTPFacilitatorClient expects (paths, body shape, passthrough
@@ -106,14 +106,30 @@ test("buildCore refuses the wrong chain or missing settlement contracts", async 
   const good = await stubRpc({ chainId: 84532, code: "0x6001600101" });
   const core = await buildCore(good, keys());
   assert.equal(typeof core.verify, "function");
-  const kinds = core.getSupported().kinds;
+  const supported = core.getSupported();
+  const kinds = supported.kinds;
   assert.equal(kinds[0]!.scheme, "batch-settlement");
   assert.ok((kinds[0]!.extra as { receiverAuthorizer: string }).receiverAuthorizer?.startsWith("0x"));
+  assert.ok(kinds.some((k) => k.scheme === "upto"));
+  assert.ok(supported.extensions.includes("eip2612GasSponsoring"));
+
+  const good296 = await stubRpc({ chainId: 296, code: "0x6001600101" });
+  const dual = await buildCore(good296, keys(), core as never);
+  const dualKinds = dual.getSupported().kinds;
+  assert.ok(dualKinds.some((k) => k.scheme === "batch-settlement" && k.network === "eip155:84532"));
+  assert.ok(dualKinds.some((k) => k.scheme === "batch-settlement" && k.network === "eip155:296"));
 
   const wrongChain = await stubRpc({ chainId: 1, code: "0x6001600101" });
-  await assert.rejects(() => buildCore(wrongChain, keys()), /not Base Sepolia/);
+  await assert.rejects(() => buildCore(wrongChain, keys()), /not a mandate testnet/);
   const noContract = await stubRpc({ chainId: 84532, code: "0x" });
   await assert.rejects(() => buildCore(noContract, keys()), /No contract at/);
+});
+
+test("ecdsa32 accepts Key Ring UTF-8 hex (Hedera seal) and raw 32-byte secrets", () => {
+  const raw = randomBytes(32);
+  assert.deepEqual(ecdsa32(raw), raw);
+  const hex = raw.toString("hex");
+  assert.equal(ecdsa32(Buffer.from(`0x${hex}`, "utf8")).toString("hex"), hex);
 });
 
 test("malformed bodies fail 400, unknown routes 404, core crashes 500", async (t) => {

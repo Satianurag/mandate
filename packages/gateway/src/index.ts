@@ -15,6 +15,7 @@ import { createMandateClient } from "./client.ts";
 import { BLOCKY402_URL } from "./facilitators.ts";
 import { withSecret } from "./keyring.ts";
 import type { StepUpDeps } from "./stepup.ts";
+import { loadRequiredPresence } from "./presence.ts";
 
 const PROJECT_ROOT = join(dirname(fileURLToPath(import.meta.url)), "../../..");
 const PORT = Number(process.env.MANDATE_PORT ?? 8402);
@@ -90,12 +91,22 @@ export async function proxyFetch(
   }
 
   const graphKey = await loadGraphKey();
+  let presence;
+  try {
+    presence = await loadRequiredPresence();
+  } catch (e) {
+    return new Response(
+      JSON.stringify({ error: e instanceof Error ? e.message : String(e) }),
+      { status: 403, headers: { "content-type": "application/json" } }
+    );
+  }
   const { x402, getLastDecision } = createMandateClient({
     hederaCiphertext: hederaEnc,
     accountId,
     graphApiKey: graphKey,
-    hcsTopic: HCS_TOPIC,
+    hcsTopic: process.env.MANDATE_HCS_TOPIC_ID,
     stepUp: deps.stepUp,
+    presence,
   });
 
   try {

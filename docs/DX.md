@@ -18,9 +18,10 @@ environment. Start there; believe nothing else first.
 3. Fund the payer with Base Sepolia USDC and the submitter with ETH (the
    scripts print the funding links).
 4. `npm run check:mandate && npm run mandate:open` — **one device tap**
-   opens the on-chain escrow channel. The tap Clear-signs the channel open
-   (`docs/erc7730-mandate-stepup.json` carries the v2 descriptors, so the
-   device screen shows the mandate fields, not hex).
+   opens the on-chain escrow channel. Until Ledger's ERC-7730 registry
+   ingests `docs/erc7730-mandate-stepup.json` (submitted; F32), the device
+   uses address-verify / blind-sign settings — **do not claim labeled
+   Clear Signing fields until a device shows them**.
 5. The agent now pays per request with off-chain vouchers, each capped by
    the mandate. Breach the envelope and the device is consulted again
    (`npm run e2e:stepup`, proven live — see `docs/STEPUP.md`).
@@ -35,8 +36,9 @@ stock `batch-settlement` scheme owns the vouchers.
 
 1. `npm run seal:keys` — the Graph Studio API key is sealed into the Key
    Ring once; it never appears in env or chat again.
-2. `npm run probe:reputation` — live Agent0 reputation for any payee,
-   including Hedera `0.0.x` accounts (resolved via their EVM alias, F20).
+2. `npm run probe:reputation` — live Agent0 reputation via **Subgraph MCP
+   discovery**, including Hedera `0.0.x` accounts (resolved via their EVM
+   alias, F20). Prints the MCP tool names used.
 3. Every payment is policy-judged before creation: allow, step-up (device
    tap), or deny — the F18 weighted hybrid with hard gates. Deny reasons
    cite the mandate line that fired.
@@ -76,6 +78,7 @@ treasury leg) — three separate Hedera primitives doing what each does best.
 - Over-ceiling is step-up, never silent deny and never silent allow: the
   policy engine owns the ceiling; the SDK spend controls stay uncapped so
   escalation reaches the human.
-- Cuts are documented with cause (F24 Substreams, F27 `upto`): if a
-  primitive cannot be compiled, observed, or stocked here, it is cut in
-  writing — not demoed as theater.
+- Cuts are documented with cause (F8 Graph testnet x402, F24 Substreams
+  until Pinax run is green, F28 Hedera proxies, F32 ERC-7730 ingest): if a
+  primitive cannot be compiled, observed, or stocked here, it is a FINDING
+  in writing — not demoed as theater.

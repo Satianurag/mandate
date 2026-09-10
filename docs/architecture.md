@@ -9,17 +9,19 @@ $0.01 proof-of-integration payment.
 | Purpose | Scheme / network | Facilitator | Cost |
 |---|---|---|---|
 | **The mandate envelope** | `batch-settlement@eip155:84532` (Base Sepolia) | self-hosted (`@mandate/facilitator`) | testnet, free |
-| **Hedera paid service** | `exact@hedera:testnet` | Blocky402 *(required by the Hedera track)* | testnet, free |
+| **Hedera EVM batch (advertised)** | `batch-settlement@eip155:296` | self-hosted when `hedera.enc` present (F28) | HBAR gas; paid E2E blocked on 0 HTS USDC |
 | **Evidence log** | HCS topic, Hedera testnet | — | testnet, free |
-| Graph proof-of-integration *(optional)* | `exact@eip155:8453` (Base mainnet) | Graph gateway | **0.01 USDC real** |
+| Graph proof-of-integration | Subgraph MCP + Agent0 (testnet data). Documented Graph x402 **testnet** host is NXDOMAIN (F8); production x402 bills Base **mainnet** even for a Sepolia subgraph (F31) — we do not pay it | — | testnet, Studio key |
 | Graph bulk reads | authenticated gateway, API key sealed in Key Ring | — | free tier |
+| Graph Substreams | Pinax `basesepolia.substreams.pinax.network` (F24 reopened) | — | Pinax key if required |
 
 ### Why the envelope is not on Hedera
 
-No escrow contracts are deployed for `batch-settlement` on the Hedera relay
-chain — the scheme lives on Base Sepolia. Self-hosting the facilitator is now
-proven (we run our own), so the remaining work is a contract deployment on
-chain 296: a Day-4 stretch, not the critical path.
+Official x402 vanity contracts now have code on Hedera EVM 296 (F28). Circle
+USDC there is HTS `0.0.429274` (EVM alias from Hiero `TokenId.toEvmAddress()`),
+and x402's documented Hedera *exact* rail is still `hedera:testnet` + token ID.
+The mandate envelope stays `batch-settlement@eip155:84532` (Base Sepolia USDC)
+until a payer holds that HTS and a paid E2E on `eip155:296` is measured.
 
 **This is a feature, not a compromise.** The mandate layer is rail-agnostic by
 design: the same policy engine and the same device signature govern a
@@ -83,7 +85,7 @@ Custody of every key involved:
 |---|---|---|---|
 | payer (device) | Ledger, never leaves | EIP-3009 deposit only (1 tap) | USDC only — deposits are gasless |
 | session | Key Ring (`mandate-session`) | vouchers (fixed receiver, capped) | none — never submits |
-| facilitator submitter | Key Ring (`mandate-facilitator`) | settlement txs | Base Sepolia ETH (gas) |
+| facilitator submitter | Key Ring (`mandate-facilitator`) | settlement txs; also the `eth_call` `from` for upto `settle`/`settleWithPermit` simulation (proxy checks `msg.sender == witness.facilitator`) | Base Sepolia ETH (gas) |
 | facilitator authorizer | Key Ring (`mandate-authorizer`) | claim/refund EIP-712 | none |
 | graph-gateway | Key Ring | — (API key, Agent0 reads) | — |
 | hedera-payment | Key Ring | HBAR transfers + HCS submits | testnet HBAR |
@@ -106,7 +108,7 @@ Custody of every key involved:
 | Sponsor | Requirement | Where satisfied |
 |---|---|---|
 | Ledger | Key Ring CLI, device approval, x402 payment flow | custody + step-up + envelope |
-| The Graph | compose 2+ products; live data | Agent0 (reputation) + x402 (402 flow + proof-of-integration) |
-| The Graph | Subgraph MCP **or** Substreams **or** x402 | x402 path live; Substreams cut per cut order (F24: no Base Sepolia endpoint on either provider) |
+| The Graph | compose 2+ products; live data | Agent0 (reputation, paid 200s) + Subgraph MCP (discovery) + Substreams module (Base Sepolia) |
+| The Graph | Subgraph MCP **or** Substreams **or** x402 | MCP wired for discovery; Substreams module in `substreams/x402-payments`; x402 testnet host still NXDOMAIN (F8) — no mainnet payment |
 | Hedera | live x402 service via Blocky402 | Hedera paid service |
 | Hedera | HCS audit, scheduled tx, ERC-8004/HCS-14 (bonus) | evidence layer (every record carries the operator UAID, F25), treasury leg (HIP-423 time-locked top-up, `treasury:topup`, F26), identity (HCS-11 profile via `uaid:register`) |

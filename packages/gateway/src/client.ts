@@ -32,11 +32,18 @@ import { deriveOperatorUaid } from "./uaid.ts";
 import type { SettleResponse } from "./types.ts";
 import { requireDeviceApproval, StepUpDenied, type StepUpDeps } from "./stepup.ts";
 import { withSecret } from "./keyring.ts";
+import { assertFreshPresence, type PresenceAttestation } from "./presence.ts";
 import type {
   CounterpartyReputation,
   PaymentProposal,
   PolicyDecision,
 } from "./types.ts";
+
+export interface PresenceGate {
+  attestation: PresenceAttestation | null;
+  operator: `0x${string}`;
+  uaid: string;
+}
 
 /** A reputation record that says "we could not read any registry", honestly. */
 function unavailableReputation(failure: string): CounterpartyReputation {
@@ -64,7 +71,7 @@ export async function decide(
   origin: string,
   requirements: PaymentRequirements,
   graphApiKey: string | null,
-  deps: { stepUp?: StepUpDeps } = {}
+  deps: { stepUp?: StepUpDeps; presence?: PresenceGate } = {}
 ): Promise<{ proposal: PaymentProposal; decision: PolicyDecision }> {
   let proposal: PaymentProposal;
   try {
@@ -110,6 +117,25 @@ export async function decide(
         });
 
   const decision = policyEngine.evaluate(proposal, reputation);
+
+  if (deps.presence && decision.verdict !== "deny") {
+    try {
+      assertFreshPresence(deps.presence.attestation, {
+        operator: deps.presence.operator,
+        uaid: deps.presence.uaid,
+      });
+    } catch (e) {
+      return {
+        proposal,
+        decision: {
+          ...decision,
+          verdict: "deny",
+          reason: e instanceof Error ? e.message : String(e),
+          trace: [...decision.trace, "poh:missing-or-stale"],
+        },
+      };
+    }
+  }
 
   if (decision.verdict === "step_up") {
     try {
@@ -157,6 +183,8 @@ export interface MandateClientOpts {
   hcsTopic?: string;
   /** Step-up device injection (tests approve/deny programmatically). */
   stepUp?: StepUpDeps;
+  /** When set, first allow requires a fresh Proof of You attestation (F33). */
+  presence?: PresenceGate;
   /**
    * Signer override. Production omits this and gets the sealed signer;
    * hermetic tests inject an ephemeral-key stock signer so the full
@@ -216,6 +244,8 @@ export function createMandateClient(opts: MandateClientOpts): MandateClient {
         accountId: opts.accountId,
         privateKeyHex: key.toString("utf8").trim(),
       });
+    }).catch((e) => {
+      console.warn(`[audit] skipped: ${e instanceof Error ? e.message : e}`);
     });
   };
 
@@ -242,7 +272,7 @@ export function createMandateClient(opts: MandateClientOpts): MandateClient {
         originOf(ctx.paymentRequired),
         ctx.selectedRequirements,
         opts.graphApiKey,
-        { stepUp: opts.stepUp }
+        { stepUp: opts.stepUp, presence: opts.presence }
       );
       last = { proposal: out.proposal, decision: out.decision };
       if (out.decision.verdict === "deny") {

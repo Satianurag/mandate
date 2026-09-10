@@ -73,7 +73,9 @@ Running order that matches the product's logic:
       the Day-1 plaintext-key spike is deleted, superseded by the mandate flow)
 - [x] Graph Studio API key, sealed into the Key Ring — hard dependency (F7)
       (`secrets/graph.enc`; rotate in Studio before public demo — key was in chat export)
-- [x] 30 min spike on the `upto` scheme — verdict: DON'T adopt (F27: EVM/Permit2-only, no Hedera stock scheme; our batch-settlement channel already is authorize-max/settle-actual)
+- [x] 30 min spike on the `upto` scheme — Hedera `upto` still does not exist
+      (F27). Base Sepolia `upto` **adopted** (F29): merchant `GET /usage`,
+      `npm run e2e:upto`
 - [x] `npm i -g @ledgerhq/wallet-cli`
 - [x] `wallet-cli ring init` with the device attached
 - [x] Prove headless `ring decrypt` works with the device unplugged (`npm run preflight`)
@@ -95,20 +97,27 @@ the Ledger ETHGlobal Telegram before sleeping.
 ## Day 3 — Thu 10 Sep — judgment and consent
 
 - [x] Re-resolve Agent0 subgraph IDs against Graph Explorer (they move)
-      (`npm run probe:reputation` — 6/9 subgraphs reachable, `REPUTATION_OK`)
+      (`npm run probe:reputation` — MCP discovery, not a pinned ID table)
 - [x] Wire Subgraph MCP; end-to-end reputation lookup
-      (Graph Studio key + `lookupCounterparty` in proxy path; MCP optional per plan)
+      (hosted SSE `subgraphs.mcp.thegraph.com` — F30; `lookupCounterparty`
+      consumes MCP-discovered IDs)
 - [x] `stepup.requireDeviceApproval` against DMK
       (live `STEPUP_OK` — `.live-results/stepup-live-clear.txt`, mode=clear)
-- [x] ERC-7730 descriptor draft + EIP-712 typed payload
-      (`docs/erc7730-mandate-stepup.json`, `buildStepUpTypedData`; registry PR post-hackathon)
+- [x] ERC-7730 descriptor for **deployed** verifying contracts
+      (`docs/erc7730-mandate-stepup.json` uses batch-settlement on 84532;
+      zero-address banned; registry PR
+      https://github.com/ethereum/clear-signing-erc7730-registry/pull/2972
+      pending ingest — F32)
 
 ## Day 4 — Fri 11 Sep — extras, then freeze
 
-- [x] ~~Substreams `x402-payments` module~~ — CUT, not deferred (F24: no Base Sepolia endpoint on either provider, and no toolchain obtainable to build it — a module that can neither compile here nor observe our chain is theater)
+- [x] Substreams `x402-payments` module — F24 reopened 10 Sep (Pinax Base
+      Sepolia DNS exists). Module in `substreams/x402-payments`;
+      `npm run e2e:substreams`
 - [x] Scheduled-Transaction treasury top-up leg (HIP-423 wait-for-expiry; `treasury:topup`; live run pending operator)
 - [x] HCS-14 UAID registration (`uaid.ts` + `npm run uaid:register`; every audit record carries the operator UAID — live inscription pending operator run)
-- [x] Hedera Harness Tier 3.5 x402 assertion PR — code DONE, 173/173 green, patch ready; push blocked on GitHub scope (bot token 403 on hedera-dev fork) — operator runs: `gh repo fork hedera-dev/hedera-harness --clone=true`, apply `/home/user/harness-x402-tier35.patch` (`git am`), push branch, `gh pr create`
+- [x] Hedera Harness Tier 3.5 x402 assertion PR —
+      https://github.com/hedera-dev/hedera-harness/pull/54
 - [ ] Deploy the gateway to a VPS; the no-device demo runs from there
 - [ ] Record a clean step-up take as insurance
 

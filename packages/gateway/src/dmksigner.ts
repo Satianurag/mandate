@@ -37,13 +37,19 @@ export interface DmkSignerOptions {
   /** Per-action device wait (discovery + tap). No silent retries. */
   timeoutMs?: number;
   skipOpenApp?: boolean;
+  /** Proof of You / address-verify. Mandate open keeps this false (one tap is the EIP-3009). */
+  checkOnDevice?: boolean;
 }
 
 /** Join DMK's {r, s, v} into the 65-byte 0x signature x402 expects. */
 export function joinSignature(sig: DmkSignature): `0x${string}` {
   const hex = (h: string, bytes: number) =>
     h.replace(/^0x/, "").padStart(bytes * 2, "0");
-  return `0x${hex(sig.r, 32)}${hex(sig.s, 32)}${hex(sig.v.toString(16), 1)}`;
+  // DMK often returns the recovery id (0/1). Circle FiatToken permit()
+  // requires v ∈ {27, 28}; Permit2 is more lenient. Normalize once here.
+  let v = Number(sig.v);
+  if (v < 27) v += 27;
+  return `0x${hex(sig.r, 32)}${hex(sig.s, 32)}${hex(v.toString(16), 1)}`;
 }
 
 export class DmkEvmSigner implements ClientEvmSigner {
@@ -56,7 +62,7 @@ export class DmkEvmSigner implements ClientEvmSigner {
 
   private constructor(
     address: `0x${string}`,
-    opts: Required<Omit<DmkSignerOptions, "skipOpenApp">> & { skipOpenApp: boolean }
+    opts: Required<DmkSignerOptions>
   ) {
     this.address = address;
     this.path = opts.path;
@@ -73,12 +79,13 @@ export class DmkEvmSigner implements ClientEvmSigner {
       path: opts.path ?? DEFAULT_DERIVATION_PATH,
       timeoutMs: opts.timeoutMs ?? 120_000,
       skipOpenApp: opts.skipOpenApp ?? false,
+      checkOnDevice: opts.checkOnDevice ?? false,
     };
     try {
       const address = await withDeviceSession(async (sessionId) => {
         const signer = new SignerEthBuilder({ dmk: getDmk(), sessionId }).build();
         const { observable } = signer.getAddress(full.path, {
-          checkOnDevice: false,
+          checkOnDevice: full.checkOnDevice,
           skipOpenApp: full.skipOpenApp,
         });
         const out = await awaitDeviceAction<DmkAddress>(observable, full.timeoutMs);

@@ -25,6 +25,8 @@ import { HBAR_ASSET_ID } from "@x402/hedera";
 import { normaliseAmount } from "../../gateway/src/hedera.ts";
 import { nodeAdapter } from "../../gateway/src/http-adapter.ts";
 import { BLOCKY402_URL } from "../../gateway/src/facilitators.ts";
+import { liveAnalyticsBody, type Agent0Row } from "../../gateway/src/analytics.ts";
+import { assertFacilitatorKinds } from "../../gateway/src/discovery.ts";
 
 export const SERVICE_NETWORK = "hedera:testnet";
 
@@ -33,6 +35,7 @@ export interface ServiceConfig {
   facilitatorUrl: string;
   port: number;
   host: string;
+  fetchRows?: (query: string) => Promise<Agent0Row[]>;
 }
 
 function flagValue(name: string): string | undefined {
@@ -96,9 +99,7 @@ export async function buildService(cfg: ServiceConfig): Promise<Server> {
     },
   };
   const httpServer = new x402HTTPResourceServer(resourceServer, routes);
-  // Fetches facilitator /supported and validates the route has scheme +
-  // facilitator backing. Without this, requests fail with "make sure to
-  // call initialize()" — boot must not serve a half-wired server.
+  await assertFacilitatorKinds(cfg.facilitatorUrl, [`exact@${SERVICE_NETWORK}`]);
   await httpServer.initialize();
 
   return createServer(async (req, res) => {
@@ -136,15 +137,18 @@ export async function buildService(cfg: ServiceConfig): Promise<Server> {
         return;
       }
       const { amount: human, symbol } = normaliseAmount(out.paymentRequirements);
-      res.writeHead(200, { "content-type": "application/json", ...settled.headers });
-      res.end(
-        JSON.stringify({
-          ok: true,
+      try {
+        const body = await liveAnalyticsBody(
           query,
-          paid: { amount: human, asset: symbol, txId: settled.transaction },
-          rows: [{ id: "agent-demo-1", feedbackCount: 42 }],
-        })
-      );
+          { amount: human, asset: symbol, txId: settled.transaction },
+          { fetchRows: cfg.fetchRows }
+        );
+        res.writeHead(200, { "content-type": "application/json", ...settled.headers });
+        res.end(JSON.stringify(body));
+      } catch (e) {
+        res.writeHead(503, { "content-type": "application/json" });
+        res.end(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }));
+      }
     } catch (e) {
       res.writeHead(500, { "content-type": "application/json" });
       res.end(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }));

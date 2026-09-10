@@ -14,7 +14,6 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npm run build -w @mandate/gateway
-      # Hermetic by design: the suite spawns its own service with pinned
-      # test doubles and needs no secrets, no device, no network.
-      - run: npm test -w @mandate/gateway
+      - run: npm run build --workspaces --if-present
+      - run: npm test --workspaces --if-present
+      - run: npm run verify

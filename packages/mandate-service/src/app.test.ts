@@ -106,6 +106,12 @@ const KINDS = [
     network: "eip155:84532",
     extra: { receiverAuthorizer: AUTHORIZER },
   },
+  {
+    x402Version: 2,
+    scheme: "upto",
+    network: "eip155:84532",
+    extra: { facilitatorAddress: AUTHORIZER },
+  },
 ];
 
 test("boot resolves the receiverAuthorizer live, refuses without it", async (t) => {
@@ -182,4 +188,17 @@ test("GET /analytics without payment returns the batch-settlement 402 offer", as
 
   const elsewhere = await fetch(`${base}/nope`);
   assert.equal(elsewhere.status, 404);
+
+  const usage = await fetch(`${base}/usage`);
+  assert.equal(usage.status, 402);
+  const usageHeader = usage.headers.get("payment-required");
+  assert.ok(usageHeader, "upto 402 must carry PAYMENT-REQUIRED");
+  const usageBody = decodePaymentRequiredHeader(usageHeader);
+  assert.equal(usageBody.accepts[0]!.scheme, "upto");
+  assert.equal(usageBody.accepts[0]!.network, "eip155:84532");
+  assert.equal(usageBody.accepts[0]!.amount, "50000");
+  assert.ok(
+    usageBody.extensions && "eip2612GasSponsoring" in usageBody.extensions,
+    "upto 402 must advertise eip2612GasSponsoring so Permit2 allowance can be gas-sponsored"
+  );
 });

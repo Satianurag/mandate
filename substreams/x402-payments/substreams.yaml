@@ -1,0 +1,28 @@
+specVersion: v0.1.0
+package:
+  name: x402-payments
+  version: v0.1.0
+  url: https://github.com/Satianurag/mandate
+  description: Maps USDC / batch-settlement / Permit2 logs on Base Sepolia.
+
+network: base-sepolia
+
+protobuf:
+  files:
+    - hits.proto
+  importPaths:
+    - proto
+
+binaries:
+  default:
+    type: wasm/rust-v1
+    file: ./target/wasm32-unknown-unknown/release/x402_payments.wasm
+
+modules:
+  - name: map_x402_payments
+    kind: map
+    inputs:
+      - params: string
+      - source: sf.ethereum.type.v2.Block
+    output:
+      type: proto:mandate.x402.v1.Hits

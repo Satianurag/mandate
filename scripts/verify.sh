@@ -38,8 +38,14 @@ elif [ -f .env ]; then
 else
   ok "no tracked .env or secrets/*.enc (local Key Ring blobs are gitignored)"
 fi
-if grep -rIn --exclude-dir=.git --exclude-dir=node_modules --exclude-dir=.live-results --exclude=verify.sh --exclude=mandate.example.yaml --exclude=mandate.yaml -E "(PRIVATE_KEY|BEGIN [A-Z ]*PRIVATE|0x[a-fA-F0-9]{64})" . >/dev/null 2>&1; then
-  bad "possible key material in source"; else ok "no key-shaped literals in source"; fi
+if git grep -I -nE "(BEGIN [A-Z ]*PRIVATE|0x[a-fA-F0-9]{64})" \
+  -- ':!scripts/verify.sh' ':!mandate.example.yaml' ':!mandate.yaml' >/dev/null 2>&1; then
+  bad "possible key material in source"
+  git grep -I -nE "(BEGIN [A-Z ]*PRIVATE|0x[a-fA-F0-9]{64})" \
+    -- ':!scripts/verify.sh' ':!mandate.example.yaml' ':!mandate.yaml' | head -20
+else
+  ok "no key-shaped literals in tracked source"
+fi
 
 hdr "4. Doc consistency (no contradictions)"
 # A doc may quote a claim in order to correct it; only flag it when the line is

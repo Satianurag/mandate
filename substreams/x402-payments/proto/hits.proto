@@ -1,0 +1,8 @@
+syntax = "proto3";
+package mandate.x402.v1;
+
+message Hits {
+  uint64 block = 1;
+  repeated string txs = 2;
+  repeated string addresses = 3;
+}

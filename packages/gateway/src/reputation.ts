@@ -11,7 +11,7 @@
  * hand-write a per-chain integration.
  *
  * Docs:  https://thegraph.com/docs/en/subgraphs/existing-subgraphs/agent0/
- * MCP:   https://github.com/graphops/subgraph-mcp
+ * MCP:   https://subgraphs.mcp.thegraph.com/sse (F30)
  */
 
 import { HEDERA_ENTITY_ID_REGEX } from "@x402/hedera";
@@ -35,6 +35,12 @@ export interface LookupOptions {
   network?: string;
   /** Injectable for tests; defaults to the global fetch. */
   fetchFn?: FetchFn;
+  /**
+   * Already-discovered Agent0 deployments. Production omits this and
+   * resolves IDs through Subgraph MCP. Tests inject a fixture so the suite
+   * stays hermetic (no MCP, no network).
+   */
+  subgraphs?: Record<string, string>;
 }
 
 /**
@@ -63,18 +69,10 @@ export async function resolveHederaEvmAddress(
 }
 
 /**
- * Agent0 deployments, by chain. Verified against The Graph's docs 2026-09-08.
- *
- * The two IDs originally hardcoded (base, bsc) were correct -- but the docs
- * also list TESTNET deployments, which changes the design for the better:
- * Base Sepolia carries an Agent0 subgraph, and Base Sepolia is where the
- * mandate escrow channel lives. Reputation and settlement can therefore sit on
- * the SAME chain rather than reading mainnet reputation to authorise a testnet
- * payment, which never really made sense.
- *
- * Every deployment is queried and the results are POOLED (F15): there is no
- * "testnet first, mainnet fallback" ordering — ordering lookups by chain is
- * what created the laundering vector.
+ * Last-known Agent0 deployments, observed 2026-09-08 (F12). This table is
+ * a FINDINGS observation and a hermetic-test fixture — production resolution
+ * goes through Subgraph MCP (`discoverAgent0Deployments`). Do not use these
+ * IDs as a silent runtime fallback; an empty MCP result must fail closed.
  */
 export const AGENT0_TESTNET: Record<string, string> = {
   "base-sepolia": "4yYAvQLFjBhBtdRCY7eUWo181VNoTSLLFd5M7FXQAi6u",
@@ -109,7 +107,7 @@ export const AGENT0_SUBGRAPHS: Record<string, string> = {
  * signal -- an agent that behaved well two years ago and badly last week
  * should not average out to fine.
  */
-const AGENT_QUERY = /* GraphQL */ `
+export const AGENT_QUERY = /* GraphQL */ `
   query CounterpartyRecord($wallet: Bytes!) {
     agents(where: { agentWallet: $wallet }, first: 1) {
       id
@@ -160,7 +158,8 @@ export async function lookupCounterparty(
   opts: LookupOptions = {}
 ): Promise<CounterpartyReputation> {
   const fetchFn = opts.fetchFn ?? fetch;
-  const entries = Object.entries(AGENT0_SUBGRAPHS);
+  const subgraphs = opts.subgraphs ?? (await resolveDiscoveredSubgraphs(apiKey));
+  const entries = Object.entries(subgraphs);
   const fullCoverage = {
     chainsQueried: entries.length,
     chainsReachable: entries.length,
@@ -287,30 +286,61 @@ async function queryAgent(
   apiKey: string,
   fetchFn: FetchFn = fetch
 ): Promise<RawAgent | null> {
+  const data = (await queryAgent0(subgraphId, apiKey, AGENT_QUERY, { wallet }, fetchFn)) as {
+    agents?: RawAgent[];
+  };
+  return data?.agents?.[0] ?? null;
+}
+
+/**
+ * POST a GraphQL document to a discovered subgraph. The Graph returns HTTP
+ * 200 even for auth failures — inspect the body, never `res.ok` alone (F4).
+ */
+export async function queryAgent0(
+  subgraphId: string,
+  apiKey: string,
+  query: string,
+  variables?: Record<string, unknown>,
+  fetchFn: FetchFn = fetch
+): Promise<unknown> {
   const res = await fetchFn(`${GATEWAY}/subgraphs/id/${subgraphId}`, {
     method: "POST",
     headers: {
       "content-type": "application/json",
       authorization: `Bearer ${apiKey}`,
     },
-    body: JSON.stringify({ query: AGENT_QUERY, variables: { wallet } }),
+    body: JSON.stringify({ query, variables }),
   });
-
-  // The Graph returns HTTP 200 even for auth failures, with the problem in the
-  // body. Verified live 2026-09-08. Never branch on res.ok alone here.
-  //
-  // This THROWS on a gateway error rather than returning null, so the caller
-  // can tell "this registry said no such agent" apart from "this registry did
-  // not answer". Collapsing those two is how unread registries turn into
-  // clean-looking counterparties.
   const body = (await res.json().catch(() => null)) as
-    | { data?: { agents?: RawAgent[] }; errors?: { message: string }[] }
+    | { data?: unknown; errors?: { message: string }[] }
     | null;
   if (!body) throw new Error(`Graph gateway: unparseable response (HTTP ${res.status})`);
   if (body.errors?.length) {
     throw new Error(`Graph gateway: ${body.errors.map((e) => e.message).join("; ")}`);
   }
-  return body.data?.agents?.[0] ?? null;
+  return body.data;
+}
+
+let lastMcpToolsUsed: string[] = [];
+/** Tool names the last MCP discovery actually called — printed by probe:reputation. */
+export function getLastMcpToolsUsed(): string[] {
+  return lastMcpToolsUsed;
+}
+
+let discoveredCache: Record<string, string> | null = null;
+
+/**
+ * Production subgraph ID source: Subgraph MCP. Tests never hit this because
+ * they pass `opts.subgraphs`. An empty MCP result throws — it does not fall
+ * back to AGENT0_SUBGRAPHS (that table is an observation, not a runtime default).
+ */
+export async function resolveDiscoveredSubgraphs(apiKey: string): Promise<Record<string, string>> {
+  if (discoveredCache) return discoveredCache;
+  const { discoverAgent0DeploymentsWithKey } = await import("./discovery.ts");
+  const { subgraphs, toolsUsed } = await discoverAgent0DeploymentsWithKey(apiKey);
+  lastMcpToolsUsed = toolsUsed;
+  discoveredCache = subgraphs;
+  return subgraphs;
 }
 
 const clamp01 = (n: number) => Math.max(0, Math.min(1, n));

@@ -1,0 +1,30 @@
+{
+  "$schema": "../../specs/erc7730-v2.schema.json",
+  "context": {
+    "eip712": {
+      "domain": { "name": "USDC", "version": "2" },
+      "deployments": [
+        { "chainId": 84532, "address": "0x036CbD53842c5426634e7929541eC2318f3dCF7e" }
+      ]
+    }
+  },
+  "metadata": {
+    "owner": "Circle Internet Financial",
+    "info": { "url": "https://www.circle.com/" }
+  },
+  "display": {
+    "formats": {
+      "ReceiveWithAuthorization(address from,address to,uint256 value,uint256 validAfter,uint256 validBefore,bytes32 nonce)": {
+        "intent": "Authorize USDC transfer",
+        "fields": [
+          { "path": "from", "label": "From", "format": "addressName", "visible": "always" },
+          { "path": "to", "label": "To", "format": "addressName", "visible": "always" },
+          { "path": "value", "label": "Amount", "format": "raw", "visible": "always" },
+          { "path": "validAfter", "label": "Valid after", "format": "raw" },
+          { "path": "validBefore", "label": "Valid before", "format": "raw" },
+          { "path": "nonce", "label": "Nonce", "visible": "never" }
+        ]
+      }
+    }
+  }
+}

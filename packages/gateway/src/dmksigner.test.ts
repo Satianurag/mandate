@@ -13,9 +13,17 @@ test("joinSignature joins r‖s‖v into a 65-byte 0x signature", () => {
   assert.equal(sig, `0x${"11".repeat(32)}${"22".repeat(32)}1b`);
 });
 
-test("joinSignature pads short r/s and accepts 0/1-style v", () => {
-  const sig = joinSignature({ r: "0x1", s: "0x2", v: 0 });
-  assert.equal(sig.length, 2 + 64 + 64 + 2);
-  assert.ok(sig.startsWith("0x0000"));
-  assert.ok(sig.endsWith("00"));
+test("joinSignature pads short r/s and normalizes 0/1-style v to 27/28", () => {
+  const sig0 = joinSignature({ r: "0x1", s: "0x2", v: 0 });
+  assert.equal(sig0.length, 2 + 64 + 64 + 2);
+  assert.ok(sig0.startsWith("0x0000"));
+  assert.ok(sig0.endsWith("1b"));
+  const sig1 = joinSignature({ r: "0x1", s: "0x2", v: 1 });
+  assert.ok(sig1.endsWith("1c"));
+  const already = joinSignature({
+    r: `0x${"11".repeat(32)}`,
+    s: `0x${"22".repeat(32)}`,
+    v: 27,
+  });
+  assert.ok(already.endsWith("1b"));
 });
