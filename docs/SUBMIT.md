@@ -38,9 +38,9 @@ Key Ring decrypt works with the device unplugged (F11). Do **not** copy
 Beats from `docs/plan.md`:
 
 1. Arithmetic problem (~20s)
-2. One Ledger tap — mandate open (~25s). Honest: address-verify / Clear Signing
-   **pending ERC-7730 registry ingest** (F32). Do not say the device shows labeled
-   fields unless the screen does.
+2. One Ledger tap — mandate open (~25s). Honest: structured EIP-712 on device
+   (`clear-basic`, F32). Do **not** say labeled ERC-7730 fields unless
+   `npm run e2e:erc7730-device` printed `ERC7730_DEVICE_CLEAR`.
 3. Paid queries with zero extra taps (~30s). Paid JSON is live Agent0, not a demo row.
 4. Escalation + device in frame (~40s)
 5. HCS evidence (~25s)
@@ -67,5 +67,5 @@ settlement on Base Sepolia batch-settlement + Hedera exact, evidence on HCS.
 
 - Hedera Harness Tier 3.5: https://github.com/hedera-dev/hedera-harness/pull/54
 - ERC-7730 registry: https://github.com/ethereum/clear-signing-erc7730-registry/pull/2972
-  (submitted, pending ingest — until a device shows labeled fields, do not
-  claim Clear Signing).
+  (Voucher/Refund descriptors; pending ingest. Mandate-open tap is USDC EIP-3009
+  BASIC EIP-712 until CAL filters load — do not claim labeled Clear Signing).

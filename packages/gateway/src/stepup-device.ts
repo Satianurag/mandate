@@ -3,8 +3,8 @@
  */
 import { buildStepUpTypedData, formatStepUpMessage } from "./descriptor.ts";
 import { formatLedgerError } from "./ledger-errors.ts";
-import { SignerEthBuilder } from "./ledger-cjs.ts";
-import { awaitDeviceAction, getDmk, resetDmk, withDeviceSession } from "./dmk-session.ts";
+import { awaitDeviceAction, resetDmk, withDeviceSession } from "./dmk-session.ts";
+import { buildEthSigner } from "./dmksigner.ts";
 import type { PaymentProposal } from "./types.ts";
 
 const DERIVATION_PATH = process.env.MANDATE_LEDGER_PATH ?? "44'/60'/0'/0/0";
@@ -67,7 +67,7 @@ async function verifyStepUpOnDevice(
   const skipOpenApp = process.env.MANDATE_ETH_APP_OPEN === "1";
   await runWithRetries(async () => {
     await withDeviceSession(async (sessionId) => {
-      const signer = new SignerEthBuilder({ dmk: getDmk(), sessionId }).build();
+      const { signer } = await buildEthSigner(sessionId);
       const { observable } = signer.getAddress(DERIVATION_PATH, {
         checkOnDevice: true,
         skipOpenApp,
@@ -88,7 +88,7 @@ async function signMessageStepUpOnDevice(
 
   await runWithRetries(async () => {
     await withDeviceSession(async (sessionId) => {
-      const signer = new SignerEthBuilder({ dmk: getDmk(), sessionId }).build();
+      const { signer } = await buildEthSigner(sessionId);
       const useEip712 = process.env.MANDATE_STEPUP_EIP712 === "1";
       const { observable } = useEip712
         ? signer.signTypedData(DERIVATION_PATH, typedData, { skipOpenApp })

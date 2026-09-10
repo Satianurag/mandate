@@ -26,3 +26,8 @@ export const { nodeHidTransportFactory } = require("@ledgerhq/device-transport-k
 export const { SignerEthBuilder } = require("@ledgerhq/device-signer-kit-ethereum") as {
   SignerEthBuilder: typeof import("@ledgerhq/device-signer-kit-ethereum").SignerEthBuilder;
 };
+
+export const { ContextModuleBuilder, ContextModuleChainID } = require("@ledgerhq/context-module") as {
+  ContextModuleBuilder: typeof import("@ledgerhq/context-module").ContextModuleBuilder;
+  ContextModuleChainID: typeof import("@ledgerhq/context-module").ContextModuleChainID;
+};

@@ -18,12 +18,11 @@ environment. Start there; believe nothing else first.
 3. Fund the payer with Base Sepolia USDC and the submitter with ETH (the
    scripts print the funding links).
 4. `npm run check:mandate && npm run mandate:open` — **one device tap**
-   opens the on-chain escrow channel. Until Ledger's ERC-7730 registry
-   ingests our descriptors (PR submitted; F32), run
-   `npm run e2e:erc7730` for local lint and preview on the
-   [ERC-7730 Tester](https://app.devicesdk.ledger.com/clear-signing-tools).
-   **Do not claim production labeled Clear Signing until a device shows them
-   without the tester.**
+   opens the on-chain escrow channel (EIP-3009 USDC). Live Nano S+ proof:
+   `npm run e2e:erc7730-device` → structured EIP-712 (`clear-basic`), **not**
+   labeled ERC-7730 (`calFilters=error` without a partner `originToken`; F32).
+   Local descriptor lint: `npm run e2e:erc7730`. Preview: [ERC-7730 Tester](https://app.devicesdk.ledger.com/clear-signing-tools).
+   **Do not claim production labeled Clear Signing until `e2e:erc7730-device` prints `ERC7730_DEVICE_CLEAR`.**
 5. The agent now pays per request with off-chain vouchers, each capped by
    the mandate. Breach the envelope and the device is consulted again
    (`npm run e2e:stepup`, proven live — see `docs/STEPUP.md`).

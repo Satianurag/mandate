@@ -53,7 +53,7 @@ plan changes. Re-verify any time with `npm run verify` (counts itself) and
 | F29 | Stock `upto@eip155:84532` is advertised and the Permit2 proxy has code on Base Sepolia | **PROVEN** | 10 Sep |
 | F30 | Official Subgraph MCP SSE answers; `@graphops/subgraph-mcp` is not on npm | **PROVEN** | 10 Sep |
 | F31 | Graph production x402 still bills `eip155:8453` even for a Base Sepolia subgraph ID | **OPEN** (theirs) | 10 Sep |
-| F32 | ERC-7730 verifying contracts collected live; MandateStepUp has no on-chain verifier | **OPEN** | 10 Sep |
+| F32 | ERC-7730 labeled fields still wait on CAL `originToken` + registry ingest; live Nano S+ takes BASIC EIP-712 | **OPEN** | 10 Sep |
 | F33 | Ledger Proof of You has no separate PoH SDK — shipping surface is DMK + UAID | **PROVEN** | 10 Sep |
 | F34 | Graph testnet x402 402s any id; paid queries need a Graph Network *testnet* subgraph with allocations | **PROVEN** | 10 Sep |
 
@@ -683,7 +683,7 @@ operator run.
 | Graph docs hostname `testnet.gateway.thegraph.com` | F8 | Docs typo — live rail is `gateway.testnet.thegraph.com` (`npm run e2e:graph-x402`) |
 | Graph production x402 bills `eip155:8453` | F31 | Theirs — do not pay mainnet; testnet host is the Sepolia rail |
 | Hedera `batch-settlement@eip155:296` paid deposit | F28 | Protocol — CREATE2 escrow cannot hold HTS. Hedera paid rail is stock `exact@hedera:testnet` |
-| ERC-7730 registry ingest | F32 | Local lint + tester path; production labeled fields wait on merge |
+| ERC-7730 labeled fields | F32 | Live `clear-basic` on Nano S+; CAL filters 403 without partner `originToken`; PR 2972 still open |
 | Operator-gated leftover | Phase 5 | VPS host, narrated video, ETHGlobal form, Graph key rotation |
 
 ## How to add a finding
@@ -911,21 +911,39 @@ Collected 10 Sep (all have code on Base Sepolia 84532):
 `MandateStepUp` is **not** a deployed contract. A zero-address descriptor is
 banned; we will not pretend the batch-settlement address verifies a type it
 does not implement. Step-up therefore stays DMK `getAddress({ checkOnDevice:
-true })` until a real verifier exists. Registry PR covers the four addresses
-above. Registry PR: https://github.com/ethereum/clear-signing-erc7730-registry/pull/2972
+true })` until a real verifier exists. Registry PR 2972 covers only
+x402 Batch Settlement `Voucher`/`Refund` on `0x4020074e…` — not the four
+addresses above and not the EIP-3009 deposit the Ledger actually signs.
+Registry PR: https://github.com/ethereum/clear-signing-erc7730-registry/pull/2972
 (submitted 10 Sep 2026). Docs must say "submitted, pending registry" — never
-"device shows fields" — until ingest is observed on a device.
+"device shows labeled ERC-7730 fields" — until CAL returns filters (`calFilters=success`)
+on a live tap.
+
+The Ledger tap that opens a mandate is **not** the Voucher type in PR 2972.
+x402 calls the device once for Circle USDC EIP-3009 `ReceiveWithAuthorization`
+on `0x036CbD53842c5426634e7929541eC2318f3dCF7e`. Vouchers after that are signed
+by the hot session key. PR 2972 therefore does not label the mandate-open screen.
 
 **Re-probe 10 Sep 14:00 UTC:** PR
 https://github.com/ethereum/clear-signing-erc7730-registry/pull/2972 is still
 **OPEN** (not merged). GitHub checks are green (descriptor validate, Sourcify +
 Rust tests for `mandate/eip712-x402-BatchSettlement`). Ingest has not happened.
-Device path remains address-verify. Official local lint: `npm run e2e:erc7730`.
+Official local lint: `npm run e2e:erc7730`.
 
-**Live 10 Sep:** `npm run e2e:stepup` → `STEPUP_OK` via address-verify. The
-device did not show labeled MandateStepUp fields. Official CLI:
+**Live 10 Sep (Nano S+ `0x57a2a47C…`, Ethereum app open):**
+`MANDATE_ETH_APP_OPEN=1 npm run e2e:erc7730-device` signed a non-settlable
+USDC `ReceiveWithAuthorization` (`validAfter` ~10 years ahead). Recovered
+signer matched the device. DMK steps were `provideContext` + `signTypedData`
+(not `signTypedDataLegacy`). Wrapped `getTypedDataFilters` returned **error**
+(`calFilters=error`). Direct CAL `GET /cal/v1/dapps` is HTTP 403 without a
+partner `originToken`. Verdict: **`clear-basic`**, `labeledClearSigning=false`.
+The Ethereum app showed structured EIP-712 fields from the type; it did **not**
+load ERC-7730 CAL filters. `originToken` is wired (`LEDGER_ORIGIN_TOKEN` or
+Key Ring `secrets/ledger-origin.enc`) and was unset. Step-up remains
+address-verify (`npm run e2e:stepup`).
+
 `python3.12` venv `erc7730 lint` on `docs/erc7730/*.json` →
-`checked 2 v2 descriptor files, no errors found` (`npm run e2e:erc7730`).
+`checked 2 v2 descriptor files` (`npm run e2e:erc7730`).
 `docs/erc7730-mandate-stepup.json` is local-lint only — it is not a registry
 descriptor (MandateStepUp has no verifying contract). Preview on a signer:
 https://app.devicesdk.ledger.com/clear-signing-tools

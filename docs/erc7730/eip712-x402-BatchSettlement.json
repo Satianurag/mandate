@@ -25,6 +25,7 @@
     "formats": {
       "Voucher(bytes32 channelId,uint128 maxClaimableAmount)": {
         "intent": "Authorize voucher",
+        "interpolatedIntent": "Cap {maxClaimableAmount}",
         "fields": [
           { "path": "channelId", "label": "Channel", "format": "raw", "visible": "always" },
           { "path": "maxClaimableAmount", "label": "Max claimable", "format": "raw", "visible": "always" }
@@ -32,6 +33,7 @@
       },
       "Refund(bytes32 channelId,uint256 nonce,uint128 amount)": {
         "intent": "Refund deposit",
+        "interpolatedIntent": "Refund {amount}",
         "fields": [
           { "path": "channelId", "label": "Channel", "format": "raw", "visible": "always" },
           { "path": "nonce", "label": "Nonce", "format": "raw" },

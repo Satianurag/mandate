@@ -50,18 +50,36 @@ export async function withDeviceSession<T>(
   }
 }
 
+export interface DeviceActionTrace {
+  status: string;
+  step?: string;
+  interaction?: string;
+}
+
 export async function awaitDeviceAction<TOutput>(
   observable: { pipe: (...ops: unknown[]) => unknown },
-  timeoutMs: number
+  timeoutMs: number,
+  trace?: DeviceActionTrace[]
 ): Promise<TOutput> {
   const state = await firstValueFrom(
     (observable as import("rxjs").Observable<DeviceActionState<TOutput>>).pipe(
       tap((s) => {
+        const iv = (
+          s as {
+            intermediateValue?: { requiredUserInteraction?: string; step?: string };
+          }
+        ).intermediateValue;
+        if (trace) {
+          trace.push({
+            status: String(s.status),
+            step: iv?.step,
+            interaction: iv?.requiredUserInteraction,
+          });
+        }
         if (s.status === DeviceActionStatus.Pending) {
-          const hint =
-            (s as { intermediateValue?: { requiredUserInteraction?: string } }).intermediateValue
-              ?.requiredUserInteraction ?? "confirm on device";
-          console.error(`>>> Ledger waiting: ${hint}`);
+          const hint = iv?.requiredUserInteraction ?? "confirm on device";
+          const step = iv?.step ? ` ${iv.step}` : "";
+          console.error(`>>> Ledger waiting:${step} ${hint}`);
         }
       }),
       filter(

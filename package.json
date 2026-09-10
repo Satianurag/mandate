@@ -43,6 +43,7 @@
     "e2e:hedera-exact": "node --experimental-strip-types scripts/e2e-payment.mjs",
     "e2e:hedera-usdc": "node --experimental-strip-types scripts/e2e-hedera-usdc.mjs",
     "e2e:erc7730": "node --experimental-strip-types scripts/e2e-erc7730.mjs",
+    "e2e:erc7730-device": "node --experimental-strip-types scripts/e2e-erc7730-device.mjs",
     "facilitator": "npm run dev -w @mandate/facilitator",
     "mandate-service": "npm run dev -w @mandate/mandate-service",
     "mandate:keygen": "node --experimental-strip-types scripts/mandate-keygen.mjs",
