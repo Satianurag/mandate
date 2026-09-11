@@ -100,8 +100,11 @@ export async function awaitDeviceAction<TOutput>(
   if (state.status === DeviceActionStatus.Stopped) {
     throw new Error("device action stopped by user");
   }
-  if (state.status !== DeviceActionStatus.Completed || state.output === undefined) {
+  if (state.status !== DeviceActionStatus.Completed) {
     throw new Error("device action did not complete");
   }
-  return state.output;
+  // Some successful DMK actions intentionally return void/undefined (for
+  // example OpenAppDeviceAction). Completion status, not output presence, is
+  // the success signal.
+  return state.output as TOutput;
 }
