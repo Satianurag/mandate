@@ -132,6 +132,15 @@ test('a fully consumed closed mandate can be replaced without deleting its histo
   assert.equal(second.financial.channelId, null);
   assert.equal(second.tasks.length, 0);
   assert.equal(second.historicalTaskCount, 1);
+  assert.equal(second.historicalTasks.length, 1);
+  assert.equal(second.historicalTasks[0].id, 'historical-query');
+  assert.equal(second.historicalTasks[0].mandate_id, mandateId);
+  assert.equal(Object.hasOwn(second.historicalTasks[0], 'result'), false);
+  const historicalDetailResponse = await request('/api/tasks/historical-query');
+  assert.equal(historicalDetailResponse.status, 200);
+  const historicalDetail = await historicalDetailResponse.json() as any;
+  assert.equal(historicalDetail.task.id, 'historical-query');
+  assert.equal(historicalDetail.task.mandate_id, mandateId);
   const secondMandateId = digest({ network: second.config.network, salt: second.config.salt });
   assert.ok(second.events.every((event: any) => event.mandate_id === secondMandateId));
   assert.ok(second.historicalWorkspaceEventCount >= 2);

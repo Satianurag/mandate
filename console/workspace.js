@@ -271,14 +271,16 @@ function renderResult(task) {
   detail.append(el('summary', 'Inspect complete evidence and payment receipt'), el('pre', pretty(result)));
   container.append(detail);
 }
-function renderHistory(tasks, historicalTaskCount = 0) {
-  const root = $('history');
-  root.replaceChildren();
-  if (!tasks.length) {
-    const suffix = historicalTaskCount > 0 ? ` ${historicalTaskCount} task${historicalTaskCount === 1 ? '' : 's'} from prior Mandates remain preserved outside this workspace.` : '';
-    root.append(el('p', `No task has been submitted for this Mandate.${suffix}`, 'empty-inline'));
-    return;
-  }
+const taskTitle = task => ({
+  refund: 'Remaining-funds recovery',
+  settlement: 'Merchant claim and settlement',
+  evidence: 'HCS evidence publication',
+  query: 'Agent0 due diligence',
+  withdrawal_initiate: 'Timed withdrawal initiation',
+  withdrawal_finalize: 'Timed withdrawal finalization',
+})[task.kind] || readable(task.kind);
+
+function historyTable(tasks, archived = false) {
   const table = el('table');
   const head = el('tr');
   ['Task / request ID', 'State', 'Updated', 'Result'].forEach(text => head.append(el('th', text)));
@@ -286,25 +288,53 @@ function renderHistory(tasks, historicalTaskCount = 0) {
   for (const task of tasks) {
     const row = el('tr');
     const id = el('td');
-    const title = ({ refund: 'Remaining-funds recovery', settlement: 'Merchant claim and settlement', evidence: 'HCS evidence publication', query: 'Agent0 due diligence' })[task.kind] || readable(task.kind);
-    id.append(el('strong', title), el('div', task.id, 'event-meta'));
+    id.append(el('strong', taskTitle(task)), el('div', task.id, 'event-meta'));
+    if (archived) id.append(el('div', `Mandate ${task.mandate_id.slice(0, 10)}…`, 'event-meta'));
     if (task.task?.source) id.append(el('div', `${sourceLabel(task.task.source.chain)} · ${task.task.maxResults} candidates`, 'event-meta'));
     const state = el('td');
     state.append(badge(readable(task.state), statusType(task.state)));
     const action = el('td');
     const button = el('button', 'Inspect', 'text-button');
     button.type = 'button';
-    button.addEventListener('click', () => {
-      selectedTask = task.id;
-      renderResult(task);
-      $('result').scrollIntoView({ block: 'center', behavior: 'smooth' });
+    button.addEventListener('click', async () => {
+      button.disabled = true;
+      try {
+        const selected = archived ? (await api(`/api/tasks/${encodeURIComponent(task.id)}`)).task : task;
+        selectedTask = selected.id;
+        renderResult(selected);
+        $('result').scrollIntoView({ block: 'center', behavior: 'smooth' });
+      } catch (error) { message(`Could not read preserved task: ${error.message}`, true); }
+      finally { button.disabled = false; }
     });
     action.append(button);
     row.append(id, state, el('td', when(task.updated_at)), action);
     table.append(row);
   }
-  root.append(table);
-  if (historicalTaskCount > 0) root.append(el('p', `Showing this Mandate only. ${historicalTaskCount} prior task${historicalTaskCount === 1 ? '' : 's'} remain preserved.`, 'subtle history-scope'));
+  return table;
+}
+
+function renderHistory(tasks, historicalTasks = [], historicalTaskCount = 0) {
+  const root = $('history');
+  root.replaceChildren();
+  if (!tasks.length) root.append(el('p', 'No task has been submitted for this Mandate.', 'empty-inline'));
+  else {
+    const currentWrap = el('div', undefined, 'table-scroll');
+    currentWrap.append(historyTable(tasks));
+    root.append(currentWrap);
+  }
+
+  if (historicalTaskCount > 0) {
+    const archive = el('details', undefined, 'history-archive');
+    archive.open = tasks.length === 0;
+    archive.append(el('summary', `Prior Mandates · ${historicalTaskCount} preserved task${historicalTaskCount === 1 ? '' : 's'}`));
+    if (historicalTasks.length) {
+      const archiveWrap = el('div', undefined, 'table-scroll');
+      archiveWrap.append(historyTable(historicalTasks, true));
+      archive.append(archiveWrap);
+      if (historicalTaskCount > historicalTasks.length) archive.append(el('p', `Showing the ${historicalTasks.length} most recent preserved tasks.`, 'subtle history-scope'));
+    } else archive.append(el('p', 'Prior task records remain preserved but are not available in this response.', 'empty-inline'));
+    root.append(archive);
+  }
 }
 function renderEvidence(events) {
   const root = $('evidence');
@@ -448,7 +478,7 @@ function render(state) {
   const latest = tasks.find(task => task.kind === 'query') || tasks[0];
   $('taskStatus').textContent = latest ? readable(latest.state) : 'No task yet';
   $('taskStatus').className = `badge ${statusType(latest?.state)}`;
-  renderHistory(tasks, state.historicalTaskCount || 0);
+  renderHistory(tasks, state.historicalTasks || [], state.historicalTaskCount || 0);
   renderResult(tasks.find(task => task.id === selectedTask) || tasks.find(task => task.kind === 'query' && task.state === 'succeeded') || latest);
   const events = [...state.events, ...(finance?.events || []), ...(state.merchantEvidence?.events || [])].sort((a, b) => b.created_at - a.created_at);
   renderEvidence(events);
@@ -472,7 +502,7 @@ async function refresh(force = false) {
     $('connectionDot').className = 'dot connected';
     $('connectionText').textContent = 'Connected to local broker';
     $('observedAt').textContent = `State checked ${when(state.observedAt)}`;
-    const next = JSON.stringify([state.config, state.financial, state.tasks, state.events, state.merchantEvidence, state.legacy, state.defaultTask]);
+    const next = JSON.stringify([state.config, state.financial, state.tasks, state.historicalTasks, state.historicalTaskCount, state.events, state.merchantEvidence, state.legacy, state.defaultTask]);
     if (force || next !== fingerprint) {
       fingerprint = next;
       render(state);

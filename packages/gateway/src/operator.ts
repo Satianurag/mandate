@@ -197,6 +197,7 @@ export async function createOperatorApp(options: OperatorOptions): Promise<Opera
   };
   const tasks = () => journal.db.prepare("SELECT * FROM workspace_tasks ORDER BY created_at DESC LIMIT 100").all() as unknown as TaskRow[];
   const tasksForMandate = (mandateId: string) => journal.db.prepare("SELECT * FROM workspace_tasks WHERE mandate_id=? ORDER BY created_at DESC LIMIT 100").all(mandateId) as unknown as TaskRow[];
+  const historicalTasksForMandate = (mandateId: string) => journal.db.prepare("SELECT * FROM workspace_tasks WHERE mandate_id != ? ORDER BY created_at DESC LIMIT 50").all(mandateId) as unknown as TaskRow[];
   const historicalTaskCount = (mandateId: string) => Number((journal.db.prepare("SELECT COUNT(*) AS n FROM workspace_tasks WHERE mandate_id != ?").get(mandateId) as { n?: number } | undefined)?.n ?? 0);
   const taskById = (id: string) => journal.db.prepare("SELECT * FROM workspace_tasks WHERE id=?").get(id) as unknown as TaskRow | undefined;
   const parseTaskSpec = (task: TaskRow): unknown => task.task_spec ? JSON.parse(task.task_spec) : null;
@@ -212,6 +213,16 @@ export async function createOperatorApp(options: OperatorOptions): Promise<Opera
     return publicPlan;
   };
   const taskForApi = (task: TaskRow | undefined) => task ? ({ ...task, task_spec: undefined, intent_hash: undefined, task: publicTaskSpec(task) }) : undefined;
+  const taskSummaryForApi = (task: TaskRow) => ({
+    id: task.id,
+    kind: task.kind,
+    mandate_id: task.mandate_id,
+    state: task.state,
+    error: task.error,
+    created_at: task.created_at,
+    updated_at: task.updated_at,
+    task: publicTaskSpec(task),
+  });
   const updateTask = (id: string, state: string, result?: unknown, error?: string) => {
     journal.db.prepare("UPDATE workspace_tasks SET state=?,result=?,error=?,updated_at=? WHERE id=?")
       .run(state, result === undefined ? null : JSON.stringify(result), error ?? null, Date.now(), id);
@@ -707,12 +718,14 @@ export async function createOperatorApp(options: OperatorOptions): Promise<Opera
         const merchantEvidence=readMerchantEvidence(channelId);
         const evidencePublication = await evidencePublicationPlan(financial, merchantEvidence);
         const currentTasks = currentMandateId ? tasksForMandate(currentMandateId) : [];
+        const historicalTasks = currentMandateId ? historicalTasksForMandate(currentMandateId) : [];
         const currentEvents = currentMandateId ? journal.events(currentMandateId) : [];
         const historicalWorkspaceEventCount = currentMandateId
           ? Number((journal.db.prepare("SELECT COUNT(*) AS n FROM events WHERE mandate_id != ?").get(currentMandateId) as { n?: number } | undefined)?.n ?? 0)
           : Number((journal.db.prepare("SELECT COUNT(*) AS n FROM events").get() as { n?: number } | undefined)?.n ?? 0);
-        respond(res, 200, { version: 4, observedAt: new Date().toISOString(), config: cfg, mandateId: currentMandateId,
-          financial, tasks: currentTasks.map(taskForApi), historicalTaskCount: currentMandateId ? historicalTaskCount(currentMandateId) : tasks().length,
+        respond(res, 200, { version: 5, observedAt: new Date().toISOString(), config: cfg, mandateId: currentMandateId,
+          financial, tasks: currentTasks.map(taskForApi), historicalTasks: historicalTasks.map(taskSummaryForApi),
+          historicalTaskCount: currentMandateId ? historicalTaskCount(currentMandateId) : tasks().length,
           legacy: await legacyInfo(), merchantEvidence, evidencePublication,
           defaultTask: cfg ? defaultResearchTask(cfg) : null, comparisonQuery: COMPARISON_QUERY, events: currentEvents,
           historicalWorkspaceEventCount, eventChainValid: journal.verifyEventChain(),

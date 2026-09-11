@@ -40,4 +40,4 @@ h4{margin:0;font-size:14px;letter-spacing:-.015em}
   .result-hero h4{font-size:18px}
 }
 
-.history-scope{margin:12px 0 0;padding:0 2px}
+.history-scope{margin:12px 0 0;padding:0 2px}.history-archive{border-top:1px solid var(--line);margin-top:18px;padding-top:5px}.history-archive>summary{color:var(--ink);font-size:12px;justify-content:space-between}.history-archive>summary::after{content:"Read only";font-size:9px;letter-spacing:.1em;color:var(--muted);font-weight:600}.history-archive>.table-scroll{margin-top:8px}

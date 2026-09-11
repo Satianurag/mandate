@@ -79,6 +79,30 @@ try {
   assert.equal(await page.locator('textarea').count(), 0, 'default product flow must not expose raw GraphQL');
   report.checks.push('source-bound limits persist exactly; default flow has no raw GraphQL editor; checkbox is not simulated Ledger approval');
 
+  // Prior-Mandate tasks are a separate read-only archive and never become current authority.
+  const historicalMandateId = digest({ network: actualState.config.network, salt: `0x${'cd'.repeat(32)}` });
+  app.journal.db.prepare(`INSERT INTO workspace_tasks(
+    id,kind,mandate_id,capability_id,query,task_spec,intent_hash,state,result,error,created_at,updated_at
+  ) VALUES(?,'query',?,NULL,'',NULL,NULL,'failed',NULL,?,?,?)`).run(
+    'browser-historical-0001',
+    historicalMandateId,
+    'Archived fixture remains inspectable.',
+    Date.now(),
+    Date.now(),
+  );
+  await page.reload();
+  const archive = page.locator('.history-archive');
+  await archive.getByText('Prior Mandates · 1 preserved task').waitFor();
+  assert.equal(await archive.getByText('Mandate ', { exact: false }).count() > 0, true);
+  await archive.getByRole('button', { name: 'Inspect', exact: true }).click();
+  await page.getByText('Archived fixture remains inspectable.').waitFor();
+  const archivedState = await page.evaluate(async () => (await fetch('/api/state')).json());
+  assert.equal(archivedState.tasks.length, 0);
+  assert.equal(archivedState.historicalTaskCount, 1);
+  assert.equal(archivedState.historicalTasks.length, 1);
+  assert.equal(Object.hasOwn(archivedState.historicalTasks[0], 'result'), false);
+  report.checks.push('prior-Mandate tasks stay separate from current authority but remain inspectable through a read-only archive');
+
   // Model a lost browser response after the broker accepted a task. The UI must observe this exact ID, never create another.
   const pendingId = 'browser-pending-0001';
   const task = { ...actualState.defaultTask, maxResults: 3 };
