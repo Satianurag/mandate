@@ -1663,9 +1663,9 @@
       }
     ],
     "screenshots": [
-      "/Users/Apple/Documents/mandate//.live-results/repair/visual-final/desktop.png",
-      "/Users/Apple/Documents/mandate//.live-results/repair/visual-final/mobile.png",
-      "/Users/Apple/Documents/mandate//.live-results/repair/visual-final/result-receipt.png"
+      ".live-results/repair/visual-final/desktop.png",
+      ".live-results/repair/visual-final/mobile.png",
+      ".live-results/repair/visual-final/result-receipt.png"
     ],
     "accounting": {
       "authorized": "0.10 USDC",

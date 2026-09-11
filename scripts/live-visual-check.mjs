@@ -27,7 +27,7 @@ try{
   const result=await new AxeBuilder({page}).withTags(['wcag2a','wcag2aa','wcag21aa']).analyze();
   const violations=result.violations.map(v=>({id:v.id,impact:v.impact,targets:v.nodes.map(n=>n.target)}));
   const screenshot=`${directory}/${viewport.name}.png`;await page.screenshot({path:screenshot,fullPage:true});
-  report.screenshots.push(screenshot);report.checks.push({viewport:viewport.name,violations});
+  report.screenshots.push(`.live-results/repair/visual-final/${viewport.name}.png`);report.checks.push({viewport:viewport.name,violations});
   assert.deepEqual(violations,[],`${viewport.name}: accessibility violations`);
  }
  await page.setViewportSize({width:1440,height:1000});

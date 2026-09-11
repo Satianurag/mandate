@@ -2,11 +2,21 @@
 /** Export public, independently checkable run facts. Never copy keys, session tokens, or private profiles. */
 import {readFile,writeFile,mkdir} from 'node:fs/promises';
 import {DatabaseSync} from 'node:sqlite';
-import {resolve,join} from 'node:path';
+import {resolve,join,relative,isAbsolute,sep} from 'node:path';
 import {parseMandateFile} from '../packages/gateway/src/mandate-config.ts';
 import {Journal,digest} from '../packages/gateway/src/journal.ts';
 import {snapshotChannel} from '../packages/gateway/src/reconciliation.ts';
 const root=new URL('..',import.meta.url).pathname;
+function publicArtifact(value){
+ if(Array.isArray(value))return value.map(publicArtifact);
+ if(value&&typeof value==='object')return Object.fromEntries(Object.entries(value).map(([key,item])=>[key,publicArtifact(item)]));
+ if(typeof value==='string'&&isAbsolute(value)){
+  const local=relative(root,resolve(value));
+  if(local==='..'||local.startsWith(`..${sep}`)||isAbsolute(local))throw new Error('Public proof artifact points outside the repository');
+  return local.split(sep).join('/');
+ }
+ return value;
+}
 const cfg=parseMandateFile(await readFile(join(root,'state/live/operator/active-mandate.yaml'),'utf8'));
 const id=digest({network:cfg.network,salt:cfg.salt});
 const financial=new Journal(join(resolve(root,cfg.storageRoot),'broker.sqlite'));
@@ -41,7 +51,7 @@ try{
    evidence,
  };
  for(const [name,file] of [['headless','headless-live.json'],['agentIsolation','agent-isolation.json'],['agentPaid','agent-paid.json'],['consensusReadback','hcs-readback.json'],['visual','visual-final/report.json']]){
-   try{proof[name]=JSON.parse(await readFile(join(root,'.live-results/repair',file),'utf8'));}catch{proof[name]=null;}
+   try{proof[name]=publicArtifact(JSON.parse(await readFile(join(root,'.live-results/repair',file),'utf8')));}catch{proof[name]=null;}
  }
  await mkdir(join(root,'docs/verification'),{recursive:true});
  await writeFile(join(root,'docs/verification/live-proof-2026-09-11.json'),JSON.stringify(proof,null,2));
