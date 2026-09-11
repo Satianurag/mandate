@@ -148,6 +148,7 @@ try {
   }
   const report = device.lastClearSigning;
   const labeled = report?.verdict === "erc7730";
+  const developmentCal = process.env.MANDATE_LEDGER_TEST_CAL_URL?.trim() || null;
   summary = {
     ok: true,
     labeledClearSigning: labeled,
@@ -161,13 +162,16 @@ try {
     validAfter: typedData.message.validAfter,
     signatureLength: signature.length,
     clearSigning: report,
+    developmentContext: developmentCal
+      ? { mode: "test", loopback: true, calUrl: developmentCal, broadcast: false }
+      : null,
     cal,
     registryPr: REGISTRY_PR,
     tester: "https://app.devicesdk.ledger.com/clear-signing-tools",
   };
   const tag =
     report?.verdict === "erc7730"
-      ? "ERC7730_DEVICE_CLEAR"
+      ? developmentCal ? "ERC7730_DEVICE_CLEAR_TEST" : "ERC7730_DEVICE_CLEAR"
       : report?.verdict === "clear-basic"
         ? "ERC7730_DEVICE_BASIC"
         : report?.verdict === "legacy-eip712"
@@ -176,6 +180,10 @@ try {
             ? "ERC7730_DEVICE_BLIND"
             : "ERC7730_DEVICE_UNKNOWN";
   console.log(tag, JSON.stringify({ verdict: report?.verdict, calFilters: report?.calFilters, steps: report?.steps, labeled }));
+  if (developmentCal && !labeled) {
+    console.error("ERC7730_TEST_CONTEXT_NOT_APPLIED: development CAL was enabled but the device did not use ERC-7730 filters");
+    process.exitCode = 2;
+  }
 } catch (e) {
   summary = {
     ok: false,

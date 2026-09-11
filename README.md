@@ -23,9 +23,13 @@ channel, receipts, query provenance, observed balances, and signing report.
 [Audit acceptance](docs/AUDIT-REMEDIATION.md) separates implementation, deterministic
 tests, live observations, and excluded claims.
 
-The device path recorded **clear-basic**, not ERC-7730. The descriptor lint result
-is separate from what happened on the device. A fresh broker process also completed
-a paid call with native HID bindings disabled; a physically unplugged or separately
+The financial funding trace recorded **clear-basic**. Separately, a physical
+Ledger Nano S+ running EthereumTest 1.23.0-dev completed the legitimate Ledger
+Device SDK development path for ERC-7730: loopback test-CAL, Ledger CAL test key,
+`calFilters=success`, `verdict=erc7730`, no broadcast and zero funds moved. That
+is **not** production CAL or registry acceptance. The exact proof is
+[`docs/verification/ledger-erc7730-device-2026-09-11.json`](docs/verification/ledger-erc7730-device-2026-09-11.json). A fresh broker process also completed a paid
+call with native HID bindings disabled; a physically unplugged or separately
 provisioned VPS broker was not demonstrated. These are not interchangeable claims.
 
 ## Verify from a clean checkout without keys or funds

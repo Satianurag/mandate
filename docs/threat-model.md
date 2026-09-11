@@ -66,10 +66,12 @@ supply chain or a clean advisory report by hiding transitive packages.
 ## Deliberately excluded claims
 
 No mainnet financial operation is supported. The live test did not demonstrate a
-physically unplugged or remotely provisioned VPS broker, on-device ERC-7730 labels,
-a running LLM fleet, universal ERC-8004 reputation scores, or a permissionless
-network-wide identity/uniqueness proof. Descriptor lint, unit tests, recorded device
-traces, and real chain transactions are different kinds of evidence.
+physically unplugged or remotely provisioned VPS broker, production CAL/registry
+ERC-7730 labels, a running LLM fleet, universal ERC-8004 reputation scores, or a
+permissionless network-wide identity/uniqueness proof. ERC-7730 hardware labels are
+demonstrated only through the Ledger development test-CAL path on EthereumTest.
+Descriptor lint, unit tests, recorded device traces, and real chain transactions
+are different kinds of evidence.
 
 Ledger explicitly documents the same-user environment risk and device-free
 post-provisioning decryption:

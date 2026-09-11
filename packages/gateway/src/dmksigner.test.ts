@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { joinSignature } from "./dmksigner.ts";
+import { hashTypedData } from "viem";
+import { joinSignature, withExplicitEip712DomainType } from "./dmksigner.ts";
 
 // joinSignature is pure and load-bearing (a malformed join is a signature
 // the facilitator rejects, or worse, one that verifies for wrong bytes):
@@ -26,4 +27,58 @@ test("joinSignature pads short r/s and normalizes 0/1-style v to 27/28", () => {
     v: 27,
   });
   assert.ok(already.endsWith("1b"));
+});
+
+
+test("withExplicitEip712DomainType adds Ledger-compatible canonical domain schema without mutation", () => {
+  const original = {
+    domain: { name: "USDC", version: "2", chainId: 84532, verifyingContract: "0x036CbD53842c5426634e7929541eC2318f3dCF7e" },
+    types: { ReceiveWithAuthorization: [{ name: "from", type: "address" }] } as Record<string, unknown>,
+    primaryType: "ReceiveWithAuthorization",
+    message: { from: "0x0000000000000000000000000000000000000001" },
+  };
+  const normalized = withExplicitEip712DomainType(original);
+  assert.notEqual(normalized, original);
+  assert.equal(original.types.EIP712Domain, undefined);
+  assert.deepEqual(normalized.types.EIP712Domain, [
+    { name: "name", type: "string" },
+    { name: "version", type: "string" },
+    { name: "chainId", type: "uint256" },
+    { name: "verifyingContract", type: "address" },
+  ]);
+});
+
+test("withExplicitEip712DomainType preserves an explicit caller domain schema", () => {
+  const domain = [{ name: "chainId", type: "uint256" }];
+  const original = { domain: { chainId: 84532 }, types: { EIP712Domain: domain }, primaryType: "Ping", message: {} };
+  const normalized = withExplicitEip712DomainType(original);
+  assert.deepEqual(normalized.types.EIP712Domain, domain);
+});
+
+
+test("Ledger domain normalization preserves the exact EIP-712 digest", () => {
+  const original = {
+    domain: { name: "USDC", version: "2", chainId: 84532, verifyingContract: "0x036CbD53842c5426634e7929541eC2318f3dCF7e" },
+    types: {
+      ReceiveWithAuthorization: [
+        { name: "from", type: "address" },
+        { name: "to", type: "address" },
+        { name: "value", type: "uint256" },
+        { name: "validAfter", type: "uint256" },
+        { name: "validBefore", type: "uint256" },
+        { name: "nonce", type: "bytes32" },
+      ],
+    } as Record<string, unknown>,
+    primaryType: "ReceiveWithAuthorization",
+    message: {
+      from: "0x57a2a47Ca22AE52867c5313c4d9ab43070D7C202",
+      to: "0x57a2a47Ca22AE52867c5313c4d9ab43070D7C202",
+      value: 1n,
+      validAfter: 1n,
+      validBefore: 2n,
+      nonce: `0x${"11".repeat(32)}`,
+    },
+  };
+  const normalized = withExplicitEip712DomainType(original);
+  assert.equal(hashTypedData(original as any), hashTypedData(normalized as any));
 });

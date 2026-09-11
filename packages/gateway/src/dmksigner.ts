@@ -33,6 +33,40 @@ import type { ContextModule } from "@ledgerhq/context-module";
 
 export const DEFAULT_DERIVATION_PATH = "44'/60'/0'/0/0";
 
+export type DmkSigningMessage = {
+  domain: Record<string, unknown>;
+  types: Record<string, unknown>;
+  primaryType: string;
+  message: Record<string, unknown>;
+};
+
+/**
+ * Ledger's ERC-7730 descriptor lookup hashes the caller-supplied `types`.
+ * Make the canonical EIP712Domain explicit before the device call so the
+ * lookup schema matches the descriptor processor. This does not mutate the
+ * x402 payload and does not change the EIP-712 digest.
+ */
+export function withExplicitEip712DomainType(message: DmkSigningMessage): DmkSigningMessage {
+  if (Array.isArray(message.types.EIP712Domain)) {
+    return { ...message, types: { ...message.types } };
+  }
+  const canonical: Array<{ name: string; type: string }> = [];
+  const domainTypes: Array<[string, string]> = [
+    ["name", "string"],
+    ["version", "string"],
+    ["chainId", "uint256"],
+    ["verifyingContract", "address"],
+    ["salt", "bytes32"],
+  ];
+  for (const [name, type] of domainTypes) {
+    if (message.domain[name] !== undefined) canonical.push({ name, type });
+  }
+  return {
+    ...message,
+    types: { ...message.types, EIP712Domain: canonical },
+  };
+}
+
 export interface ClearSigningReport {
   originTokenPresent: boolean;
   verdict: ClearSigningVerdict;
@@ -44,12 +78,23 @@ export interface ClearSigningReport {
 export async function buildEthSigner(sessionId: string) {
   const originToken = await loadLedgerOriginToken();
   const cal = { typedDataFilters: "none" as CalFilterStatus };
-  const inner = new ContextModuleBuilder({
+  const contextBuilder = new ContextModuleBuilder({
     originToken: originToken ?? "",
     loggerFactory: (tag) => getDmk().getLoggerFactory()(["ContextModule", tag]),
-  })
-    .setChain(ContextModuleChainID.Ethereum)
-    .build();
+  }).setChain(ContextModuleChainID.Ethereum);
+
+  // Official Ledger development path: test-signed ERC-7730 context through a
+  // loopback CAL bridge. Never allow this test mode to target a remote host.
+  const testCal = process.env.MANDATE_LEDGER_TEST_CAL_URL?.trim();
+  if (testCal) {
+    const url = new URL(testCal);
+    if (url.protocol !== "http:" || !["127.0.0.1", "localhost"].includes(url.hostname)) {
+      throw new Error("MANDATE_LEDGER_TEST_CAL_URL must be loopback HTTP");
+    }
+    contextBuilder.setCalConfig({ url: url.origin, mode: "test", branch: "main" });
+  }
+
+  const inner = contextBuilder.build();
   const contextModule: ContextModule = {
     getContexts: (input, types) => inner.getContexts(input, types),
     getFieldContext: (field, expectedType) => inner.getFieldContext(field, expectedType),
@@ -144,12 +189,7 @@ export class DmkEvmSigner implements ClientEvmSigner {
    * x402 passes — the stock EIP-3009 authorization. Inspect the recorded signing report;
    * do not infer on-device human-readable scope labels from application text.
    */
-  async signTypedData(message: {
-    domain: Record<string, unknown>;
-    types: Record<string, unknown>;
-    primaryType: string;
-    message: Record<string, unknown>;
-  }): Promise<`0x${string}`> {
+  async signTypedData(message: DmkSigningMessage): Promise<`0x${string}`> {
     assertTestnetChain(message.domain.chainId);
     this.signCalls++;
     const trace: DeviceActionTrace[] = [];
@@ -157,9 +197,10 @@ export class DmkEvmSigner implements ClientEvmSigner {
       const sig = await withDeviceSession(async (sessionId) => {
         const { signer, originTokenPresent, cal } = await buildEthSigner(sessionId);
         try {
+          const ledgerMessage = withExplicitEip712DomainType(message);
           const { observable } = signer.signTypedData(
             this.path,
-            message as unknown as DmkTypedData,
+            ledgerMessage as unknown as DmkTypedData,
             { skipOpenApp: this.skipOpenApp }
           );
           return await awaitDeviceAction<DmkSignature>(observable, this.timeoutMs, trace);

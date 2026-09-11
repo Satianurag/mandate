@@ -68,8 +68,11 @@ build/test proof, not the headless paid-broker proof.
 
 `npm run verify:descriptors` invokes the official ERC-7730 linter. Full lint passed
 for the current USDC and batch descriptors. Missing tooling is a failure; schema-only
-validation is labeled separately. Runtime device trace was **clear-basic**, and
-registry acceptance / device-specific ERC-7730 labels are not claimed.
+validation is labeled separately. The financial funding trace was **clear-basic**.
+A separate physical Ledger development proof used EthereumTest, a loopback Ledger
+test-CAL bridge and CAL-test-key signatures to reach `calFilters=success` and
+`verdict=erc7730` for Base Sepolia USDC typed data. This is labeled development
+evidence, not production CAL/registry acceptance, and it broadcast nothing.
 
 ## Live failures repaired rather than concealed
 

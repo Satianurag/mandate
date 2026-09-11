@@ -1674,5 +1674,115 @@
       "furtherSpendingDisabled": true
     },
     "ok": true
+  },
+  "ledgerErc7730Development": {
+    "format": "mandate-ledger-erc7730-device-proof-v1",
+    "observedAt": "2026-09-11",
+    "network": "eip155:84532",
+    "testnetOnly": true,
+    "productionCal": {
+      "status": "not-available-without-origin-token",
+      "observed": {
+        "usdc84532": {
+          "address": "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
+          "chainId": 84532,
+          "originTokenPresent": false,
+          "status": 403,
+          "bytes": 0,
+          "descriptorKeys": 0,
+          "ms": 617
+        },
+        "batch84532": {
+          "address": "0x4020074e9dF2ce1deE5A9C1b5c3f541D02a10003",
+          "chainId": 84532,
+          "originTokenPresent": false,
+          "status": 403,
+          "bytes": 0,
+          "descriptorKeys": 0,
+          "ms": 274
+        },
+        "permit284532": {
+          "address": "0x000000000022D473030F116dDEE9F6B43aC78BA3",
+          "chainId": 84532,
+          "originTokenPresent": false,
+          "status": 403,
+          "bytes": 0,
+          "descriptorKeys": 0,
+          "ms": 435
+        }
+      },
+      "originTokenPresent": false,
+      "registryPr": "https://github.com/ethereum/clear-signing-erc7730-registry/pull/2972",
+      "claim": "not production CAL/registry acceptance"
+    },
+    "developmentCal": {
+      "mode": "ledger-cal-test-key",
+      "loopbackOnly": true,
+      "broadcast": false,
+      "health": {
+        "ok": true,
+        "mode": "ledger-cal-test-key",
+        "network": "eip155:84532",
+        "descriptorKeys": [
+          "84532:0x036cbd53842c5426634e7929541ec2318f3dcf7e",
+          "84532:0x4020074e9df2ce1dee5a9c1b5c3f541d02a10003"
+        ],
+        "signedInstructions": 13,
+        "pkiCertificates": 0,
+        "testKeyFingerprint": "a1609ceb5c83174145c39e67826ad702e3c84aa191b7d85e4799cb61ce13e386"
+      },
+      "contextProbe": {
+        "ok": true,
+        "mode": "test",
+        "network": "eip155:84532",
+        "deviceModel": "nanoSP",
+        "intent": "Authorize USDC transfer",
+        "filters": [
+          "from",
+          "to",
+          "validAfter",
+          "validBefore",
+          "value"
+        ],
+        "filterCount": 5,
+        "certificatePresent": false,
+        "tokenMetadata": true,
+        "broadcast": false
+      },
+      "source": "Ledger Device SDK clear-signing tester custom ERC-7730 descriptor flow, queried via Context7"
+    },
+    "physicalDevice": {
+      "app": "EthereumTest 1.23.0-dev",
+      "address": "0x57a2a47Ca22AE52867c5313c4d9ab43070D7C202",
+      "recovered": "0x57a2a47Ca22AE52867c5313c4d9ab43070D7C202",
+      "signatureLength": 132,
+      "clearSigning": {
+        "originTokenPresent": false,
+        "verdict": "erc7730",
+        "steps": [
+          "signer.eth.steps.getAddress",
+          "signer.eth.steps.buildContext",
+          "signer.eth.steps.provideContext",
+          "signer.eth.steps.signTypedData",
+          "signer.eth.steps.detectBlindSigning"
+        ],
+        "calFilters": "success"
+      },
+      "labeledClearSigning": true,
+      "fundsMoved": 0,
+      "broadcast": false,
+      "typedData": {
+        "primaryType": "ReceiveWithAuthorization",
+        "verifyingContract": "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
+        "chainId": 84532,
+        "validAfter": "2104484833",
+        "validAfterSafety": "approximately ten years in the future; the authorization cannot settle during the demo window"
+      }
+    },
+    "commands": [
+      "MANDATE_LEDGER_CAL_TEST_KEY_FILE=<local app-ethereum cal.pem> npm run ledger:test-cal -- docs/erc7730/eip712-USDC-base-sepolia.json docs/erc7730/eip712-x402-BatchSettlement.json",
+      "MANDATE_LEDGER_TEST_CAL_URL=http://127.0.0.1:8427 npm run ledger:test-context",
+      "MANDATE_LEDGER_TEST_CAL_URL=http://127.0.0.1:8427 MANDATE_ETH_APP_OPEN=1 MANDATE_STEPUP_TIMEOUT_MS=180000 npm run e2e:erc7730-device"
+    ]
   }
 }

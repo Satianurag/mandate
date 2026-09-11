@@ -67,7 +67,9 @@
     "verify:descriptors": "node --experimental-strip-types scripts/e2e-erc7730.mjs",
     "mandate:reconcile": "node scripts/operator-task.mjs reconcile",
     "verify:linux": "bash scripts/clean-linux-verify.sh",
-    "postinstall": "node scripts/apply-security-patches.mjs"
+    "postinstall": "node scripts/apply-security-patches.mjs",
+    "ledger:test-cal": "node scripts/ledger-test-cal.mjs",
+    "ledger:test-context": "node scripts/probe-ledger-test-context.mjs"
   },
   "license": "MIT",
   "devDependencies": {

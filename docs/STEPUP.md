@@ -14,8 +14,11 @@ Human-presence attestations are optional, separately validated statements. They 
 not authorize a transfer, establish human uniqueness, or expand a budget. Their
 expected principal comes from trusted configuration, not the untrusted attestation.
 
-The actual funding run recorded clear-basic. There is no current claim of a deployed
-ERC-7730 descriptor for the custom action-approval type. The obsolete draft descriptor
-from the prototype is excluded; the linted USDC/batch descriptors are separate.
-See [../DX.md](../DX.md) for device evidence and [threat-model.md](threat-model.md)
-for the trust boundary. Do not turn on blind signing as an automatic failure fallback.
+The actual funding run recorded clear-basic. A separate physical ERC-7730 proof
+exists for the stock Base Sepolia USDC `ReceiveWithAuthorization` typed data using
+Ledger's development test-CAL path on EthereumTest. There is still no claim of a
+production-deployed ERC-7730 descriptor for the custom action-approval type. The
+obsolete draft descriptor from the prototype is excluded; the linted USDC/batch
+descriptors are separate. See [../DX.md](../DX.md) for device evidence and
+[threat-model.md](threat-model.md) for the trust boundary. Do not turn on blind
+signing as an automatic failure fallback.

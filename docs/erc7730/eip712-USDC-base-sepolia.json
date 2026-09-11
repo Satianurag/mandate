@@ -2,15 +2,23 @@
   "$schema": "../../specs/erc7730-v2.schema.json",
   "context": {
     "eip712": {
-      "domain": { "name": "USDC", "version": "2" },
+      "domain": {
+        "name": "USDC",
+        "version": "2"
+      },
       "deployments": [
-        { "chainId": 84532, "address": "0x036CbD53842c5426634e7929541eC2318f3dCF7e" }
+        {
+          "chainId": 84532,
+          "address": "0x036CbD53842c5426634e7929541eC2318f3dCF7e"
+        }
       ]
     }
   },
   "metadata": {
     "owner": "Circle",
-    "info": { "url": "https://www.circle.com/" }
+    "info": {
+      "url": "https://www.circle.com/"
+    }
   },
   "display": {
     "formats": {
@@ -22,29 +30,63 @@
             "path": "from",
             "label": "From",
             "format": "addressName",
-            "visible": "always",
-            "params": { "types": ["eoa", "wallet"] }
+            "params": {
+              "types": [
+                "wallet"
+              ],
+              "sources": [
+                "local",
+                "ens"
+              ]
+            },
+            "visible": "always"
           },
           {
             "path": "to",
             "label": "To",
             "format": "addressName",
-            "visible": "always",
-            "params": { "types": ["eoa", "wallet", "contract"] }
+            "params": {
+              "types": [
+                "eoa",
+                "contract"
+              ],
+              "sources": [
+                "local",
+                "ens"
+              ]
+            },
+            "visible": "always"
           },
           {
             "path": "value",
             "label": "Amount",
             "format": "tokenAmount",
-            "visible": "always",
             "params": {
-              "token": "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
-              "chainId": 84532
+              "tokenPath": "@.to"
+            },
+            "visible": "always"
+          },
+          {
+            "path": "validAfter",
+            "label": "Valid after",
+            "format": "date",
+            "params": {
+              "encoding": "timestamp"
             }
           },
-          { "path": "validAfter", "label": "Valid after", "format": "raw" },
-          { "path": "validBefore", "label": "Valid before", "format": "raw" },
-          { "path": "nonce", "label": "Nonce", "visible": "never" }
+          {
+            "path": "validBefore",
+            "label": "Valid before",
+            "format": "date",
+            "params": {
+              "encoding": "timestamp"
+            }
+          },
+          {
+            "label": "Nonce",
+            "path": "nonce",
+            "visible": "never"
+          }
         ]
       }
     }

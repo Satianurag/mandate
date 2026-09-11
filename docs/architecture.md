@@ -52,7 +52,9 @@ hash, sequence, and running hash. A public topic ID or UAID alone is not authors
 The device signs the actual funding authorization. It does not attest to the
 broker's rolling window, URL allowlist, or task expiry. The stock channel's
 `withdrawDelay` is a recovery timing parameter, not the expiry of agent authority.
-The live device trace was clear-basic, not CAL/ERC-7730 label delivery.
+The live funding trace was clear-basic. ERC-7730 label delivery is demonstrated
+separately through the Ledger development test-CAL path on EthereumTest; that path
+is loopback-only, Base Sepolia-only and not a production registry claim.
 
 ## Accounting and failure semantics
 

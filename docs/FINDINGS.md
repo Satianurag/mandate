@@ -22,11 +22,13 @@ facts are in [verification/live-proof-2026-09-11.json](verification/live-proof-2
 
 ## Important distinctions
 
-The live device result was clear-basic. Official descriptor lint passed, but that
-is not registry acceptance or device-label proof. The Linux clean build ran without
-secrets; it was not a funded USB-less broker. The paid restart proof used a fresh
-HID-disabled process on the Mac, not a physically disconnected Ledger. Test fixtures
-are isolated test inputs, not evidence of live payment success.
+The live funding result was clear-basic. Official descriptor lint passed, and a
+separate physical-device development proof now shows `calFilters=success` and
+`verdict=erc7730` on EthereumTest via a loopback Ledger test-CAL bridge. That proof
+is not production CAL/registry acceptance, and it moved no funds. The Linux clean
+build ran without secrets; it was not a funded USB-less broker. The paid restart
+proof used a fresh HID-disabled process on the Mac, not a physically disconnected
+Ledger. Test fixtures are isolated test inputs, not evidence of live payment success.
 
 Historic optional Graph direct-payment, Hedera batch, treasury, Substreams and
 identity experiments are not rolled into the Base Sepolia workspace's live claim.

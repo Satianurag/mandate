@@ -1,9 +1,11 @@
 # Ledger integration and developer-experience report
 
 **Observed on 11 September 2026.** These are reproducible integration observations,
-not claims that every upstream behavior is a defect or that descriptors reached a
-device. The canonical execution evidence is
-[`docs/verification/live-proof-2026-09-11.json`](docs/verification/live-proof-2026-09-11.json).
+not claims that every upstream behavior is a defect. The canonical execution
+evidence is
+[`docs/verification/live-proof-2026-09-11.json`](docs/verification/live-proof-2026-09-11.json),
+with the separate physical ERC-7730 development proof in
+[`docs/verification/ledger-erc7730-device-2026-09-11.json`](docs/verification/ledger-erc7730-device-2026-09-11.json).
 
 ## Integration actually used
 
@@ -42,18 +44,29 @@ that a physical device was used in the deterministic suite.
 
 The live funding trace reported `originTokenPresent=false`, `calFilters=error`,
 and `verdict=clear-basic`. The signature was valid and the channel funded, but that
-is not evidence that CAL/ERC-7730 field labels appeared on the device. The application
-persists the report next to the funding signature's digest.
+is not evidence that production CAL/ERC-7730 field labels appeared on the device.
+The application persists that report next to the funding signature's digest.
+
+A separate physical development proof now follows Ledger's Device SDK clear-signing
+tester pattern for custom ERC-7730 descriptors before they are available in
+production CAL: a loopback-only CAL bridge serves Base Sepolia descriptor filters,
+EthereumTest 1.23.0-dev verifies CAL-test-key signatures embedded in the app, and
+the Ledger trace reports `calFilters=success` and `verdict=erc7730`. The signed
+USDC authorization uses `validAfter` roughly ten years in the future, is never
+broadcast, and moves zero funds. This is development hardware evidence, not
+registry acceptance or partner-origin production CAL access.
 
 `npm run verify:descriptors` separately runs the official linter on the USDC and
 batch descriptors. Missing tooling exits nonzero; schema-only validation must be
 requested explicitly and is labeled schema-only. Full local lint passed during this
-run. Registry acceptance and hardware rendering are not inferred from that result.
+run. Production registry acceptance is not inferred from linter output or the
+development bridge.
 
 Useful upstream improvement: make the distinction between generic clear signing,
-legacy paths, CAL filters, and successfully provided device context conspicuous in
-integrator-facing results. This is integration feedback, not an assertion that the
-current SDK is unsafe merely because optional context resolution failed.
+legacy paths, CAL filters, production context, and development test-CAL context
+conspicuous in integrator-facing results. This is integration feedback, not an
+assertion that the current SDK is unsafe merely because optional production context
+resolution failed.
 
 ### 3. Be precise about headless behavior
 
