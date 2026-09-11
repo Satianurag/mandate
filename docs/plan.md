@@ -4,4 +4,5 @@ See [AUDIT-REMEDIATION.md](AUDIT-REMEDIATION.md) for the single authoritative au
 mapping. Setup is in [../README.md](../README.md), architecture in
 [architecture.md](architecture.md), and recovery in [RECOVERY.md](RECOVERY.md).
 The pre-audit roadmap remains in Git at `f5ed2be`; it is not the repaired product's
-runtime specification.
+runtime specification. The latest live fully-spent acceptance is recorded in
+[LIVE-LEDGER-CYCLE-2026-09-11.md](LIVE-LEDGER-CYCLE-2026-09-11.md).

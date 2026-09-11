@@ -4,18 +4,38 @@ This is an operator/demo guide, not a claim that a narrated submission video has
 already been recorded. Do not present a replay of stored evidence as a new payment.
 The existing live workspace can be inspected without spending again.
 
-## Inspect the completed run
+## Inspect the verified runs
 
-Open `npm run console:open` with the local stack running. The envelope should be
-refunded, lifetime charges 0.03 USDC, pending liability zero, and returned money
-0.07 USDC. Inspect the successful query's real registration data and source block.
-Select the blocked fourth request: its rolling-budget failure must remain visible.
-Inspect reconciled settlement/refund failures: the original error and the actual
-resolving receipt are part of the result, not erased history.
+The current local workspace is intentionally left on a fresh, source-bound,
+**unfunded** Mandate. Opening it does not replay a payment. Its history retains the
+newly completed minimal lifecycle and the earlier larger refund cycle.
 
-The public proof JSON is safe to inspect without the Mac credentials. Verify the
-funding, merchant sweep and refund on Base Sepolia; verify signed anchors on Hedera
-testnet. Agent isolation and HID-disabled restart are distinct recorded checks.
+### Minimal fully-spent lifecycle
+
+Inspect request `632ef57a-e7b1-4758-9aed-bb6bd91b4073`: one Ledger funding
+authorization established a 0.01-USDC lifetime envelope and one paid Agent0
+comparison succeeded. Inspect the next blocked request to show that no lifetime
+authority remained and no second charge was accepted. Then inspect the successful
+merchant settlement and `fully_spent` closure. The closure has zero refundable
+amount and no refund transaction.
+
+The public-safe details, exact Base Sepolia transactions, source block, result,
+settlement balance delta and independent chain readback are in
+[verification/ledger-paid-lifecycle-2026-09-11.json](verification/ledger-paid-lifecycle-2026-09-11.json).
+The narration and claim boundary are in
+[LIVE-LEDGER-CYCLE-2026-09-11.md](LIVE-LEDGER-CYCLE-2026-09-11.md).
+This funding trace was clear-basic; do not describe it as production ERC-7730.
+
+### Multi-call and remaining-funds recovery lifecycle
+
+The earlier proof used 0.10 USDC, accepted three 0.01-USDC calls, blocked a fourth
+at the rolling limit, settled 0.03 USDC, and returned 0.07 USDC. Inspect the
+reconciled settlement/refund failures: the original error and the actual resolving
+receipt remain visible rather than being replaced with success-shaped history.
+
+[verification/live-proof-2026-09-11.json](verification/live-proof-2026-09-11.json)
+contains the channel, receipts, query provenance, observed balances and HCS
+readback. Agent isolation and the HID-disabled restart are distinct recorded checks.
 
 ## Demonstrate a new run deliberately
 

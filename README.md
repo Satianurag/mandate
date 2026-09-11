@@ -3,7 +3,7 @@
 **Testnet-only, Ledger-funded access to paid agent services.** A person reviews a
 spending envelope, an isolated consumer performs useful paid work through a trusted
 broker, and the workspace shows the actual charges, blocked requests, settlement,
-and remaining-funds recovery.
+zero-refund closure, and remaining-funds recovery.
 
 The verified workspace uses **Base Sepolia USDC** for payments, **testnet Agent0
 subgraphs** for real query results, and **Hedera testnet** for authenticated evidence.
@@ -12,25 +12,41 @@ Mandate supplies the constrained execution, durable accounting, recovery, and UI
 
 ## What was demonstrated live
 
-The 11 September 2026 run used one 0.10-USDC funding authorization, completed three
-0.01-USDC paid queries, blocked a fourth at a 0.03-USDC hourly limit, revoked agent
-access, paid the merchant 0.03 USDC, and returned 0.07 USDC to the payer. This is real
-testnet activity, not a unit-test fixture. Both intermediate network failures and
-their recovery are retained in the evidence.
+Two complementary Base Sepolia testnet cycles are retained.
 
-[Public run proof](docs/verification/live-proof-2026-09-11.json) contains the exact
-channel, receipts, query provenance, observed balances, and signing report.
-[Audit acceptance](docs/AUDIT-REMEDIATION.md) separates implementation, deterministic
-tests, live observations, and excluded claims.
+The first 11 September 2026 run used one 0.10-USDC funding authorization,
+completed three 0.01-USDC paid queries, blocked a fourth at a 0.03-USDC hourly
+limit, revoked agent access, paid the merchant 0.03 USDC, and returned 0.07 USDC
+to the payer. Both intermediate network failures and their recovery remain in the
+evidence. The exact channel, receipts, source provenance, balances, signing report
+and HCS readback are in the
+[multi-call and refund proof](docs/verification/live-proof-2026-09-11.json).
 
-The financial funding trace recorded **clear-basic**. Separately, a physical
+A second fresh acceptance cycle used exactly one Ledger authorization and a
+0.01-USDC lifetime envelope. It produced a source-bound Agent0 due-diligence
+result, denied a second request without another charge, reconciled the merchant
+claim and settlement, closed the fully spent Mandate without inventing a zero-value
+refund, and then created a fresh unfunded Mandate while preserving the old history
+in a separate read-only archive.
+See the [human-readable lifecycle record](docs/LIVE-LEDGER-CYCLE-2026-09-11.md)
+and [machine-readable proof](docs/verification/ledger-paid-lifecycle-2026-09-11.json).
+
+These are real testnet operations, not unit-test fixtures. The latest post-run gate
+passes `npm run verify` with 181 deterministic checks, `npm run verify:linux`
+inside a no-runtime-network container, and `npm run test:ui` against a real local
+HTTP/SQLite application. [Audit acceptance](docs/AUDIT-REMEDIATION.md)
+separates implementation, deterministic tests, live observations, and excluded
+claims.
+
+The financial funding traces recorded **clear-basic**. Separately, a physical
 Ledger Nano S+ running EthereumTest 1.23.0-dev completed the legitimate Ledger
 Device SDK development path for ERC-7730: loopback test-CAL, Ledger CAL test key,
 `calFilters=success`, `verdict=erc7730`, no broadcast and zero funds moved. That
 is **not** production CAL or registry acceptance. The exact proof is
-[`docs/verification/ledger-erc7730-device-2026-09-11.json`](docs/verification/ledger-erc7730-device-2026-09-11.json). A fresh broker process also completed a paid
-call with native HID bindings disabled; a physically unplugged or separately
-provisioned VPS broker was not demonstrated. These are not interchangeable claims.
+[`docs/verification/ledger-erc7730-device-2026-09-11.json`](docs/verification/ledger-erc7730-device-2026-09-11.json).
+A fresh broker process also completed a paid call with native HID bindings disabled;
+a physically unplugged or separately provisioned VPS broker was not demonstrated.
+These are not interchangeable claims.
 
 ## Verify from a clean checkout without keys or funds
 
@@ -173,7 +189,8 @@ integration. They must remain testnet-only and have separate explicit live gates
 
 [Architecture](docs/architecture.md) · [Recovery](docs/RECOVERY.md) ·
 [Ledger DX](DX.md) · [Current findings](docs/FINDINGS.md) ·
-[Walkthrough](docs/WALKTHROUGH.md) · [Dependency security](docs/DEPENDENCIES.md)
+[Walkthrough](docs/WALKTHROUGH.md) · [Live Ledger cycle](docs/LIVE-LEDGER-CYCLE-2026-09-11.md) ·
+[Dependency security](docs/DEPENDENCIES.md)
 
 Upstream references, checked during remediation:
 [Ledger Key Ring](https://developers.ledger.com/docs/ai-tools/ledger-cli),

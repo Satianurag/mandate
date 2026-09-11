@@ -45,9 +45,10 @@ hash, sequence, and running hash. A public topic ID or UAID alone is not authors
 | Base Sepolia workspace; optional allowed testnet adapters | Explicit parser, chain probes, signer guards and registration allowlists |
 | Resource origin/path, GET-only, per-call and rolling limits, task expiry | Trusted broker checks plus durable integer reservations |
 | No silent extra funding | One-deposit guard; resume clients have no deposit signer |
-| Stop new requests | Durable stopped/refunded state, signing guards and capability revocation |
+| Stop new requests | Durable stopped/refunded/closed state, signing guards and capability revocation |
 | Agent cannot access broker credentials | Separate constrained container plus scoped relay; not merely encryption |
 | Refund completed | Matching calldata, receipt, token transfer and same-block before/after state |
+| Fully-spent closure completed | Spent equals ceiling, reserved is zero, per-channel claimed liability matches spend, receiver aggregate claimed equals settled, and no withdrawal is pending |
 
 The device signs the actual funding authorization. It does not attest to the
 broker's rolling window, URL allowlist, or task expiry. The stock channel's
@@ -77,6 +78,12 @@ HTTP response, transaction hash, or returned `success` flag alone is insufficien
 A refunded channel may still expose gross `balance == totalClaimed` on-chain.
 Those values represent accounted liability, not spendable remaining funds. The
 workspace presents the confirmed returned amount and prevents further execution.
+
+A fully spent channel can also retain its gross funded balance on-chain after all
+of that balance has become claimed liability. Once the merchant's aggregate claimed
+and settled values reconcile, the broker records a terminal `closed` state instead
+of constructing a meaningless zero-value refund. Closing does not delete the
+channel or history; a later Mandate requires a fresh salt and separate authority.
 
 ## Persistence and operations
 

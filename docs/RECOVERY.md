@@ -3,7 +3,8 @@
 First preserve the channel snapshots, broker/merchant databases, reviewed config,
 sealed session key, and Key Ring member. Never delete state or rotate a key merely
 because an HTTP request failed. A missing receipt is not proof that no payment was
-made. Never reuse a refunded channel or fund it again by changing a label.
+made. Never reuse a refunded or fully-spent closed channel, or fund it again by
+changing a label.
 
 ## Lost response or uncertain paid request
 
@@ -32,6 +33,18 @@ It retries only a definite pre-transaction `nothing_to_settle` error, not an amb
 send error. The successful sweep must reconcile with actual receiver token balances.
 A later success is linked to earlier uncertainty; the original failure is not erased.
 
+## Fully spent: close instead of refunding zero
+
+When accepted spend equals the full ceiling and reserved liability is zero, first
+complete merchant claim and settlement. Then use **Close fully spent Mandate**. The
+operator reads the exact channel on Base Sepolia and requires per-channel claimed
+liability to match broker spend, receiver aggregate claimed to equal settled, and
+no timed withdrawal to be pending. Only then does it record `closed`.
+
+This path creates no refund request and no zero-value transaction. The old channel,
+receipts and task history remain inspectable. A repeat run must use a newly reviewed,
+unfunded Mandate with a fresh salt; saving it does not inherit prior funding.
+
 ## Refund sent but confirmation failed
 
 Do not press a new payment/funding button. The refund transaction is saved before
@@ -49,9 +62,11 @@ reason to hide the intermediate failure.
 ## Stop versus return of funds
 
 Stop persists revocation and prevents new work/signing. It does not reverse prior
-charges or automatically erase merchant liability. Claim/sweep existing liabilities,
-then request the remaining-funds refund. The UI labels returned money only after
-matching on-chain proof. A stopped or refunded agent capability is unusable.
+charges or automatically erase merchant liability. Claim/sweep existing liabilities;
+then request a matching remaining-funds refund when value remains, or close the
+Mandate when the full ceiling is spent. The UI labels returned money or terminal
+closure only after matching on-chain proof. A stopped, refunded or closed agent
+capability is unusable.
 
 ## HCS failures
 

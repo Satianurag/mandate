@@ -1,0 +1,262 @@
+{
+  "schemaVersion": 1,
+  "title": "Mandate live Ledger-funded lifecycle proof",
+  "performedAt": "2026-09-11T15:11:47.369Z",
+  "verifiedAt": "2026-09-11T15:42:53.380932Z",
+  "claimBoundary": {
+    "environment": "testnet-only",
+    "paymentNetwork": "eip155:84532",
+    "researchNetwork": "bsc-chapel",
+    "mainnetUsed": false,
+    "newHcsPublicationPerformed": false,
+    "deploymentChanged": false,
+    "tunnelChanged": false,
+    "note": "The funding authorization recorded clear-basic. This proof does not claim production ERC-7730/CAL acceptance or that every broker policy field appeared on the device."
+  },
+  "ledger": {
+    "expectedPayer": "0x57a2a47Ca22AE52867c5313c4d9ab43070D7C202",
+    "deviceAddressMatched": true,
+    "fundingSignatureCount": 1,
+    "signingReport": {
+      "calFilters": "error",
+      "originTokenPresent": false,
+      "steps": [
+        "signer.eth.steps.getAppConfig",
+        "signer.eth.steps.getAddress",
+        "signer.eth.steps.buildContext",
+        "signer.eth.steps.provideContext",
+        "signer.eth.steps.signTypedData",
+        "signer.eth.steps.detectBlindSigning"
+      ],
+      "verdict": "clear-basic"
+    }
+  },
+  "mandate": {
+    "id": "58e18c68ff60e755d8dcb59550c1ecca67f52e9f0ac0034c6ce527c604ffa6ec",
+    "channelId": "0x4b591fde90aa86ccb1137ce5bc157954645b4f3a22fc51fe62cdf9ca8d52ed05",
+    "ceilingBaseUnits": "10000",
+    "perCallBaseUnits": "10000",
+    "rollingWindowBaseUnits": "10000",
+    "tokenDecimals": 6
+  },
+  "paidWork": {
+    "requestId": "632ef57a-e7b1-4758-9aed-bb6bd91b4073",
+    "state": "succeeded",
+    "acceptedCostBaseUnits": "10000",
+    "transaction": "0xf2b8cbb202b2668363d8df5e38afeba6553b58998c9c84ac44221e4ab2d71183",
+    "source": {
+      "provider": "the-graph",
+      "chain": "bsc-chapel",
+      "deployment": "BTjind17gmRZ6YhT9peaCM13SvWuqztsmqyfjpntbg3Z",
+      "blockNumber": "130428783",
+      "observedAt": "2026-09-11T15:11:40.951Z"
+    },
+    "recommendation": {
+      "status": "best_supported_record",
+      "registration": "158",
+      "wallet": "0x25f75573799a3aa37760d6be4b862aca70599b49",
+      "basis": "Highest indexed feedback count among returned records with a service wallet. This is evidence coverage, not a quality guarantee."
+    },
+    "accounting": {
+      "requestId": "632ef57a-e7b1-4758-9aed-bb6bd91b4073",
+      "paidCalls": 1,
+      "acceptedCostBaseUnits": "10000",
+      "reservedBaseUnits": "0",
+      "remainingAuthorityBaseUnits": "0",
+      "ceilingBaseUnits": "10000",
+      "completedAt": "2026-09-11T15:11:47.369Z"
+    }
+  },
+  "deniedAdditionalRun": {
+    "requestId": "577eaf0f-eca9-4d9a-9500-80daa1bd6dde",
+    "state": "blocked",
+    "error": "Failed to create payment payload: Lifetime budget exhausted",
+    "additionalChargeBaseUnits": "0"
+  },
+  "merchantLifecycle": {
+    "claimTransaction": "0x4b2f4f38090f82574712a5e17e1fb9c47886c342a9bf5cdcfe310db3923ad699",
+    "settlementTaskId": "014ae533-619f-43e7-a6f6-a96b96277b50",
+    "settlementTaskState": "succeeded",
+    "settlementTransaction": "0xdc8a1222d4a64139398a9b1dc6eda18fa3ae13f0c3f77ef918a083f3166dc1aa",
+    "receiverBalanceBeforeBaseUnits": "50000",
+    "receiverBalanceAfterBaseUnits": "60000",
+    "receiverIncreaseBaseUnits": "10000",
+    "aggregateClaimedAfterBaseUnits": "40000",
+    "aggregateSettledAfterBaseUnits": "40000"
+  },
+  "closure": {
+    "state": "closed",
+    "spentBaseUnits": "10000",
+    "reservedBaseUnits": "0",
+    "reason": "fully_spent",
+    "refundableBaseUnits": "0",
+    "proofBlock": "46685663",
+    "refundTaskCount": 0,
+    "eventChainValid": true
+  },
+  "repeatUse": {
+    "freshMandateCreated": true,
+    "freshMandateState": "not_funded",
+    "freshMandateDeposit": "none",
+    "freshMandateSpentBaseUnits": "0",
+    "freshMandateReservedBaseUnits": "0",
+    "oldTaskHistoryPreserved": true,
+    "additionalSignatureRequested": false,
+    "additionalPaymentRequested": false,
+    "priorTaskCount": 15,
+    "priorTaskArchiveInspectable": true,
+    "archiveIndexContainsResultPayloads": false,
+    "currentTasksAfterFreshMandate": 0,
+    "historicalMerchantEventsVisibleInFreshMandate": 0
+  },
+  "independentBaseSepoliaReadback": {
+    "chainId": 84532,
+    "transactions": {
+      "fundingAndPayment": {
+        "hash": "0xf2b8cbb202b2668363d8df5e38afeba6553b58998c9c84ac44221e4ab2d71183",
+        "status": "success",
+        "blockNumber": "46685609",
+        "transactionIndex": 20,
+        "gasUsed": "140976",
+        "transfers": [
+          {
+            "token": "0x036cbd53842c5426634e7929541ec2318f3dcf7e",
+            "from": "0x57a2a47Ca22AE52867c5313c4d9ab43070D7C202",
+            "to": "0x4020806089470a89826cB9fB1f4059150b550004",
+            "valueBaseUnits": "10000"
+          },
+          {
+            "token": "0x036cbd53842c5426634e7929541ec2318f3dcf7e",
+            "from": "0x4020806089470a89826cB9fB1f4059150b550004",
+            "to": "0x4020074e9dF2ce1deE5A9C1b5c3f541D02a10003",
+            "valueBaseUnits": "10000"
+          }
+        ]
+      },
+      "merchantClaim": {
+        "hash": "0x4b2f4f38090f82574712a5e17e1fb9c47886c342a9bf5cdcfe310db3923ad699",
+        "status": "success",
+        "blockNumber": "46685618",
+        "transactionIndex": 27,
+        "gasUsed": "60672",
+        "transfers": []
+      },
+      "merchantSettlement": {
+        "hash": "0xdc8a1222d4a64139398a9b1dc6eda18fa3ae13f0c3f77ef918a083f3166dc1aa",
+        "status": "success",
+        "blockNumber": "46685638",
+        "transactionIndex": 26,
+        "gasUsed": "56840",
+        "transfers": [
+          {
+            "token": "0x036cbd53842c5426634e7929541ec2318f3dcf7e",
+            "from": "0x4020074e9dF2ce1deE5A9C1b5c3f541D02a10003",
+            "to": "0x3D4A323C18d98Da9Dee2EA6D23787C43EA6B5d71",
+            "valueBaseUnits": "10000"
+          }
+        ]
+      }
+    },
+    "channel": {
+      "network": "eip155:84532",
+      "blockNumber": "46686038",
+      "observedAt": "2026-09-11T15:26:04.580Z",
+      "channelId": "0x4b591fde90aa86ccb1137ce5bc157954645b4f3a22fc51fe62cdf9ca8d52ed05",
+      "balanceBaseUnits": "10000",
+      "claimedBaseUnits": "10000",
+      "payerBalanceBaseUnits": "34939874",
+      "receiverBalanceBaseUnits": "60000",
+      "receiverAggregateClaimedBaseUnits": "40000",
+      "receiverAggregateSettledBaseUnits": "40000",
+      "withdrawalAmountBaseUnits": "0",
+      "withdrawalInitiatedAt": 0,
+      "refundNonce": "0"
+    }
+  },
+  "deterministicVerification": {
+    "build": "passed",
+    "gatewayTests": {
+      "passed": 161,
+      "failed": 0,
+      "skipped": 0
+    },
+    "facilitatorTests": {
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0
+    },
+    "mandateServiceTests": {
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0
+    },
+    "hederaServiceTests": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "browserUi": {
+      "passed": true,
+      "networkMocks": 0,
+      "financialOperations": 0,
+      "desktopSeriousAxeViolations": 0,
+      "mobileSeriousAxeViolations": 0,
+      "exhaustedAuthorityPreSubmissionGuard": true,
+      "priorMandateArchiveRegression": true,
+      "archiveCurrentAuthorityIsolation": true
+    },
+    "gitDiffCheck": "passed",
+    "npmRunVerify": {
+      "status": "passed",
+      "totalChecks": 181,
+      "breakdown": {
+        "securityParserGuards": 4,
+        "facilitator": 5,
+        "gateway": 161,
+        "mandateService": 6,
+        "hederaService": 2,
+        "merchantResolver": 3
+      },
+      "walletOrPaymentRequested": false
+    },
+    "cleanLinux": {
+      "status": "passed",
+      "totalChecks": 181,
+      "dockerRuntimeNetwork": "none",
+      "hostCredentialsMounted": false,
+      "hostStateMounted": false,
+      "usbDeviceAvailable": false,
+      "imageManifestListDigest": "sha256:c36ba8394239274812bb559ef5aa6ee20ef4c50b1777dadab2a03981360b60b0",
+      "note": "This proves clean installation/build/test portability, not a funded headless broker run."
+    }
+  },
+  "redactionsAndExclusions": [
+    "No operator token, cookie, Key Ring password, private capability token, sealed key material, raw private key, or local login URL is included.",
+    "Raw signatures and complete local SQLite state are intentionally excluded.",
+    "No new Hedera evidence publication was performed for this cycle because it was not required to prove the Base Sepolia lifecycle."
+  ],
+  "implementation": {
+    "branch": "product/mandate-completion",
+    "lifecycleCommit": "95051f9d99e98bbf756d21abfc361f59d962acae",
+    "archiveCommit": "b1c17fa0b513b1c363425e6865ce68004793aa27"
+  },
+  "finalLocalRuntime": {
+    "operatorHealthStatus": 200,
+    "operatorSigningAtStartup": false,
+    "merchantUnsignedOfferStatus": 402,
+    "facilitatorSupportedStatus": 200,
+    "currentMandateState": "not_funded",
+    "currentMandateDeposit": "none",
+    "currentSpentBaseUnits": "0",
+    "currentReservedBaseUnits": "0",
+    "currentTaskCount": 0,
+    "activeOrUncertainTaskCount": 0,
+    "priorTaskCount": 15,
+    "priorTaskSummariesReturned": 15,
+    "priorTaskSummaryResultPayloads": 0,
+    "historicalMerchantEvidenceExcludedFromCurrentView": true,
+    "tailscaleFunnelChanged": false,
+    "newSignatureOrPaymentDuringRestart": false,
+    "verifiedAt": "2026-09-11T15:42:53.380932Z"
+  }
+}
