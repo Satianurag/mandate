@@ -336,7 +336,7 @@ export async function buildService(cfg: ServiceConfig): Promise<BuiltService> {
       return;
     }
     void handlePaidRequest({ req, res, httpServer, journal,
-      prepare: query => liveAnalyticsBody(query, {}, { fetchRows: cfg.fetchRows }),
+      prepare: request => liveAnalyticsBody(request.query, {}, { fetchRows: cfg.fetchRows, source: request.source }),
       actualAmount: path => path === "/usage" ? full.priceBaseUnits : undefined,
     }).catch(e => {
       console.error("Merchant handler failed:", e instanceof Error ? e.message : String(e));

@@ -17,3 +17,15 @@ test("scope rejects foreign origins, paths, writes and caller payment credential
   assert.throws(() => assertRequestScope(s,s.serviceUrl,{ method: "POST", body: "changed" }), /read-only/);
   assert.throws(() => assertRequestScope(s,s.serviceUrl,{ headers: { "payment-signature": "outside" } }), /forbidden/);
 });
+
+
+test("source-bound scope requires the exact reviewed chain and deployment", () => {
+  const source = { provider: "the-graph" as const, chain: "bsc-chapel" as const, deployment: "BTjind17gmRZ6YhT9peaCM13SvWuqztsmqyfjpntbg3Z" };
+  const bound = validateScope({ ...s, researchSource: source });
+  const query = encodeURIComponent("{ agents(first: 2) { id } }");
+  assertRequestScope(bound, `${bound.serviceUrl}?q=${query}&sourceChain=${source.chain}&sourceDeployment=${source.deployment}`);
+  assert.throws(() => assertRequestScope(bound, `${bound.serviceUrl}?q=${query}`), /requires one query/);
+  assert.throws(() => assertRequestScope(bound, `${bound.serviceUrl}?q=${query}&sourceChain=base-sepolia&sourceDeployment=${source.deployment}`), /outside the mandate/);
+  assert.throws(() => assertRequestScope(bound, `${bound.serviceUrl}?q=${query}&sourceChain=${source.chain}&sourceDeployment=4yYAvQLFjBhBtdRCY7eUWo181VNoTSLLFd5M7FXQAi6u`), /outside the mandate/);
+  assertRequestScope(bound, bound.serviceUrl, undefined, true);
+});

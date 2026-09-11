@@ -20,6 +20,10 @@ perCallBaseUnits: "50000"
 windowBaseUnits: "100000"
 windowMs: 3600000
 storageRoot: ./state/mandate
+researchSource:
+  provider: the-graph
+  chain: bsc-chapel
+  deployment: BTjind17gmRZ6YhT9peaCM13SvWuqztsmqyfjpntbg3Z
 `;
 
 test("parses a valid mandate file and checksums the receiver", () => {
@@ -28,6 +32,8 @@ test("parses a valid mandate file and checksums the receiver", () => {
   assert.equal(m.ceilingBaseUnits, "5000000");
   assert.equal(m.receiver, "0x000000000000000000000000000000000000dEaD");
   assert.equal(m.derivationPath, "44'/60'/0'/0/0");
+  assert.equal(m.researchSource?.chain, "bsc-chapel");
+  assert.equal(m.researchSource?.deployment, "BTjind17gmRZ6YhT9peaCM13SvWuqztsmqyfjpntbg3Z");
 });
 
 test("rejects wrong version, network, and malformed fields by name", () => {
@@ -44,4 +50,10 @@ test("rejects wrong version, network, and malformed fields by name", () => {
 test("legacy configuration is explicitly rejected rather than silently adding authority", () => {
   assert.throws(() => parseMandateFile(GOOD.replace("version: 2", "version: 1")), /legacy v1/);
   assert.throws(() => parseMandateFile(GOOD + "\nunrecognizedLimit: 100\n"), /unrecognizedLimit/);
+});
+
+
+test("legacy v2 without a research source remains readable for recovery", () => {
+  const legacy = parseMandateFile(GOOD.replace(/researchSource:[\s\S]*$/, ""));
+  assert.equal(legacy.researchSource, undefined);
 });

@@ -33,3 +33,25 @@ test("outbox retains failures and retries idempotent event IDs before confirming
   assert.equal((await flushOutbox(journal, opts)).confirmed, 0);
   journal.close();
 });
+
+test("one evidence consent plan caps the combined workspace, buyer and merchant batch", async () => {
+  const { planEvidenceBatch } = await import("./evidence-publisher.ts");
+  const plan = planEvidenceBatch([
+    { journal: "workspace", pending: 7 },
+    { journal: "buyer", pending: 19 },
+    { journal: "merchant", pending: 4 },
+  ]);
+  assert.equal(plan.pendingRecords, 30);
+  assert.equal(plan.maxRecordsPerAction, 20);
+  assert.equal(plan.plannedRecords, 20);
+  assert.equal(plan.estimatedSubmissions, 20);
+  assert.deepEqual(plan.journals, [
+    { journal: "workspace", pending: 7, planned: 7 },
+    { journal: "buyer", pending: 19, planned: 13 },
+    { journal: "merchant", pending: 4, planned: 0 },
+  ]);
+  assert.equal(plan.perRecordMaxTransactionFeeHbar, "0.25");
+  assert.equal(plan.worstCaseConfiguredMaxFeeHbar, "5");
+  assert.match(plan.consentHash, /^[a-f0-9]{64}$/);
+  assert.equal(planEvidenceBatch([{ journal: "workspace", pending: 3 }]).worstCaseConfiguredMaxFeeHbar, "0.75");
+});

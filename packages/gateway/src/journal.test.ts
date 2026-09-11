@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Journal, digest } from "./journal.ts";
 const limits = { ceilingBaseUnits: "500", perCallBaseUnits: "50", windowBaseUnits: "500", windowMs: 3600000 };
+const fullLimits = { ...limits, perCallBaseUnits: "500" };
 function setup(t: { after: (fn: () => void) => void }) {
   const dir = mkdtempSync(join(tmpdir(), "mandate-journal-"));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
@@ -109,4 +110,104 @@ test('confirmed refund state and proof are atomic, idempotent and cannot be repl
   assert.throws(()=>j.refundConfirmed('m',{...proof,transaction:`0x${'ef'.repeat(32)}`}),/Conflicting/);
   assert.throws(()=>j.assertActive('m'),/refunded/);j.stop('m');assert.equal(j.mandate('m')?.state,'refunded');
  }finally{j.close();}
+});
+
+test('fully consumed mandates close without inventing a zero-value refund', () => {
+  const j = new Journal(':memory:');
+  const channelId = `0x${'12'.repeat(32)}`;
+  const proof = {
+    network: 'eip155:84532', channelId, balanceBaseUnits: '500', claimedBaseUnits: '500',
+    receiverAggregateClaimedBaseUnits: '500', receiverAggregateSettledBaseUnits: '500',
+    withdrawalAmountBaseUnits: '0', blockNumber: '100', observedAt: '2026-09-11T00:00:00.000Z',
+  };
+  try {
+    j.register('m', fullLimits); j.bindChannel('m', channelId); j.depositOnce('m'); j.funded('m', { channelId });
+    j.reserve({ ...request('all'), amount: '500', limits: fullLimits }); j.signed('all', { voucher: 'all' }); j.accept('all', '500', { transaction: 'accepted' });
+    j.closeFullySpent('m', '500', proof);
+    assert.equal(j.mandate('m')?.state, 'closed');
+    assert.equal(j.events('m').filter(event => event.kind === 'mandate.closed').length, 1);
+    assert.equal(j.events('m').some(event => event.kind === 'refund.transaction_confirmed'), false);
+    assert.throws(() => j.assertActive('m'), /closed/);
+    j.stop('m');
+    assert.equal(j.mandate('m')?.state, 'closed');
+    j.closeFullySpent('m', '500', { ...proof, blockNumber: '101', observedAt: '2026-09-11T00:01:00.000Z' });
+    assert.equal(j.events('m').filter(event => event.kind === 'mandate.closed').length, 1);
+  } finally { j.close(); }
+});
+
+test('fully-spent closure fails closed for unresolved, under-spent, unsettled, or withdrawing channels', () => {
+  const baseProof = {
+    network: 'eip155:84532', channelId: `0x${'34'.repeat(32)}`, balanceBaseUnits: '500', claimedBaseUnits: '500',
+    receiverAggregateClaimedBaseUnits: '500', receiverAggregateSettledBaseUnits: '500', withdrawalAmountBaseUnits: '0',
+  };
+  const make = (id: string) => {
+    const j = new Journal(':memory:');
+    j.register(id, fullLimits); j.bindChannel(id, baseProof.channelId); j.depositOnce(id); j.funded(id, { channelId: baseProof.channelId });
+    return j;
+  };
+  const unresolved = make('unresolved');
+  try {
+    unresolved.reserve({ ...request('pending'), mandateId: 'unresolved' });
+    assert.throws(() => unresolved.closeFullySpent('unresolved', '500', baseProof), /Resolve uncertain or reserved/);
+  } finally { unresolved.close(); }
+  const under = make('under');
+  try {
+    under.reserve({ ...request('part'), mandateId: 'under' }); under.signed('part', {}); under.accept('part', '50', {});
+    assert.throws(() => under.closeFullySpent('under', '500', baseProof), /not fully consumed/);
+  } finally { under.close(); }
+  const unsettled = make('unsettled');
+  try {
+    unsettled.reserve({ ...request('all-unsettled'), mandateId: 'unsettled', amount: '500', limits: fullLimits }); unsettled.signed('all-unsettled', {}); unsettled.accept('all-unsettled', '500', {});
+    assert.throws(() => unsettled.closeFullySpent('unsettled', '500', { ...baseProof, receiverAggregateSettledBaseUnits: '499' }), /unsettled/);
+    assert.throws(() => unsettled.closeFullySpent('unsettled', '500', { ...baseProof, withdrawalAmountBaseUnits: '1' }), /withdrawal/);
+  } finally { unsettled.close(); }
+});
+
+test('timed withdrawal lifecycle is durable, idempotent, and never conflates initiation with returned funds', () => {
+  const j = new Journal(':memory:');
+  const channelId = `0x${'78'.repeat(32)}`;
+  const base = {
+    network: 'eip155:84532', channelId, balanceBaseUnits: '500', claimedBaseUnits: '50', payerBalanceBaseUnits: '1000',
+    receiverAggregateClaimedBaseUnits: '50', receiverAggregateSettledBaseUnits: '50', withdrawalAmountBaseUnits: '0',
+    withdrawalInitiatedAt: 0, blockNumber: '10', observedAt: '2026-09-11T00:00:00.000Z',
+  };
+  try {
+    j.register('timed', limits); j.bindIdentity('timed', '0x0000000000000000000000000000000000000001', '0x0000000000000000000000000000000000000002');
+    j.bindChannel('timed', channelId); j.depositOnce('timed'); j.funded('timed', { channelId });
+    j.reserve({ ...request('timed-charge'), mandateId: 'timed' }); j.signed('timed-charge', {}); j.accept('timed-charge', '50', {});
+    const initiation = { transaction: `0x${'ab'.repeat(32)}`, amountBaseUnits: '450', readyAt: 1900,
+      before: base, after: { ...base, withdrawalAmountBaseUnits: '450', withdrawalInitiatedAt: 1000, blockNumber: '11' } };
+    j.withdrawalInitiated('timed', initiation);
+    assert.equal(j.mandate('timed')?.state, 'withdrawal_pending');
+    assert.equal(j.events('timed').some(event => event.kind === 'refund.transaction_confirmed'), false);
+    j.withdrawalInitiated('timed', initiation);
+    assert.equal(j.events('timed').filter(event => event.kind === 'withdrawal.initiated').length, 1);
+    j.stop('timed');
+    assert.equal(j.mandate('timed')?.state, 'withdrawal_pending');
+    const finalization = { transaction: `0x${'cd'.repeat(32)}`, returnedBaseUnits: '450',
+      before: initiation.after, after: { ...initiation.after, balanceBaseUnits: '50', payerBalanceBaseUnits: '1450', withdrawalAmountBaseUnits: '0', withdrawalInitiatedAt: 0, blockNumber: '12' } };
+    j.withdrawalFinalized('timed', finalization);
+    assert.equal(j.mandate('timed')?.state, 'refunded');
+    assert.equal(j.events('timed').filter(event => event.kind === 'withdrawal.transaction_confirmed').length, 1);
+    j.withdrawalFinalized('timed', finalization);
+    assert.equal(j.events('timed').filter(event => event.kind === 'withdrawal.transaction_confirmed').length, 1);
+  } finally { j.close(); }
+});
+
+test('timed withdrawal journal rejects unsettled liability and unproven token return', () => {
+  const j = new Journal(':memory:');
+  const channelId = `0x${'90'.repeat(32)}`;
+  const base = { network: 'eip155:84532', channelId, balanceBaseUnits: '500', claimedBaseUnits: '50', payerBalanceBaseUnits: '1000',
+    receiverAggregateClaimedBaseUnits: '50', receiverAggregateSettledBaseUnits: '49', withdrawalAmountBaseUnits: '0', withdrawalInitiatedAt: 0 };
+  try {
+    j.register('blocked-timed', limits); j.bindChannel('blocked-timed', channelId); j.depositOnce('blocked-timed'); j.funded('blocked-timed', {});
+    j.reserve({ ...request('blocked-charge'), mandateId: 'blocked-timed' }); j.signed('blocked-charge', {}); j.accept('blocked-charge', '50', {});
+    const initiation = { transaction: `0x${'ef'.repeat(32)}`, amountBaseUnits: '450', readyAt: 1900,
+      before: base, after: { ...base, withdrawalAmountBaseUnits: '450', withdrawalInitiatedAt: 1000 } };
+    assert.throws(() => j.withdrawalInitiated('blocked-timed', initiation), /unsettled/);
+    initiation.after.receiverAggregateSettledBaseUnits = '50'; initiation.before.receiverAggregateSettledBaseUnits = '50';
+    j.withdrawalInitiated('blocked-timed', initiation);
+    assert.throws(() => j.withdrawalFinalized('blocked-timed', { transaction: `0x${'12'.repeat(32)}`, returnedBaseUnits: '450', before: initiation.after,
+      after: { ...initiation.after, balanceBaseUnits: '50', payerBalanceBaseUnits: '1449', withdrawalAmountBaseUnits: '0', withdrawalInitiatedAt: 0 } }), /expected payer return/);
+  } finally { j.close(); }
 });

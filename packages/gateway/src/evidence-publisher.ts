@@ -34,6 +34,45 @@ export function verifyAnchor(anchor: SignedAnchor, expected: { account: string; 
   } catch { return false; }
 }
 export interface AnchorReceipt { transactionId: string | null; topicSequenceNumber: string; topicRunningHash: string; status: string; consensusTimestamp?: string; recoveredFromMirror?: boolean }
+export const EVIDENCE_BATCH_LIMIT = 20;
+export interface EvidenceBatchPlan {
+  pendingRecords: number;
+  maxRecordsPerAction: number;
+  plannedRecords: number;
+  estimatedSubmissions: number;
+  perRecordMaxTransactionFeeHbar: "0.25";
+  worstCaseConfiguredMaxFeeHbar: string;
+  journals: Array<{ journal: string; pending: number; planned: number }>;
+  consentHash: string;
+}
+export function planEvidenceBatch(
+  pending: Array<{ journal: string; pending: number }>,
+  maxRecordsPerAction = EVIDENCE_BATCH_LIMIT,
+): EvidenceBatchPlan {
+  if (!Number.isSafeInteger(maxRecordsPerAction) || maxRecordsPerAction < 1 || maxRecordsPerAction > 100) throw new Error("Invalid evidence publication batch limit");
+  let remaining = maxRecordsPerAction;
+  const journals = pending.map(entry => {
+    if (!entry.journal || !Number.isSafeInteger(entry.pending) || entry.pending < 0) throw new Error("Invalid evidence publication queue preview");
+    const planned = Math.min(entry.pending, remaining);
+    remaining -= planned;
+    return { journal: entry.journal, pending: entry.pending, planned };
+  });
+  const pendingRecords = journals.reduce((sum, entry) => sum + entry.pending, 0);
+  const plannedRecords = journals.reduce((sum, entry) => sum + entry.planned, 0);
+  const feeQuarterUnits = plannedRecords;
+  const worstCaseConfiguredMaxFeeHbar = `${Math.floor(feeQuarterUnits / 4)}${feeQuarterUnits % 4 ? `.${String((feeQuarterUnits % 4) * 25).padStart(2, "0")}` : ""}`;
+  const consent = { maxRecordsPerAction, plannedRecords, journals };
+  return {
+    pendingRecords,
+    maxRecordsPerAction,
+    plannedRecords,
+    estimatedSubmissions: plannedRecords,
+    perRecordMaxTransactionFeeHbar: "0.25",
+    worstCaseConfiguredMaxFeeHbar,
+    journals,
+    consentHash: digest(consent),
+  };
+}
 export async function publishAnchor(topic: string, anchor: SignedAnchor, key: PrivateKey): Promise<AnchorReceipt> {
   const client = Client.forTestnet();
   client.setOperator(AccountId.fromString(anchor.publisherAccount), key);

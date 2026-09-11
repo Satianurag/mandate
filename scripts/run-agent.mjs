@@ -11,6 +11,9 @@ const index = process.argv.indexOf('--capability');
 if (index < 0 || !process.argv[index + 1]) throw new Error('Usage: npm run agent -- --capability <operator-created file> [--probe]');
 const capability = JSON.parse(await readFile(resolve(process.argv[index + 1]), 'utf8'));
 if (capability.broker !== 'http://127.0.0.1:8410' || !/^[A-Za-z0-9_-]{43}$/.test(capability.token ?? '')) throw new Error('Invalid local broker capability');
+if (capability.version === 2) {
+  if (!capability.task || capability.task.version !== 1 || capability.task.template !== 'agent0-due-diligence') throw new Error('Invalid source-bound research capability');
+} else if (typeof capability.query !== 'string') throw new Error('Legacy capability is missing its exact query');
 const image = (await readFile(`${root}/agent/runtime-image.txt`, 'utf8')).trim();
 if (!/^node@sha256:[a-f0-9]{64}$/.test(image)) throw new Error('The agent runtime must be pinned to an official Node image digest');
 const requestId = process.argv.find(v => v.startsWith('--request-id='))?.slice(13) ?? randomUUID();
@@ -44,7 +47,7 @@ lines.on('line', line => {
       assert.equal(metadata.Mounts[0].Destination, '/agent/consumer.mjs');
       assert.equal(metadata.Mounts[0].RW, false);
       report.isolation = { ...message.boundary, networkMode: metadata.HostConfig.NetworkMode, readOnlyRootfs: true, nonRoot: true, capabilitiesDropped: ['ALL'], noNewPrivileges: true, hostDataMounts: 0, codeMountReadOnly: true };
-      child.stdin.write(`${JSON.stringify({ type: 'init', query: capability.query, requestId, probe: report.probe })}\n`);
+      child.stdin.write(`${JSON.stringify({ type: 'init', task: capability.task, query: capability.query, requestId, probe: report.probe })}\n`);
       return;
     }
     if (message.type === 'call') {

@@ -5,6 +5,7 @@ import { nodeAdapter } from "./http-adapter.ts";
 import { Journal, digest, type StoredResponse } from "./journal.ts";
 import { validateAnalyticsQuery } from "./query-scope.ts";
 import { AGENT0_SAMPLE_QUERY } from "./analytics.ts";
+import { validateResearchSource, type ResearchSourceScope } from "./research-task.ts";
 
 export function writeStored(res: ServerResponse, response: StoredResponse): void {
   res.writeHead(response.status, { "content-type": "application/json", "cache-control": "private, no-store", ...response.headers });
@@ -12,15 +13,34 @@ export function writeStored(res: ServerResponse, response: StoredResponse): void
 }
 export async function handlePaidRequest(opts: {
   req: IncomingMessage; res: ServerResponse; httpServer: x402HTTPResourceServer; journal: Journal;
-  prepare: (query: string) => Promise<Record<string, unknown>>;
+  prepare: (request: { query: string; source?: ResearchSourceScope }) => Promise<Record<string, unknown>>;
   actualAmount?: (path: string) => string | undefined;
 }): Promise<void> {
   const { req, res, httpServer, journal } = opts;
   const base = `http://${req.headers.host ?? "localhost"}`;
-  const url = new URL(req.url ?? "/", base), path = url.pathname;
+  let url: URL, path: string, query: string, source: ResearchSourceScope | undefined;
+  try {
+    url = new URL(req.url ?? "/", base);
+    path = url.pathname;
+    const allowed = new Set(["q", "sourceChain", "sourceDeployment"]);
+    if ([...url.searchParams.keys()].some(key => !allowed.has(key))) throw new Error("Paid analytics request contains unsupported query parameters");
+    if (url.searchParams.getAll("q").length > 1 || url.searchParams.getAll("sourceChain").length > 1 || url.searchParams.getAll("sourceDeployment").length > 1) {
+      throw new Error("Paid analytics request contains duplicate query parameters");
+    }
+    query = url.searchParams.get("q") ?? AGENT0_SAMPLE_QUERY;
+    const sourceChain = url.searchParams.get("sourceChain"), sourceDeployment = url.searchParams.get("sourceDeployment");
+    if ((sourceChain === null) !== (sourceDeployment === null)) throw new Error("Research source chain and deployment must be supplied together");
+    source = sourceChain && sourceDeployment ? validateResearchSource({ provider: "the-graph", chain: sourceChain, deployment: sourceDeployment }) : undefined;
+  } catch (e) {
+    writeStored(res, { status: 400, headers: {}, body: JSON.stringify({
+      error: e instanceof Error ? e.message : String(e),
+      paymentCommitted: false,
+      paymentProcessingAttempted: false,
+    }) });
+    return;
+  }
   const adapter = nodeAdapter(req, base);
   const context = { adapter, path, method: req.method ?? "GET" };
-  const query = url.searchParams.get("q") ?? AGENT0_SAMPLE_QUERY;
   const raw = req.headers["payment-signature"] ?? req.headers["x-payment"];
   let paymentHash: string | undefined;
   let recovery = false;
@@ -55,7 +75,7 @@ export async function handlePaidRequest(opts: {
         writeStored(res, { status: 409, headers: {}, body: JSON.stringify({ error: e instanceof Error ? e.message : String(e), reconciliationRequired: true }) });
         return;
       }
-      journal.event("merchant", paymentHash, "merchant.request_received", { method: context.method, path, query, recovery });
+      journal.event("merchant", paymentHash, "merchant.request_received", { method: context.method, path, query, source: source ?? null, recovery });
       if (!recovery && httpServer.requiresPayment(context)) {
         try { validateAnalyticsQuery(query); }
         catch (e) {
@@ -63,7 +83,7 @@ export async function handlePaidRequest(opts: {
         }
         try {
           // Deliberately before processHTTPRequest: some stock flows settle deposits upfront.
-          prepared = await opts.prepare(query);
+          prepared = await opts.prepare({ query, source });
           if (Buffer.byteLength(JSON.stringify(prepared)) > 1_000_000) throw new Error("Analytics result exceeds the 1 MB response bound");
         } catch (e) {
           journal.event("merchant", paymentHash, "merchant.prepare_failed", { message: e instanceof Error ? e.message : String(e), paymentCommitted: false });

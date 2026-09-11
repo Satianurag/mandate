@@ -2,6 +2,7 @@
 import { getAddress } from "viem";
 import type { Network, PaymentRequirements } from "@x402/core/types";
 import { units, type BudgetLimits } from "./journal.ts";
+import { validateResearchSource, type ResearchSourceScope } from "./research-task.ts";
 
 export interface MandateScope extends BudgetLimits {
   network: Network;
@@ -11,6 +12,8 @@ export interface MandateScope extends BudgetLimits {
   receiverAuthorizer: `0x${string}`;
   withdrawDelay: number;
   expiresAt: string;
+  /** Optional only for reading legacy v2 mandates. New paid work requires an exact source. */
+  researchSource?: ResearchSourceScope;
 }
 export function validateScope(scope: MandateScope): MandateScope {
   if (!scope || typeof scope !== "object") throw new Error("An explicit mandate scope is required");
@@ -29,7 +32,8 @@ export function validateScope(scope: MandateScope): MandateScope {
   if (!Number.isSafeInteger(scope.windowMs) || scope.windowMs < 1000 || scope.windowMs > 31 * 86400000) throw new Error("Invalid rolling budget window");
   if (!Number.isSafeInteger(scope.withdrawDelay) || scope.withdrawDelay < 60 || scope.withdrawDelay > 31 * 86400) throw new Error("Invalid withdrawal delay");
   if (typeof scope.expiresAt !== "string" || !scope.expiresAt.endsWith("Z") || !Number.isFinite(Date.parse(scope.expiresAt))) throw new Error("Expiry must be a UTC ISO timestamp");
-  return Object.freeze({ ...scope, serviceUrl: service.toString(), asset: getAddress(scope.asset), receiver: getAddress(scope.receiver), receiverAuthorizer: getAddress(scope.receiverAuthorizer) });
+  const researchSource = scope.researchSource === undefined ? undefined : validateResearchSource(scope.researchSource);
+  return Object.freeze({ ...scope, serviceUrl: service.toString(), asset: getAddress(scope.asset), receiver: getAddress(scope.receiver), receiverAuthorizer: getAddress(scope.receiverAuthorizer), researchSource });
 }
 export function assertUnexpired(scope: MandateScope, now = Date.now()): void {
   if (now >= Date.parse(scope.expiresAt)) throw new Error("Mandate permission has expired; withdrawal delay is not permission expiry");
@@ -41,7 +45,16 @@ export function assertRequestScope(scope: MandateScope, input: string | URL | Re
   if (u.username || u.password || u.hash || u.origin !== allowed.origin || u.pathname !== allowed.pathname) throw new Error("Request origin or path is outside the mandate");
   if (req.method !== "GET" || req.body) throw new Error("Only bounded read-only GET requests are authorized");
   const keys = [...u.searchParams.keys()];
-  if (keys.some(k => k !== "q") || u.searchParams.getAll("q").length > 1) throw new Error("Only one q parameter is allowed");
+  const allowedKeys = scope.researchSource && !recovery ? new Set(["q", "sourceChain", "sourceDeployment"]) : new Set(["q"]);
+  if (keys.some(k => !allowedKeys.has(k)) || u.searchParams.getAll("q").length > 1) throw new Error("Request contains fields outside the reviewed research task");
+  if (scope.researchSource && !recovery) {
+    if (u.searchParams.getAll("q").length !== 1 || u.searchParams.getAll("sourceChain").length !== 1 || u.searchParams.getAll("sourceDeployment").length !== 1) {
+      throw new Error("A source-bound task requires one query, sourceChain and sourceDeployment");
+    }
+    if (u.searchParams.get("sourceChain") !== scope.researchSource.chain || u.searchParams.get("sourceDeployment") !== scope.researchSource.deployment) {
+      throw new Error("Research source is outside the mandate");
+    }
+  }
   if (u.toString().length > 16000) throw new Error("Request is too large");
   for (const name of ["authorization", "cookie", "payment-signature", "x-payment", "host"]) {
     if (req.headers.has(name)) throw new Error(`Caller-controlled ${name} is forbidden`);

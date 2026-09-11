@@ -12,6 +12,7 @@ import type {
   TypedData as DmkTypedData,
   Signature as DmkSignature,
   Address as DmkAddress,
+  SignerEth,
 } from "@ledgerhq/device-signer-kit-ethereum";
 import { SignerEthBuilder, ContextModuleBuilder, ContextModuleChainID } from "./ledger-cjs.ts";
 import {
@@ -30,6 +31,12 @@ import {
   type ClearSigningVerdict,
 } from "./origin-token.ts";
 import type { ContextModule } from "@ledgerhq/context-module";
+import { getAddress, type Address, type Hex } from "viem";
+import {
+  applyLedgerTransactionSignature,
+  unsignedWithdrawalBytes,
+  type PreparedWithdrawalTransaction,
+} from "./withdrawal.ts";
 
 export const DEFAULT_DERIVATION_PATH = "44'/60'/0'/0/0";
 
@@ -220,5 +227,64 @@ export class DmkEvmSigner implements ClientEvmSigner {
     } finally {
       resetDmk();
     }
+  }
+}
+
+
+export interface LedgerWithdrawalSigningResult {
+  signedSerialized: Hex;
+  transactionHash: Hex;
+  signer: Address;
+  trace: DeviceActionTrace[];
+}
+
+/**
+ * Execute exactly one DMK transaction-signing action against an already-built
+ * signer. This helper is injectable for hermetic tests and never broadcasts.
+ */
+export async function signWithdrawalWithEthSigner(
+  signer: Pick<SignerEth, "signTransaction">,
+  plan: PreparedWithdrawalTransaction,
+  expectedAddress: Address,
+  options: { path?: string; timeoutMs?: number; skipOpenApp?: boolean } = {},
+): Promise<LedgerWithdrawalSigningResult> {
+  if (plan.network !== "eip155:84532" || plan.chainId !== 84532) throw new Error("Ledger transaction signing is restricted to Base Sepolia");
+  if (getAddress(plan.payer) !== getAddress(expectedAddress)) throw new Error("Reviewed withdrawal payer differs from the expected Ledger address");
+  const trace: DeviceActionTrace[] = [];
+  const { observable } = signer.signTransaction(
+    options.path ?? DEFAULT_DERIVATION_PATH,
+    unsignedWithdrawalBytes(plan),
+    { skipOpenApp: options.skipOpenApp ?? false },
+  );
+  const signature = await awaitDeviceAction<DmkSignature>(observable, options.timeoutMs ?? 120_000, trace);
+  const applied = await applyLedgerTransactionSignature(plan.unsignedSerialized, signature, expectedAddress);
+  return { ...applied, trace };
+}
+
+/**
+ * Ask the physical Ledger to sign one reviewed withdrawal transaction.
+ * The result remains unbroadcast. Callers must separately revalidate state and
+ * explicitly authorize broadcast.
+ */
+export async function signLedgerWithdrawalTransaction(
+  plan: PreparedWithdrawalTransaction,
+  expectedAddress: Address,
+  options: DmkSignerOptions = {},
+): Promise<LedgerWithdrawalSigningResult> {
+  assertTestnetChain(plan.chainId);
+  const full = {
+    path: options.path ?? DEFAULT_DERIVATION_PATH,
+    timeoutMs: options.timeoutMs ?? 120_000,
+    skipOpenApp: options.skipOpenApp ?? process.env.MANDATE_ETH_APP_OPEN === "1",
+  };
+  try {
+    return await withDeviceSession(async sessionId => {
+      const { signer } = await buildEthSigner(sessionId);
+      return signWithdrawalWithEthSigner(signer, plan, expectedAddress, full);
+    }, full.timeoutMs);
+  } catch (error) {
+    throw new Error(`signLedgerWithdrawalTransaction: ${formatLedgerError(error)}`);
+  } finally {
+    resetDmk();
   }
 }

@@ -147,10 +147,41 @@ export async function withSecret<T>(
   }
 }
 
+const DEFAULT_WALLET_CLI_TIMEOUT_MS = 60_000;
+const DEFAULT_WALLET_CLI_MAX_OUTPUT_BYTES = 1_000_000;
+const MAX_WALLET_CLI_TIMEOUT_MS = 120_000;
+const MAX_WALLET_CLI_OUTPUT_BYTES = 4_000_000;
+const MAX_WALLET_CLI_INPUT_BYTES = 1_000_000;
+
+function boundedSetting(name: string, fallback: number, maximum: number): number {
+  const raw = process.env[name];
+  if (raw === undefined || raw === "") return fallback;
+  const value = Number(raw);
+  if (!Number.isSafeInteger(value) || value < 10 || value > maximum) {
+    throw new KeyRingError(`${name} must be an integer from 10 to ${maximum}`);
+  }
+  return value;
+}
+
+function sanitizeDiagnostic(input: string): string {
+  let value = input;
+  const password = process.env.WALLET_PASS;
+  if (password) value = value.split(password).join("[REDACTED_PASSWORD]");
+  value = value.replace(/(?:0x)?[a-fA-F0-9]{64}/g, "[REDACTED_32_BYTE_VALUE]");
+  value = value.replace(/[A-Za-z0-9+/=_-]{96,}/g, "[REDACTED_LONG_VALUE]");
+  return value.slice(0, 4096);
+}
+
 function run(args: string[], input: Buffer): Promise<Buffer> {
+  if (input.length > MAX_WALLET_CLI_INPUT_BYTES) {
+    return Promise.reject(new KeyRingError(`wallet-cli input exceeds the ${MAX_WALLET_CLI_INPUT_BYTES}-byte bound`));
+  }
+  const timeoutMs = boundedSetting("MANDATE_WALLET_CLI_TIMEOUT_MS", DEFAULT_WALLET_CLI_TIMEOUT_MS, MAX_WALLET_CLI_TIMEOUT_MS);
+  const maxOutputBytes = boundedSetting("MANDATE_WALLET_CLI_MAX_OUTPUT_BYTES", DEFAULT_WALLET_CLI_MAX_OUTPUT_BYTES, MAX_WALLET_CLI_OUTPUT_BYTES);
   return new Promise((resolve, reject) => {
     const child = spawn("wallet-cli", args, {
       stdio: ["pipe", "pipe", "pipe"],
+      detached: process.platform !== "win32",
       // Pass WALLET_PASS through explicitly rather than inheriting the whole
       // environment, so an unrelated leaked variable cannot ride along.
       env: { PATH: process.env.PATH ?? "", WALLET_PASS: process.env.WALLET_PASS ?? "" },
@@ -158,26 +189,56 @@ function run(args: string[], input: Buffer): Promise<Buffer> {
 
     const out: Buffer[] = [];
     const err: Buffer[] = [];
-    child.stdout.on("data", (c: Buffer) => out.push(c));
-    child.stderr.on("data", (c: Buffer) => err.push(c));
+    let totalOutput = 0;
+    let settled = false;
+    const command = `wallet-cli ${args.slice(0, 2).join(" ")}`;
+    const kill = () => {
+      if (!child.pid) return;
+      try {
+        if (process.platform !== "win32") process.kill(-child.pid, "SIGKILL");
+        else child.kill("SIGKILL");
+      } catch {
+        try { child.kill("SIGKILL"); } catch { /* process already exited */ }
+      }
+    };
+    const finishReject = (error: KeyRingError) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      kill();
+      reject(error);
+    };
+    const collect = (target: Buffer[], chunk: Buffer) => {
+      if (settled) return;
+      totalOutput += chunk.length;
+      if (totalOutput > maxOutputBytes) {
+        finishReject(new KeyRingError(`${command} exceeded the ${maxOutputBytes}-byte output bound`));
+        return;
+      }
+      target.push(Buffer.from(chunk));
+    };
+    const timer = setTimeout(() => {
+      finishReject(new KeyRingError(`${command} timed out after ${timeoutMs} ms`));
+    }, timeoutMs);
+    timer.unref();
 
-    child.on("error", (e) =>
-      reject(
-        new KeyRingError(
-          `Could not run wallet-cli. Install it with: npm i -g @ledgerhq/wallet-cli (${e.message})`
-        )
-      )
-    );
-
-    child.on("close", (code) => {
-      if (code === 0) return resolve(Buffer.concat(out));
-      reject(
-        new KeyRingError(
-          `wallet-cli ${args[0]} ${args[1]} exited ${code}`,
-          Buffer.concat(err).toString("utf8"),
-          code ?? undefined
-        )
-      );
+    child.stdout.on("data", (chunk: Buffer) => collect(out, chunk));
+    child.stderr.on("data", (chunk: Buffer) => collect(err, chunk));
+    child.stdin.on("error", error => {
+      if ((error as NodeJS.ErrnoException).code !== "EPIPE") finishReject(new KeyRingError(`${command} input failed: ${error.message}`));
+    });
+    child.on("error", error => {
+      finishReject(new KeyRingError(`Could not run wallet-cli. Install it with: npm i -g @ledgerhq/wallet-cli (${sanitizeDiagnostic(error.message)})`));
+    });
+    child.on("close", code => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      if (code === 0) {
+        resolve(Buffer.concat(out));
+        return;
+      }
+      reject(new KeyRingError(`${command} exited ${code}`, sanitizeDiagnostic(Buffer.concat(err).toString("utf8")), code ?? undefined));
     });
 
     if (input.length) child.stdin.write(input);

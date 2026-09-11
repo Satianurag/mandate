@@ -68,3 +68,24 @@ test("audit regression: the actual paid query reaches the live data boundary", a
   assert.equal(executed, query); assert.deepEqual(body.rows, []);
   await assert.rejects(liveAnalyticsBody("mutation { deleteEverything }", {}, { apiKey: "unit-test-key", subgraphs: {} }), /read-only/);
 });
+
+
+test("explicit source never falls through to a different deployment", async () => {
+  const query = "{ agents(first: 2) { id agentId agentWallet totalFeedback feedback(first: 1) { value isRevoked } } _meta { block { number } } }";
+  const source = { provider: "the-graph" as const, chain: "bsc-chapel" as const, deployment: "BTjind17gmRZ6YhT9peaCM13SvWuqztsmqyfjpntbg3Z" };
+  const seen: string[] = [];
+  const fetchFn = (async (url: string | URL | Request) => {
+    seen.push(String(url));
+    return new Response(JSON.stringify({ data: { agents: [], _meta: { block: { number: 77 } } } }), { status: 200 });
+  }) as typeof fetch;
+  const body = await liveAnalyticsBody(query, {}, { apiKey: "unit-test-key", subgraphs: {
+    "base-sepolia": "4yYAvQLFjBhBtdRCY7eUWo181VNoTSLLFd5M7FXQAi6u",
+    "bsc-chapel": source.deployment,
+  }, fetchFn, source });
+  assert.equal(seen.length, 1);
+  assert.match(seen[0]!, new RegExp(source.deployment));
+  assert.equal((body.source as { chain: string }).chain, "bsc-chapel");
+  await assert.rejects(() => liveAnalyticsBody(query, {}, { apiKey: "unit-test-key", subgraphs: { "base-sepolia": "4yYAvQLFjBhBtdRCY7eUWo181VNoTSLLFd5M7FXQAi6u" }, fetchFn, source }), /not available/);
+  await assert.rejects(() => liveAnalyticsBody(query, {}, { apiKey: "unit-test-key", subgraphs: { "bsc-chapel": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" }, fetchFn, source }), /no longer matches/);
+  assert.equal(seen.length, 1, "mismatched discovery must fail before querying another deployment");
+});

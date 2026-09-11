@@ -118,7 +118,7 @@ export async function buildService(cfg: ServiceConfig): Promise<Server> {
   const journal = new Journal(cfg.journalPath ?? "./state/hedera-service/merchant.sqlite");
   const server = createServer((req, res) => {
     void handlePaidRequest({ req, res, httpServer, journal,
-      prepare: query => liveAnalyticsBody(query, {}, { fetchRows: cfg.fetchRows }),
+      prepare: request => liveAnalyticsBody(request.query, {}, { fetchRows: cfg.fetchRows, source: request.source }),
     }).catch(e => {
       console.error("Merchant handler failed:", e instanceof Error ? e.message : String(e));
       if (!res.headersSent) res.writeHead(503, { "content-type": "application/json" });

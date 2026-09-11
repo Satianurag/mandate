@@ -12,6 +12,8 @@ export interface MandateFile extends MandateScope {
   sessionKey: string;
   derivationPath: string;
   storageRoot: string;
+  /** Absent only on legacy v2 files, which remain recoverable but cannot start new research. */
+  researchSource?: MandateScope["researchSource"];
 }
 function fail(field: string, why: string): never { throw new Error(`mandate.yaml: field "${field}" ${why}.`); }
 export function parseMandateFile(text: string): MandateFile {
@@ -21,7 +23,7 @@ export function parseMandateFile(text: string): MandateFile {
   const d = value as Record<string, unknown>;
   if (d.version === 1) fail("version", "is legacy v1: review a new v2 scope in the operator workspace; the original configuration and funded channel must be preserved for recovery");
   if (d.version !== 2) fail("version", "must be 2");
-  const allowed = new Set(["version","network","rpcUrl","serviceUrl","ceilingBaseUnits","perCallBaseUnits","windowBaseUnits","windowMs","salt","receiver","asset","receiverAuthorizer","withdrawDelay","expiresAt","operatorAddress","sessionKey","derivationPath","storageRoot"]);
+  const allowed = new Set(["version","network","rpcUrl","serviceUrl","ceilingBaseUnits","perCallBaseUnits","windowBaseUnits","windowMs","salt","receiver","asset","receiverAuthorizer","withdrawDelay","expiresAt","operatorAddress","sessionKey","derivationPath","storageRoot","researchSource"]);
   for (const k of Object.keys(d)) if (!allowed.has(k)) fail(k, "is not a recognized authority field");
   if (d.network !== "eip155:84532") fail("network", "must be eip155:84532 for the Ledger operator workspace");
   for (const f of ["rpcUrl","serviceUrl","sessionKey","storageRoot","expiresAt"] as const) {
@@ -47,5 +49,5 @@ export function scopeOf(m: MandateFile): MandateScope {
   return { network: m.network, serviceUrl: m.serviceUrl, asset: m.asset, receiver: m.receiver,
     receiverAuthorizer: m.receiverAuthorizer, withdrawDelay: m.withdrawDelay, expiresAt: m.expiresAt,
     ceilingBaseUnits: m.ceilingBaseUnits, perCallBaseUnits: m.perCallBaseUnits,
-    windowBaseUnits: m.windowBaseUnits, windowMs: m.windowMs };
+    windowBaseUnits: m.windowBaseUnits, windowMs: m.windowMs, researchSource: m.researchSource };
 }

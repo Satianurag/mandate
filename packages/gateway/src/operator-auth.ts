@@ -8,7 +8,7 @@ import { Journal, digest } from "./journal.ts";
 const fresh = () => randomBytes(32).toString("base64url");
 const hash = (token: string) => createHash("sha256").update(token).digest("hex");
 export type Principal = { role: "operator"; csrf: string; sessionHash: string } |
-  { role: "agent"; capabilityId: string; mandateId: string; queryHash: string; expiresAt: number };
+  { role: "agent"; capabilityId: string; mandateId: string; authorityHash: string; expiresAt: number };
 export class HttpError extends Error {
   readonly status: number;
   constructor(status: number, message: string) { super(message); this.status = status; }
@@ -60,7 +60,7 @@ export class OperatorAuth {
       const row = this.journal.db.prepare("SELECT * FROM agent_capabilities WHERE hash=? AND revoked=0 AND expires_at>?").get(hash(token), Date.now()) as
         { id: string; mandate_id: string; query_hash: string; expires_at: number } | undefined;
       if (!row) throw new HttpError(401, "Agent capability is missing, expired or revoked");
-      return { role: "agent", capabilityId: row.id, mandateId: row.mandate_id, queryHash: row.query_hash, expiresAt: row.expires_at };
+      return { role: "agent", capabilityId: row.id, mandateId: row.mandate_id, authorityHash: row.query_hash, expiresAt: row.expires_at };
     }
     const token = /(?:^|;\s*)mandate_session=([A-Za-z0-9_-]{43})(?:;|$)/.exec(req.headers.cookie ?? "")?.[1];
     const row = token ? this.journal.db.prepare("SELECT csrf FROM operator_sessions WHERE hash=? AND expires_at>?").get(hash(token), Date.now()) as { csrf: string } | undefined : undefined;
@@ -74,12 +74,13 @@ export class OperatorAuth {
   operator(principal: Principal): void {
     if (principal.role !== "operator") throw new HttpError(403, "Agent capabilities cannot change authority, access operator evidence or control recovery");
   }
-  createCapability(mandateId: string, query: string, expiresAt: number): { id: string; token: string } {
+  createCapability(mandateId: string, authority: unknown, expiresAt: number): { id: string; token: string } {
     if (!Number.isSafeInteger(expiresAt) || expiresAt <= Date.now()) throw new HttpError(400, "Capability expiry must be in the future");
-    const id = fresh().slice(0, 16), token = fresh();
+    const id = fresh().slice(0, 16), token = fresh(), authorityHash = digest(authority);
+    // The legacy column name is retained for a non-destructive SQLite migration. Its value is now the canonical authority hash.
     this.journal.db.prepare("INSERT INTO agent_capabilities(id,hash,mandate_id,query_hash,expires_at) VALUES(?,?,?,?,?)")
-      .run(id, hash(token), mandateId, digest(query), expiresAt);
-    this.journal.event(mandateId, null, "agent.capability_created", { id, queryHash: digest(query), expiresAt });
+      .run(id, hash(token), mandateId, authorityHash, expiresAt);
+    this.journal.event(mandateId, null, "agent.capability_created", { id, authorityHash, expiresAt });
     return { id, token };
   }
   revokeCapabilities(mandateId: string): void {
