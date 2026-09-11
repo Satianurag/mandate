@@ -49,9 +49,7 @@ export const MANDATE_AGENT_VERSION = "0.1.0";
 export const MANDATE_SKILLS = [13, 15, 33, 35, 36, 39];
 
 const HEDERA_NETWORK_NAMES: Record<string, string> = {
-  "hedera:mainnet": "mainnet",
   "hedera:testnet": "testnet",
-  "hedera:previewnet": "previewnet",
 };
 
 /**

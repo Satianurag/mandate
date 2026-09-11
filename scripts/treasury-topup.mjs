@@ -45,9 +45,9 @@ if (!process.env.WALLET_PASS) {
 // Gateway networks are CAIP-style (hedera:testnet); the SDKs want bare names.
 const network = process.env.MANDATE_HEDERA_NETWORK ?? "hedera:testnet";
 const sdkNetwork =
-  network === "hedera:mainnet" ? "mainnet" : network === "hedera:testnet" ? "testnet" : null;
+  network === "hedera:testnet" ? "testnet" : null;
 if (!sdkNetwork) {
-  console.error(`hedera:mainnet/testnet only, got ${network}`);
+  console.error(`hedera:testnet only (mainnet disabled), got ${network}`);
   process.exit(1);
 }
 
@@ -122,10 +122,7 @@ try {
 const executeAt = new Date(Date.now() + inDays * 86_400_000);
 await withSecret("treasury", treasuryEnc, async (secret) => {
   const treasuryKey = PrivateKey.fromStringECDSA(secret.toString("utf8").trim().replace(/^0x/, ""));
-  const client =
-    sdkNetwork === "mainnet"
-      ? Client.forMainnet().setOperator(treasuryId, treasuryKey)
-      : Client.forTestnet().setOperator(treasuryId, treasuryKey);
+  const client = Client.forTestnet().setOperator(treasuryId, treasuryKey);
   try {
     const signed = await (
       await buildTopUpSchedule(

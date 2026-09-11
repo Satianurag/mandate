@@ -1,0 +1,18 @@
+# Reproducible, credential-free Linux verification. This is not an agent or a funded broker image.
+FROM node@sha256:83f487e0a63425e5b4d146fb5e5be574bcbe1b7b843d3ebafdd95eaf7767a7e5
+RUN apt-get update && apt-get install -y --no-install-recommends libudev1 libusb-1.0-0 python3 make g++ ca-certificates && rm -rf /var/lib/apt/lists/*
+WORKDIR /opt/mandate
+COPY package.json package-lock.json ./
+COPY packages/facilitator/package.json ./packages/facilitator/package.json
+COPY packages/gateway/package.json ./packages/gateway/package.json
+COPY packages/mandate-service/package.json ./packages/mandate-service/package.json
+COPY packages/service/package.json ./packages/service/package.json
+COPY scripts/apply-security-patches.mjs ./scripts/apply-security-patches.mjs
+RUN npm ci --no-audit --no-fund
+COPY --chown=node:node packages ./packages
+COPY --chown=node:node scripts ./scripts
+COPY --chown=node:node console ./console
+COPY --chown=node:node agent ./agent
+RUN chown node:node /opt/mandate
+USER node
+CMD ["npm", "run", "verify"]

@@ -1,24 +1,22 @@
-# Copy to mandate.yaml (gitignored) and set the receiver. No secrets here —
-# the session key lives sealed in the Key Ring and is only NAMED below.
-#
-# Quote every hex/integer value: unquoted 0x… parses as a YAML number and the
-# strict loader rejects it. All fields are required; nothing defaults.
-version: 1
+# Reviewed operator configuration. The workspace creates fresh salt/storage on save.
+# Never copy an old funded channel into a new authority without reconciliation.
+version: 2
 network: "eip155:84532"
 rpcUrl: "https://sepolia.base.org"
 serviceUrl: "http://127.0.0.1:8405/analytics"
-# Lifetime spend cap in USDC base units (6 decimals): "5000000" = $5.00.
+asset: "0x036CbD53842c5426634e7929541eC2318f3dCF7e"
+# Set all three from independently verified operator/merchant identities.
+operatorAddress: "REQUIRED_LEDGER_ADDRESS"
+receiver: "REQUIRED_MERCHANT_ADDRESS"
+receiverAuthorizer: "REQUIRED_FACILITATOR_AUTHORIZER"
+withdrawDelay: 86400
+# Explicit UTC expiry; this is broker-enforced, not escrow withdrawal timing.
+expiresAt: "REQUIRED_UTC_ISO_EXPIRY"
 ceilingBaseUnits: "5000000"
-# Fresh bytes32 per mandate. The channel id commits it: re-running with the
-# same salt RESUMES the channel (no new tap, no new deposit); a new salt
-# opens a new mandate (one tap, one deposit).
-salt: "0x0000000000000000000000000000000000000000000000000000000000000000"
-# The paid service's receiver. Use an address you control (claim the USDC
-# later) — NOT the payer: self-channels are rejected by the facilitator.
-receiver: "0x0000000000000000000000000000000000000000"
-# Key Ring key name sealing the voucher session key (npm run mandate:keygen).
+perCallBaseUnits: "10000"
+windowBaseUnits: "100000"
+windowMs: 3600000
+salt: "REQUIRED_FRESH_BYTES32"
 sessionKey: "mandate-session"
-# Ledger derivation path for the payer.
 derivationPath: "44'/60'/0'/0/0"
-# Channel records. Must survive restarts — vouchers live here, not onchain.
-storageRoot: "./state/mandate"
+storageRoot: "./state/operator-mandate"

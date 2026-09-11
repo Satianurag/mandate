@@ -8,6 +8,7 @@
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { AGENT_QUERY, queryAgent0, resolveDiscoveredSubgraphs } from "./reputation.ts";
+import { validateAnalyticsQuery } from "./query-scope.ts";
 import { withSecret } from "./keyring.ts";
 
 export { AGENT_QUERY };
@@ -31,8 +32,9 @@ export interface Agent0Row {
   id: string;
   agentId: string | null;
   agentWallet: string | null;
-  totalFeedback: string;
+  totalFeedback: string | null;
   sampleMean: number | null;
+  measurements?: Array<{value: string; isRevoked: boolean}>;
 }
 
 export interface AnalyticsPayload {
@@ -54,9 +56,10 @@ export async function fetchAgent0Rows(
   opts: { fetchFn?: FetchFn; query?: string } = {}
 ): Promise<Agent0Row[]> {
   const fetchFn = opts.fetchFn ?? fetch;
-  const query = opts.query ?? AGENT0_SAMPLE_QUERY;
+  const query = validateAnalyticsQuery(opts.query ?? AGENT0_SAMPLE_QUERY);
   const body = await queryAgent0(subgraphId, apiKey, query, undefined, fetchFn);
   const agents = (body as { agents?: Raw[] })?.agents ?? [];
+  if (!Array.isArray(agents)) throw new Error("Graph response agents must be a collection");
   return agents.map(toRow);
 }
 
@@ -69,16 +72,14 @@ interface Raw {
 }
 
 function toRow(agent: Raw): Agent0Row {
-  const live = (agent.feedback ?? [])
-    .filter((f) => !f.isRevoked)
-    .map((f) => Number(f.value))
-    .filter((n) => Number.isFinite(n));
   return {
     id: agent.id,
-    agentId: agent.agentId,
-    agentWallet: agent.agentWallet,
-    totalFeedback: agent.totalFeedback,
-    sampleMean: live.length ? live.reduce((a, b) => a + b, 0) / live.length : null,
+    agentId: agent.agentId ?? null,
+    agentWallet: agent.agentWallet ?? null,
+    totalFeedback: agent.totalFeedback ?? null,
+    // Measurements can have incompatible units and scales. Never average them into a trust score.
+    sampleMean: null,
+    measurements: (agent.feedback ?? []).map(f => ({value:String(f.value),isRevoked:f.isRevoked})),
   };
 }
 
@@ -106,6 +107,7 @@ export async function liveAnalyticsBody(
     fetchRows?: (query: string) => Promise<Agent0Row[]>;
   } = {}
 ): Promise<Record<string, unknown>> {
+  validateAnalyticsQuery(query);
   if (deps.fetchRows) {
     const rows = await deps.fetchRows(query);
     return analyticsPayload(query, { chain: "test", subgraphId: "injected" }, rows, paid);
@@ -120,26 +122,25 @@ export async function liveAnalyticsBody(
     "ethereum-sepolia",
     "bsc-chapel",
     "monad-testnet",
-    ...Object.keys(subgraphs),
   ].filter((c, i, a) => subgraphs[c] && a.indexOf(c) === i);
   if (preferred.length === 0) throw new Error("MCP discovery returned no Agent0 deployments.");
 
   let lastErr: Error | undefined;
+  const attempts: Array<{chain:string;status:string;error?:string}> = [];
   for (const chain of preferred) {
     const subgraphId = subgraphs[chain]!;
     try {
-      const rows = await fetchAgent0Rows(subgraphId, apiKey, {
-        fetchFn: deps.fetchFn,
-        query: AGENT0_SAMPLE_QUERY,
-      });
-      if (rows.length === 0) {
-        lastErr = new Error(`Agent0 ${chain} (${subgraphId}) returned zero rows.`);
-        continue;
-      }
-      return analyticsPayload(query, { chain, subgraphId }, rows, paid);
+      const data = await queryAgent0(subgraphId, apiKey, query, undefined, deps.fetchFn);
+      if (!data || typeof data !== "object") throw new Error("Graph returned no query data");
+      const raw = data as {agents?:Raw[];_meta?:unknown};
+      if (raw.agents !== undefined && !Array.isArray(raw.agents)) throw new Error("Graph agents is not a collection");
+      attempts.push({chain,status:"available"});
+      return {...analyticsPayload(query, {chain,subgraphId}, (raw.agents ?? []).map(toRow), paid),
+        data, sourceMetadata:raw._meta ?? null, sourceAttempts:attempts};
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       lastErr = e instanceof Error ? e : new Error(msg);
+      attempts.push({chain,status:"unavailable",error:msg});
       if (/subgraph not found|bad indexers/i.test(msg)) continue;
       throw e;
     }
@@ -153,5 +154,7 @@ export function analyticsPayload(
   rows: Agent0Row[],
   paid: Record<string, unknown>
 ): Record<string, unknown> {
-  return { ok: true, query, source, paid, rows };
+  return { ok: true, query, source, observedAt: new Date().toISOString(),
+    reputation: { advisoryOnly: true, reviewersFiltered: false, measurementSchema: "unspecified", warning: "Feedback counts and raw sample values are not spending authority or a comparable trust score." },
+    paid, rows };
 }

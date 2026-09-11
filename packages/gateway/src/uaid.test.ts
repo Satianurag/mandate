@@ -101,8 +101,7 @@ test("operator UAID is deterministic and carries the account uid", async () => {
   assert.ok(a.startsWith("uaid:aid:"));
   assert.ok(a.includes("uid=0.0.54321"));
   assert.ok(a.includes("nativeId=hedera:testnet:0.0.54321"));
-  const mainnet = await deriveOperatorUaid("0.0.54321", "hedera:mainnet");
-  assert.notEqual(mainnet, a, "network is part of the identity");
+  await assert.rejects(() => deriveOperatorUaid("0.0.54321", "hedera:mainnet"), /unknown Hedera network/);
 });
 
 test("operator profile is SDK-schema-valid with the UAID embedded", async () => {

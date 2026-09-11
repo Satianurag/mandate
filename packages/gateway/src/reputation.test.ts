@@ -43,7 +43,7 @@ const agent = (wallet: string, values: number[]) => ({
 
 test("Hedera account ID resolves to its EVM alias before reputation lookup", async () => {
   const evm = "0x79dc34e41b2b591078d3de222c43ecaabd52fccb";
-  const baseId = AGENT0_SUBGRAPHS["base"]!;
+  const baseId = AGENT0_SUBGRAPHS["base-sepolia"]!;
   const { fn, seen } = stubFetch({
     mirror: { account: "0.0.1234", evm_address: evm },
     agents: { [baseId]: agent(evm, [90, 95]) },

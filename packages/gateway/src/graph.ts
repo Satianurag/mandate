@@ -12,23 +12,10 @@
  *      failures -- `{"errors":[{"message":"auth error: ..."}]}`. Never branch
  *      on res.ok alone against The Graph; always inspect the body.
  *
- * Observed challenge (production, mainnet):
- *   scheme  exact          network eip155:8453 (Base mainnet)
- *   amount  10000          = 0.01 USDC (6dp)
- *   asset   0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913  (USDC on Base)
- *   payTo   0x79DC34E41B2b591078d3dE222C43EcaaBD52FcCB
- *   extra   { assetTransferMethod: "eip3009", name: "USD Coin", version: "2" }
- *
- * IMPORTANT: the gateway offers ONLY the `exact` scheme. It cannot accept
- * batch-settlement vouchers, so the mandate envelope runs against our own
- * service on Base Sepolia. See docs/architecture.md.
- *
- * `@graphprotocol/client-x402` and Graph docs list the testnet host as
- * `testnet.gateway.thegraph.com`. That name is NXDOMAIN (F8). The live
- * host is the subdomain swap `gateway.testnet.thegraph.com`, which
- * returns x402 v2 on Base Sepolia (`eip155:84532`). Production
- * `gateway.thegraph.com` still bills `eip155:8453` even for a Sepolia
- * subgraph ID (F31) — we never pay that challenge.
+ * The deployed paid workspace uses its own batch-settlement merchant on Base
+ * Sepolia. This optional direct Graph x402 adapter defaults to the testnet
+ * endpoint and must never send a payment header to the production gateway.
+ * Historical endpoint observations are not current availability guarantees.
  */
 
 export const GRAPH_X402_PRODUCTION = "https://gateway.thegraph.com/api/x402";
@@ -90,12 +77,14 @@ export async function queryOrChallenge(
   | { kind: "challenge"; challenge: GraphChallenge }
   | { kind: "error"; message: string }
 > {
-  const base = opts.base ?? GRAPH_X402_PRODUCTION;
+  const base = opts.base ?? GRAPH_X402_TESTNET;
+  if (opts.paymentSignature && base !== GRAPH_X402_TESTNET) throw new Error("Testnet-only: payment headers cannot be sent to another Graph gateway");
   const headers: Record<string, string> = { "content-type": "application/json" };
   if (opts.paymentSignature) headers["Payment-Signature"] = opts.paymentSignature;
 
   const res = await fetch(`${base}/subgraphs/id/${subgraphId}`, {
     method: "POST",
+    redirect: "error", signal: AbortSignal.timeout(15000),
     headers,
     body: JSON.stringify({ query }),
   });

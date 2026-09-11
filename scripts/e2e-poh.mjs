@@ -45,7 +45,7 @@ const challenge = buildPresenceChallenge({
 console.error(">>> Sign Proof of You typed data on Ledger");
 const signature = await device.signTypedData(challenge);
 const attestation = { challenge, signature, address: device.address };
-assertFreshPresence(attestation, { operator: device.address, uaid });
+await assertFreshPresence(attestation, { operator: device.address, uaid });
 
 const hederaEnc = await readFile(`${ROOT}/secrets/hedera.enc`);
 const record = {
@@ -88,7 +88,7 @@ await writeFile(
 console.log("POH_OK", JSON.stringify({ uaid, operator: device.address, taps: device.signCalls }));
 
 try {
-  assertFreshPresence(null, { operator: device.address, uaid });
+  await assertFreshPresence(null, { operator: device.address, uaid });
   console.error("POH_FAILED: replay without attestation should deny");
   process.exit(1);
 } catch {

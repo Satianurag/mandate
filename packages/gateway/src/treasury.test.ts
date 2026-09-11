@@ -166,8 +166,8 @@ describe("treasury top-up schedule", () => {
     assert.equal(calls.length, 2);
   });
 
-  it("treasuryMirrorBase maps both networks", () => {
+  it("treasuryMirrorBase rejects mainnet", () => {
     assert.match(treasuryMirrorBase("testnet"), /testnet/);
-    assert.match(treasuryMirrorBase("mainnet"), /mainnet/);
+    assert.throws(() => treasuryMirrorBase("mainnet" as never), /Testnet-only/);
   });
 });

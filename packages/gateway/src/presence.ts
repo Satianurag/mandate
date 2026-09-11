@@ -7,7 +7,7 @@
  * (no zero-address, no borrowed x402 contract).
  */
 
-import type { Hex } from "viem";
+import { getAddress, verifyTypedData, type Hex } from "viem";
 
 export const PRESENCE_PRIMARY_TYPE = "HumanPresence";
 
@@ -101,39 +101,62 @@ export async function loadRequiredPresence(): Promise<
   if (!attestation) {
     throw new Error("Proof of You file is missing attestation/challenge/signature.");
   }
-  return {
-    attestation,
-    operator: (raw.operator ?? attestation.address) as `0x${string}`,
-    uaid: raw.uaid ?? attestation.challenge.message.uaid,
-  };
+  const operator = process.env.MANDATE_OPERATOR_ADDRESS;
+  const uaid = process.env.MANDATE_OPERATOR_UAID;
+  if (!operator || !uaid) {
+    throw new Error("Proof of You requires independently configured MANDATE_OPERATOR_ADDRESS and MANDATE_OPERATOR_UAID.");
+  }
+  const expected = { operator: getAddress(operator), uaid };
+  await assertFreshPresence(attestation, expected);
+  return { attestation, ...expected };
 }
 
-/** Freshness + binding checks. Replay of a missing/stale attestation fails. */
-export function assertFreshPresence(
+/**
+ * Cryptographically verified recent presence. This is NOT one-time payment consent.
+ * Identity and chain must come from trusted operator configuration, never the file.
+ */
+export async function assertFreshPresence(
   attestation: PresenceAttestation | null | undefined,
-  expected: { operator: `0x${string}`; uaid: string },
+  expected: { operator: `0x${string}`; uaid: string; chainId?: number },
   now = Date.now()
-): void {
-  if (!attestation) {
-    throw new Error("Proof of You required: no presence attestation.");
-  }
-  if (attestation.address.toLowerCase() !== expected.operator.toLowerCase()) {
+): Promise<void> {
+  if (!attestation) throw new Error("Proof of You required: no presence attestation.");
+  const operator = getAddress(expected.operator);
+  const c = attestation.challenge;
+  if (!c?.message || !c.domain || !c.types) throw new Error("Proof of You: malformed challenge.");
+  if (getAddress(attestation.address) !== operator || getAddress(c.message.operator) !== operator) {
     throw new Error("Proof of You: attestation address does not match operator.");
   }
-  if (attestation.challenge.message.uaid !== expected.uaid) {
-    throw new Error("Proof of You: attestation UAID does not match operator UAID.");
-  }
-  if (attestation.challenge.domain.verifyingContract.toLowerCase() !== expected.operator.toLowerCase()) {
-    throw new Error("Proof of You: verifyingContract must be the operator address.");
-  }
-  if (attestation.challenge.domain.verifyingContract === "0x0000000000000000000000000000000000000000") {
+  if (c.message.uaid !== expected.uaid) throw new Error("Proof of You: attestation UAID does not match operator UAID.");
+  if (operator === "0x0000000000000000000000000000000000000000") {
     throw new Error("Proof of You: zero-address verifyingContract is banned.");
   }
-  const age = now - attestation.challenge.message.issuedAt;
-  if (age < 0 || age > MAX_AGE_MS) {
+  if (getAddress(c.domain.verifyingContract) !== operator) {
+    throw new Error("Proof of You: verifyingContract must be the operator address.");
+  }
+  const age = now - c.message.issuedAt;
+  if (!Number.isSafeInteger(c.message.issuedAt) || age < 0 || age > MAX_AGE_MS) {
     throw new Error("Proof of You: attestation expired or not yet valid.");
   }
-  if (!attestation.signature || attestation.signature.length < 132) {
-    throw new Error("Proof of You: missing device signature.");
+  if (typeof c.message.nonce !== "string" || !c.message.nonce || c.message.nonce.length > 128) {
+    throw new Error("Proof of You: malformed nonce.");
   }
+  const canonical = buildPresenceChallenge({
+    operator, uaid: expected.uaid, nonce: c.message.nonce,
+    issuedAt: c.message.issuedAt, chainId: expected.chainId ?? 84532,
+  });
+  if (c.primaryType !== canonical.primaryType ||
+      c.domain.name !== canonical.domain.name || c.domain.version !== canonical.domain.version ||
+      c.domain.chainId !== canonical.domain.chainId ||
+      JSON.stringify(c.types) !== JSON.stringify(canonical.types)) {
+    throw new Error("Proof of You: non-canonical typed data or wrong chain.");
+  }
+  if (!/^0x[0-9a-fA-F]{130}$/.test(attestation.signature)) {
+    throw new Error("Proof of You: malformed device signature.");
+  }
+  let valid = false;
+  try {
+    valid = await verifyTypedData({ ...canonical, address: operator, signature: attestation.signature });
+  } catch { /* Invalid curve points and recovery IDs are rejection, not presence. */ }
+  if (!valid) throw new Error("Proof of You: invalid device signature.");
 }

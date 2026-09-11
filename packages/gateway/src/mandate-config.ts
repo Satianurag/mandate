@@ -1,87 +1,51 @@
-/**
- * mandate.yaml — the mandate's durable identity.
- *
- * The file pins everything a mandate needs to resume after a restart: its
- * salt (channel id input), ceiling, receiver, and chain. It contains no
- * secrets — the session key lives sealed in the Key Ring and is named here.
- * Strict parse: unknown versions, missing fields, and malformed values throw
- * with the field name. Never defaults that could attach money to the wrong
- * channel.
- */
-
+/** Versioned immutable operator authority. Legacy v1 is never silently widened. */
 import { parse } from "yaml";
 import { getAddress } from "viem";
-import { MANDATE_NETWORK } from "./mandate.ts";
-
-export interface MandateFile {
-  version: 1;
-  network: typeof MANDATE_NETWORK;
+import { validateScope, type MandateScope } from "./scope.ts";
+import { units } from "./journal.ts";
+export interface MandateFile extends MandateScope {
+  version: 2;
+  network: "eip155:84532";
   rpcUrl: string;
-  serviceUrl: string;
-  ceilingBaseUnits: string;
   salt: `0x${string}`;
-  receiver: `0x${string}`;
+  operatorAddress: `0x${string}`;
   sessionKey: string;
   derivationPath: string;
   storageRoot: string;
 }
-
-function fail(field: string, why: string): never {
-  throw new Error(`mandate.yaml: field "${field}" ${why}.`);
-}
-
+function fail(field: string, why: string): never { throw new Error(`mandate.yaml: field "${field}" ${why}.`); }
 export function parseMandateFile(text: string): MandateFile {
-  let doc: unknown;
-  try {
-    doc = parse(text);
-  } catch (e) {
-    throw new Error(`mandate.yaml: invalid YAML (${e instanceof Error ? e.message : e}).`);
-  }
-  if (typeof doc !== "object" || doc === null || Array.isArray(doc)) {
-    throw new Error("mandate.yaml: top level must be a mapping.");
-  }
-  const d = doc as Record<string, unknown>;
-  if (d.version !== 1) fail("version", `must be 1, got ${JSON.stringify(d.version)}`);
-  if (d.network !== MANDATE_NETWORK) {
-    fail("network", `must be "${MANDATE_NETWORK}", got ${JSON.stringify(d.network)}`);
-  }
-  for (const f of ["rpcUrl", "serviceUrl", "sessionKey", "storageRoot"] as const) {
+  let value: unknown;
+  try { value = parse(text); } catch { throw new Error("mandate.yaml: invalid YAML."); }
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("mandate.yaml: top level must be a mapping.");
+  const d = value as Record<string, unknown>;
+  if (d.version === 1) fail("version", "is legacy v1: review a new v2 scope in the operator workspace; the original configuration and funded channel must be preserved for recovery");
+  if (d.version !== 2) fail("version", "must be 2");
+  const allowed = new Set(["version","network","rpcUrl","serviceUrl","ceilingBaseUnits","perCallBaseUnits","windowBaseUnits","windowMs","salt","receiver","asset","receiverAuthorizer","withdrawDelay","expiresAt","operatorAddress","sessionKey","derivationPath","storageRoot"]);
+  for (const k of Object.keys(d)) if (!allowed.has(k)) fail(k, "is not a recognized authority field");
+  if (d.network !== "eip155:84532") fail("network", "must be eip155:84532 for the Ledger operator workspace");
+  for (const f of ["rpcUrl","serviceUrl","sessionKey","storageRoot","expiresAt"] as const) {
     if (typeof d[f] !== "string" || !(d[f] as string).trim()) fail(f, "must be a non-empty string");
   }
-  for (const f of ["rpcUrl", "serviceUrl"] as const) {
-    try {
-      const u = new URL(d[f] as string);
-      if (u.protocol !== "http:" && u.protocol !== "https:") fail(f, "must be http(s)");
-    } catch {
-      fail(f, `is not a URL: ${JSON.stringify(d[f])}`);
-    }
+  const rpc = new URL(String(d.rpcUrl));
+  if (rpc.username || rpc.password || !(rpc.protocol === "https:" || (rpc.protocol === "http:" && ["localhost","127.0.0.1","[::1]"].includes(rpc.hostname)))) fail("rpcUrl", "must be HTTPS or loopback HTTP without credentials");
+  for (const f of ["ceilingBaseUnits","perCallBaseUnits","windowBaseUnits"] as const) {
+    try { units(d[f] as string, true); } catch { fail(f, "must be a positive integer base-units string"); }
   }
-  if (typeof d.ceilingBaseUnits !== "string" || !/^\d+$/.test(d.ceilingBaseUnits)) {
-    fail("ceilingBaseUnits", "must be a base-units integer string");
+  if (typeof d.salt !== "string" || !/^0x[0-9a-fA-F]{64}$/.test(d.salt) || /^0x0+$/.test(d.salt)) fail("salt", "must be fresh, nonzero bytes32 hex");
+  for (const f of ["operatorAddress","receiver","asset","receiverAuthorizer"] as const) {
+    try { d[f] = getAddress(d[f] as string); } catch { fail(f, "must be a checksummed EVM address"); }
+    if (d[f] === "0x0000000000000000000000000000000000000000") fail(f, "cannot be zero");
   }
-  if (BigInt(d.ceilingBaseUnits as string) <= 0n) fail("ceilingBaseUnits", "must be positive");
-  if (typeof d.salt !== "string" || !/^0x[0-9a-fA-F]{64}$/.test(d.salt)) {
-    fail("salt", "must be bytes32 hex");
-  }
-  let receiver: `0x${string}`;
-  try {
-    receiver = getAddress(d.receiver as string) as `0x${string}`;
-  } catch {
-    fail("receiver", `is not an address: ${JSON.stringify(d.receiver)}`);
-  }
-  if (d.derivationPath !== undefined && typeof d.derivationPath !== "string") {
-    fail("derivationPath", "must be a string");
-  }
-  return {
-    version: 1,
-    network: MANDATE_NETWORK,
-    rpcUrl: (d.rpcUrl as string).trim(),
-    serviceUrl: (d.serviceUrl as string).trim(),
-    ceilingBaseUnits: d.ceilingBaseUnits as string,
-    salt: d.salt as `0x${string}`,
-    receiver,
-    sessionKey: (d.sessionKey as string).trim(),
-    derivationPath: ((d.derivationPath as string) ?? "44'/60'/0'/0/0").trim(),
-    storageRoot: (d.storageRoot as string).trim(),
-  };
+  if (d.operatorAddress === d.receiver) fail("receiver", "must differ from the payer");
+  if (!/^[A-Za-z0-9_-]{1,64}$/.test(String(d.sessionKey))) fail("sessionKey", "must be a safe Key Ring name");
+  if (d.derivationPath !== undefined && (typeof d.derivationPath !== "string" || !/^44'\/60'\/[0-9]+'\/[0-9]+\/[0-9]+$/.test(d.derivationPath))) fail("derivationPath", "must be an Ethereum BIP-44 path");
+  const result = { ...d, derivationPath: d.derivationPath ?? "44'/60'/0'/0/0" } as unknown as MandateFile;
+  return { ...result, ...validateScope(scopeOf(result)), network: "eip155:84532" };
+}
+export function scopeOf(m: MandateFile): MandateScope {
+  return { network: m.network, serviceUrl: m.serviceUrl, asset: m.asset, receiver: m.receiver,
+    receiverAuthorizer: m.receiverAuthorizer, withdrawDelay: m.withdrawDelay, expiresAt: m.expiresAt,
+    ceilingBaseUnits: m.ceilingBaseUnits, perCallBaseUnits: m.perCallBaseUnits,
+    windowBaseUnits: m.windowBaseUnits, windowMs: m.windowMs };
 }

@@ -66,7 +66,7 @@ const svc = spawn(
   }
 );
 await waitHttp(
-  `http://127.0.0.1:${SERVICE_PORT}/usdc-analytics?q=${encodeURIComponent("{ agents { id } }")}`
+  `http://127.0.0.1:${SERVICE_PORT}/usdc-analytics?q=${encodeURIComponent("{ agents(first: 5) { id agentId agentWallet totalFeedback } }")}`
 );
 
 await (async () => {
@@ -75,7 +75,7 @@ try {
   const { proxyFetch } = await import(`${ROOT}/packages/gateway/src/index.ts`);
   const { pollTopicRecord } = await import(`${ROOT}/packages/gateway/src/evidence.ts`);
 
-  const url = `http://127.0.0.1:${SERVICE_PORT}/usdc-analytics?q=${encodeURIComponent("{ agents { id } }")}`;
+  const url = `http://127.0.0.1:${SERVICE_PORT}/usdc-analytics?q=${encodeURIComponent("{ agents(first: 5) { id agentId agentWallet totalFeedback } }")}`;
   console.log(`e2e hedera USDC exact → ${url} payTo=${payTo}`);
   console.log("(tap the Ledger if policy escalates to step_up)");
 

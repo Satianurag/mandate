@@ -72,7 +72,7 @@ const svc = spawn(
     stdio: "inherit",
   }
 );
-await waitHttp(`http://127.0.0.1:${SERVICE_PORT}/analytics?q=${encodeURIComponent("{ agents { id } }")}`);
+await waitHttp(`http://127.0.0.1:${SERVICE_PORT}/analytics?q=${encodeURIComponent("{ agents(first: 5) { id agentId agentWallet totalFeedback } }")}`);
 
 await (async () => {
 let code = 0;
@@ -80,7 +80,7 @@ try {
   const { proxyFetch } = await import(`${ROOT}/packages/gateway/src/index.ts`);
   const { pollTopicRecord } = await import(`${ROOT}/packages/gateway/src/evidence.ts`);
 
-  const url = `http://127.0.0.1:${SERVICE_PORT}/analytics?q=${encodeURIComponent("{ agents { id } }")}`;
+  const url = `http://127.0.0.1:${SERVICE_PORT}/analytics?q=${encodeURIComponent("{ agents(first: 5) { id agentId agentWallet totalFeedback } }")}`;
   console.log(`e2e payment → ${url} payTo=${payTo}`);
   console.log("(tap the Ledger if policy escalates to step_up)");
 

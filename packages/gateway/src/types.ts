@@ -52,6 +52,8 @@ export interface CounterpartyReputation {
 }
 
 export interface PaymentProposal {
+  requestUrl?: string;
+  requestId?: string;
   /** The origin we are about to pay, e.g. "https://data.example.com". */
   origin: string;
   /** Stock v2 requirements, as selected by the x402 client from the 402. */

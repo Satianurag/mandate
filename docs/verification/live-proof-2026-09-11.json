@@ -1,0 +1,1678 @@
+{
+  "format": "mandate-live-proof-v2",
+  "generatedAt": "2026-09-11T08:26:49.983Z",
+  "testnetOnly": true,
+  "authority": {
+    "network": "eip155:84532",
+    "payer": "0x57a2a47Ca22AE52867c5313c4d9ab43070D7C202",
+    "receiver": "0x3D4A323C18d98Da9Dee2EA6D23787C43EA6B5d71",
+    "asset": "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
+    "receiverAuthorizer": "0x3D4A323C18d98Da9Dee2EA6D23787C43EA6B5d71",
+    "channelId": "0xfe09c8abe0e73fdb6d6b9631b17fe712c9712bf731079a2ffdd0f05698cce29a",
+    "ceilingBaseUnits": "100000",
+    "perCallBaseUnits": "10000",
+    "windowBaseUnits": "30000",
+    "windowMs": 3600000,
+    "expiresAt": "2026-09-11T12:08:00.000Z"
+  },
+  "financial": {
+    "state": "refunded",
+    "spent": "30000",
+    "reserved": "0",
+    "window": "0",
+    "returnedBaseUnits": "70000"
+  },
+  "ledgerFunding": {
+    "verifiedSignatureEvents": 1,
+    "report": {
+      "clearSigning": {
+        "calFilters": "error",
+        "originTokenPresent": false,
+        "steps": [
+          "signer.eth.steps.getAppConfig",
+          "signer.eth.steps.getAddress",
+          "signer.eth.steps.buildContext",
+          "signer.eth.steps.provideContext",
+          "signer.eth.steps.signTypedData",
+          "signer.eth.steps.detectBlindSigning"
+        ],
+        "verdict": "clear-basic"
+      },
+      "payer": "0x57a2a47Ca22AE52867c5313c4d9ab43070D7C202",
+      "typedDataHash": "d0f23d1676535920b65d47c97add88531e740de4e30eb4246aff80fc1a71359c"
+    }
+  },
+  "payments": [
+    {
+      "id": "live-headless-20260911-v1",
+      "state": "accepted",
+      "amountBaseUnits": "10000",
+      "reservedMaximum": "10000",
+      "network": "eip155:84532",
+      "asset": "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
+      "receipt": {
+        "amount": "",
+        "extra": {
+          "channelState": {
+            "balance": "100000",
+            "channelId": "0xfe09c8abe0e73fdb6d6b9631b17fe712c9712bf731079a2ffdd0f05698cce29a",
+            "chargedCumulativeAmount": "30000",
+            "refundNonce": "0",
+            "totalClaimed": "0",
+            "withdrawRequestedAt": 0
+          },
+          "chargedAmount": "10000"
+        },
+        "network": "eip155:84532",
+        "payer": "0x57a2a47ca22ae52867c5313c4d9ab43070d7c202",
+        "success": true,
+        "transaction": ""
+      },
+      "result": {
+        "ok": true,
+        "query": "{ agents(first: 3, orderBy: totalFeedback, orderDirection: desc) { id agentId agentWallet totalFeedback } _meta { block { number } } }",
+        "source": {
+          "chain": "bsc-chapel",
+          "subgraphId": "BTjind17gmRZ6YhT9peaCM13SvWuqztsmqyfjpntbg3Z"
+        },
+        "observedAt": "2026-09-11T06:46:30.223Z",
+        "reputation": {
+          "advisoryOnly": true,
+          "reviewersFiltered": false,
+          "measurementSchema": "unspecified",
+          "warning": "Feedback counts and raw sample values are not spending authority or a comparable trust score."
+        },
+        "paid": {
+          "amount": "10000",
+          "amountBaseUnits": "10000",
+          "asset": "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
+          "network": "eip155:84532",
+          "scheme": "batch-settlement",
+          "txId": null,
+          "txHash": null,
+          "stage": "voucher_accepted"
+        },
+        "rows": [
+          {
+            "id": "97:158",
+            "agentId": "158",
+            "agentWallet": "0x25f75573799a3aa37760d6be4b862aca70599b49",
+            "totalFeedback": "6",
+            "sampleMean": null,
+            "measurements": []
+          },
+          {
+            "id": "97:1",
+            "agentId": "1",
+            "agentWallet": "0x80de10e23b7a4c424d0af8ecbcf9d460a073967c",
+            "totalFeedback": "5",
+            "sampleMean": null,
+            "measurements": []
+          },
+          {
+            "id": "97:2210",
+            "agentId": "2210",
+            "agentWallet": "0x38c6fc4a5525b37f9545423a7132157f69ce08da",
+            "totalFeedback": "4",
+            "sampleMean": null,
+            "measurements": []
+          }
+        ],
+        "data": {
+          "agents": [
+            {
+              "id": "97:158",
+              "agentId": "158",
+              "agentWallet": "0x25f75573799a3aa37760d6be4b862aca70599b49",
+              "totalFeedback": "6"
+            },
+            {
+              "id": "97:1",
+              "agentId": "1",
+              "agentWallet": "0x80de10e23b7a4c424d0af8ecbcf9d460a073967c",
+              "totalFeedback": "5"
+            },
+            {
+              "id": "97:2210",
+              "agentId": "2210",
+              "agentWallet": "0x38c6fc4a5525b37f9545423a7132157f69ce08da",
+              "totalFeedback": "4"
+            }
+          ],
+          "_meta": {
+            "block": {
+              "number": 130361425
+            }
+          }
+        },
+        "sourceMetadata": {
+          "block": {
+            "number": 130361425
+          }
+        },
+        "sourceAttempts": [
+          {
+            "chain": "base-sepolia",
+            "status": "unavailable",
+            "error": "Graph gateway: subgraph not found: GjQEDgEKqoh5Yc8MUgxoQoRATEJdEiH7HbocfR1aFiHa"
+          },
+          {
+            "chain": "bsc-chapel",
+            "status": "available"
+          }
+        ]
+      }
+    },
+    {
+      "id": "live-isolated-agent-20260911-v1",
+      "state": "accepted",
+      "amountBaseUnits": "10000",
+      "reservedMaximum": "10000",
+      "network": "eip155:84532",
+      "asset": "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
+      "receipt": {
+        "amount": "",
+        "extra": {
+          "channelState": {
+            "balance": "100000",
+            "channelId": "0xfe09c8abe0e73fdb6d6b9631b17fe712c9712bf731079a2ffdd0f05698cce29a",
+            "chargedCumulativeAmount": "20000",
+            "refundNonce": "0",
+            "totalClaimed": "0",
+            "withdrawRequestedAt": 0
+          },
+          "chargedAmount": "10000"
+        },
+        "network": "eip155:84532",
+        "payer": "0x57a2a47ca22ae52867c5313c4d9ab43070d7c202",
+        "success": true,
+        "transaction": ""
+      },
+      "result": {
+        "ok": true,
+        "query": "{ agents(first: 5, orderBy: totalFeedback, orderDirection: desc) { id agentId agentWallet totalFeedback feedback(first: 5, orderBy: createdAt, orderDirection: desc) { value isRevoked } } _meta { block { number } } }",
+        "source": {
+          "chain": "bsc-chapel",
+          "subgraphId": "BTjind17gmRZ6YhT9peaCM13SvWuqztsmqyfjpntbg3Z"
+        },
+        "observedAt": "2026-09-11T06:21:09.462Z",
+        "reputation": {
+          "advisoryOnly": true,
+          "reviewersFiltered": false,
+          "measurementSchema": "unspecified",
+          "warning": "Feedback counts and raw sample values are not spending authority or a comparable trust score."
+        },
+        "paid": {
+          "amount": "10000",
+          "amountBaseUnits": "10000",
+          "asset": "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
+          "network": "eip155:84532",
+          "scheme": "batch-settlement",
+          "txId": null,
+          "txHash": null,
+          "stage": "voucher_accepted"
+        },
+        "rows": [
+          {
+            "id": "97:158",
+            "agentId": "158",
+            "agentWallet": "0x25f75573799a3aa37760d6be4b862aca70599b49",
+            "totalFeedback": "6",
+            "sampleMean": null,
+            "measurements": [
+              {
+                "value": "100",
+                "isRevoked": false
+              },
+              {
+                "value": "100",
+                "isRevoked": false
+              },
+              {
+                "value": "19999999994",
+                "isRevoked": false
+              },
+              {
+                "value": "0",
+                "isRevoked": false
+              },
+              {
+                "value": "1",
+                "isRevoked": false
+              }
+            ]
+          },
+          {
+            "id": "97:1",
+            "agentId": "1",
+            "agentWallet": "0x80de10e23b7a4c424d0af8ecbcf9d460a073967c",
+            "totalFeedback": "5",
+            "sampleMean": null,
+            "measurements": [
+              {
+                "value": "88",
+                "isRevoked": false
+              },
+              {
+                "value": "74",
+                "isRevoked": false
+              },
+              {
+                "value": "75",
+                "isRevoked": false
+              },
+              {
+                "value": "76",
+                "isRevoked": false
+              },
+              {
+                "value": "77",
+                "isRevoked": false
+              }
+            ]
+          },
+          {
+            "id": "97:2210",
+            "agentId": "2210",
+            "agentWallet": "0x38c6fc4a5525b37f9545423a7132157f69ce08da",
+            "totalFeedback": "4",
+            "sampleMean": null,
+            "measurements": [
+              {
+                "value": "100",
+                "isRevoked": false
+              },
+              {
+                "value": "100",
+                "isRevoked": false
+              },
+              {
+                "value": "143",
+                "isRevoked": false
+              },
+              {
+                "value": "100",
+                "isRevoked": false
+              }
+            ]
+          },
+          {
+            "id": "97:1776",
+            "agentId": "1776",
+            "agentWallet": "0x3c0051722f04cd25563c250a62f8fcb88e4b88d6",
+            "totalFeedback": "4",
+            "sampleMean": null,
+            "measurements": [
+              {
+                "value": "81",
+                "isRevoked": false
+              },
+              {
+                "value": "92",
+                "isRevoked": false
+              },
+              {
+                "value": "88",
+                "isRevoked": false
+              },
+              {
+                "value": "88",
+                "isRevoked": false
+              }
+            ]
+          },
+          {
+            "id": "97:1868",
+            "agentId": "1868",
+            "agentWallet": "0x54b291874e41effc8b74768258a11785b476cc2a",
+            "totalFeedback": "3",
+            "sampleMean": null,
+            "measurements": [
+              {
+                "value": "100",
+                "isRevoked": false
+              },
+              {
+                "value": "100",
+                "isRevoked": false
+              },
+              {
+                "value": "100",
+                "isRevoked": false
+              }
+            ]
+          }
+        ],
+        "data": {
+          "agents": [
+            {
+              "id": "97:158",
+              "agentId": "158",
+              "agentWallet": "0x25f75573799a3aa37760d6be4b862aca70599b49",
+              "totalFeedback": "6",
+              "feedback": [
+                {
+                  "value": "100",
+                  "isRevoked": false
+                },
+                {
+                  "value": "100",
+                  "isRevoked": false
+                },
+                {
+                  "value": "19999999994",
+                  "isRevoked": false
+                },
+                {
+                  "value": "0",
+                  "isRevoked": false
+                },
+                {
+                  "value": "1",
+                  "isRevoked": false
+                }
+              ]
+            },
+            {
+              "id": "97:1",
+              "agentId": "1",
+              "agentWallet": "0x80de10e23b7a4c424d0af8ecbcf9d460a073967c",
+              "totalFeedback": "5",
+              "feedback": [
+                {
+                  "value": "88",
+                  "isRevoked": false
+                },
+                {
+                  "value": "74",
+                  "isRevoked": false
+                },
+                {
+                  "value": "75",
+                  "isRevoked": false
+                },
+                {
+                  "value": "76",
+                  "isRevoked": false
+                },
+                {
+                  "value": "77",
+                  "isRevoked": false
+                }
+              ]
+            },
+            {
+              "id": "97:2210",
+              "agentId": "2210",
+              "agentWallet": "0x38c6fc4a5525b37f9545423a7132157f69ce08da",
+              "totalFeedback": "4",
+              "feedback": [
+                {
+                  "value": "100",
+                  "isRevoked": false
+                },
+                {
+                  "value": "100",
+                  "isRevoked": false
+                },
+                {
+                  "value": "143",
+                  "isRevoked": false
+                },
+                {
+                  "value": "100",
+                  "isRevoked": false
+                }
+              ]
+            },
+            {
+              "id": "97:1776",
+              "agentId": "1776",
+              "agentWallet": "0x3c0051722f04cd25563c250a62f8fcb88e4b88d6",
+              "totalFeedback": "4",
+              "feedback": [
+                {
+                  "value": "81",
+                  "isRevoked": false
+                },
+                {
+                  "value": "92",
+                  "isRevoked": false
+                },
+                {
+                  "value": "88",
+                  "isRevoked": false
+                },
+                {
+                  "value": "88",
+                  "isRevoked": false
+                }
+              ]
+            },
+            {
+              "id": "97:1868",
+              "agentId": "1868",
+              "agentWallet": "0x54b291874e41effc8b74768258a11785b476cc2a",
+              "totalFeedback": "3",
+              "feedback": [
+                {
+                  "value": "100",
+                  "isRevoked": false
+                },
+                {
+                  "value": "100",
+                  "isRevoked": false
+                },
+                {
+                  "value": "100",
+                  "isRevoked": false
+                }
+              ]
+            }
+          ],
+          "_meta": {
+            "block": {
+              "number": 130358080
+            }
+          }
+        },
+        "sourceMetadata": {
+          "block": {
+            "number": 130358080
+          }
+        },
+        "sourceAttempts": [
+          {
+            "chain": "base-sepolia",
+            "status": "unavailable",
+            "error": "Graph gateway: subgraph not found: GjQEDgEKqoh5Yc8MUgxoQoRATEJdEiH7HbocfR1aFiHa"
+          },
+          {
+            "chain": "bsc-chapel",
+            "status": "available"
+          }
+        ]
+      }
+    },
+    {
+      "id": "fda5c7be-01ea-4f88-add6-9b7162942586",
+      "state": "accepted",
+      "amountBaseUnits": "10000",
+      "reservedMaximum": "10000",
+      "network": "eip155:84532",
+      "asset": "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
+      "receipt": {
+        "amount": "100000",
+        "extra": {
+          "channelState": {
+            "balance": "100000",
+            "channelId": "0xfe09c8abe0e73fdb6d6b9631b17fe712c9712bf731079a2ffdd0f05698cce29a",
+            "chargedCumulativeAmount": "10000",
+            "refundNonce": "0",
+            "totalClaimed": "0",
+            "withdrawRequestedAt": 0
+          },
+          "chargedAmount": "10000"
+        },
+        "network": "eip155:84532",
+        "payer": "0x57a2a47Ca22AE52867c5313c4d9ab43070D7C202",
+        "success": true,
+        "transaction": "0xafbc9c114cc95651b29479571b924477db235fcaa760704b7df66fbcf6c61e6f"
+      },
+      "result": {
+        "ok": true,
+        "query": "{ agents(first: 5, orderBy: totalFeedback, orderDirection: desc) { id agentId agentWallet totalFeedback feedback(first: 5, orderBy: createdAt, orderDirection: desc) { value isRevoked } } _meta { block { number } } }",
+        "source": {
+          "chain": "bsc-chapel",
+          "subgraphId": "BTjind17gmRZ6YhT9peaCM13SvWuqztsmqyfjpntbg3Z"
+        },
+        "observedAt": "2026-09-11T06:12:05.050Z",
+        "reputation": {
+          "advisoryOnly": true,
+          "reviewersFiltered": false,
+          "measurementSchema": "unspecified",
+          "warning": "Feedback counts and raw sample values are not spending authority or a comparable trust score."
+        },
+        "paid": {
+          "amount": "10000",
+          "amountBaseUnits": "10000",
+          "asset": "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
+          "network": "eip155:84532",
+          "scheme": "batch-settlement",
+          "txId": "0xafbc9c114cc95651b29479571b924477db235fcaa760704b7df66fbcf6c61e6f",
+          "txHash": "0xafbc9c114cc95651b29479571b924477db235fcaa760704b7df66fbcf6c61e6f",
+          "stage": "voucher_accepted"
+        },
+        "rows": [
+          {
+            "id": "97:158",
+            "agentId": "158",
+            "agentWallet": "0x25f75573799a3aa37760d6be4b862aca70599b49",
+            "totalFeedback": "6",
+            "sampleMean": null,
+            "measurements": [
+              {
+                "value": "100",
+                "isRevoked": false
+              },
+              {
+                "value": "100",
+                "isRevoked": false
+              },
+              {
+                "value": "19999999994",
+                "isRevoked": false
+              },
+              {
+                "value": "0",
+                "isRevoked": false
+              },
+              {
+                "value": "1",
+                "isRevoked": false
+              }
+            ]
+          },
+          {
+            "id": "97:1",
+            "agentId": "1",
+            "agentWallet": "0x80de10e23b7a4c424d0af8ecbcf9d460a073967c",
+            "totalFeedback": "5",
+            "sampleMean": null,
+            "measurements": [
+              {
+                "value": "88",
+                "isRevoked": false
+              },
+              {
+                "value": "74",
+                "isRevoked": false
+              },
+              {
+                "value": "75",
+                "isRevoked": false
+              },
+              {
+                "value": "76",
+                "isRevoked": false
+              },
+              {
+                "value": "77",
+                "isRevoked": false
+              }
+            ]
+          },
+          {
+            "id": "97:2210",
+            "agentId": "2210",
+            "agentWallet": "0x38c6fc4a5525b37f9545423a7132157f69ce08da",
+            "totalFeedback": "4",
+            "sampleMean": null,
+            "measurements": [
+              {
+                "value": "100",
+                "isRevoked": false
+              },
+              {
+                "value": "100",
+                "isRevoked": false
+              },
+              {
+                "value": "143",
+                "isRevoked": false
+              },
+              {
+                "value": "100",
+                "isRevoked": false
+              }
+            ]
+          },
+          {
+            "id": "97:1776",
+            "agentId": "1776",
+            "agentWallet": "0x3c0051722f04cd25563c250a62f8fcb88e4b88d6",
+            "totalFeedback": "4",
+            "sampleMean": null,
+            "measurements": [
+              {
+                "value": "81",
+                "isRevoked": false
+              },
+              {
+                "value": "92",
+                "isRevoked": false
+              },
+              {
+                "value": "88",
+                "isRevoked": false
+              },
+              {
+                "value": "88",
+                "isRevoked": false
+              }
+            ]
+          },
+          {
+            "id": "97:1868",
+            "agentId": "1868",
+            "agentWallet": "0x54b291874e41effc8b74768258a11785b476cc2a",
+            "totalFeedback": "3",
+            "sampleMean": null,
+            "measurements": [
+              {
+                "value": "100",
+                "isRevoked": false
+              },
+              {
+                "value": "100",
+                "isRevoked": false
+              },
+              {
+                "value": "100",
+                "isRevoked": false
+              }
+            ]
+          }
+        ],
+        "data": {
+          "agents": [
+            {
+              "id": "97:158",
+              "agentId": "158",
+              "agentWallet": "0x25f75573799a3aa37760d6be4b862aca70599b49",
+              "totalFeedback": "6",
+              "feedback": [
+                {
+                  "value": "100",
+                  "isRevoked": false
+                },
+                {
+                  "value": "100",
+                  "isRevoked": false
+                },
+                {
+                  "value": "19999999994",
+                  "isRevoked": false
+                },
+                {
+                  "value": "0",
+                  "isRevoked": false
+                },
+                {
+                  "value": "1",
+                  "isRevoked": false
+                }
+              ]
+            },
+            {
+              "id": "97:1",
+              "agentId": "1",
+              "agentWallet": "0x80de10e23b7a4c424d0af8ecbcf9d460a073967c",
+              "totalFeedback": "5",
+              "feedback": [
+                {
+                  "value": "88",
+                  "isRevoked": false
+                },
+                {
+                  "value": "74",
+                  "isRevoked": false
+                },
+                {
+                  "value": "75",
+                  "isRevoked": false
+                },
+                {
+                  "value": "76",
+                  "isRevoked": false
+                },
+                {
+                  "value": "77",
+                  "isRevoked": false
+                }
+              ]
+            },
+            {
+              "id": "97:2210",
+              "agentId": "2210",
+              "agentWallet": "0x38c6fc4a5525b37f9545423a7132157f69ce08da",
+              "totalFeedback": "4",
+              "feedback": [
+                {
+                  "value": "100",
+                  "isRevoked": false
+                },
+                {
+                  "value": "100",
+                  "isRevoked": false
+                },
+                {
+                  "value": "143",
+                  "isRevoked": false
+                },
+                {
+                  "value": "100",
+                  "isRevoked": false
+                }
+              ]
+            },
+            {
+              "id": "97:1776",
+              "agentId": "1776",
+              "agentWallet": "0x3c0051722f04cd25563c250a62f8fcb88e4b88d6",
+              "totalFeedback": "4",
+              "feedback": [
+                {
+                  "value": "81",
+                  "isRevoked": false
+                },
+                {
+                  "value": "92",
+                  "isRevoked": false
+                },
+                {
+                  "value": "88",
+                  "isRevoked": false
+                },
+                {
+                  "value": "88",
+                  "isRevoked": false
+                }
+              ]
+            },
+            {
+              "id": "97:1868",
+              "agentId": "1868",
+              "agentWallet": "0x54b291874e41effc8b74768258a11785b476cc2a",
+              "totalFeedback": "3",
+              "feedback": [
+                {
+                  "value": "100",
+                  "isRevoked": false
+                },
+                {
+                  "value": "100",
+                  "isRevoked": false
+                },
+                {
+                  "value": "100",
+                  "isRevoked": false
+                }
+              ]
+            }
+          ],
+          "_meta": {
+            "block": {
+              "number": 130356870
+            }
+          }
+        },
+        "sourceMetadata": {
+          "block": {
+            "number": 130356870
+          }
+        },
+        "sourceAttempts": [
+          {
+            "chain": "base-sepolia",
+            "status": "unavailable",
+            "error": "Graph gateway: subgraph not found: GjQEDgEKqoh5Yc8MUgxoQoRATEJdEiH7HbocfR1aFiHa"
+          },
+          {
+            "chain": "bsc-chapel",
+            "status": "available"
+          }
+        ]
+      }
+    }
+  ],
+  "tasks": [
+    {
+      "id": "fda5c7be-01ea-4f88-add6-9b7162942586",
+      "kind": "query",
+      "state": "succeeded",
+      "error": null
+    },
+    {
+      "id": "live-isolated-agent-20260911-v1",
+      "kind": "query",
+      "state": "succeeded",
+      "error": null
+    },
+    {
+      "id": "cb8cc9de-ce3a-4fa4-b0ff-b16984eb2aa4",
+      "kind": "evidence",
+      "state": "reconciled",
+      "error": null
+    },
+    {
+      "id": "06736440-616e-4d1f-a2b2-9972c6172fae",
+      "kind": "evidence",
+      "state": "reconciled",
+      "error": null
+    },
+    {
+      "id": "71200d63-b4da-4dec-bd79-2203cb1bf274",
+      "kind": "query",
+      "state": "blocked",
+      "error": "Failed to create payment payload: Rolling budget exhausted"
+    },
+    {
+      "id": "d613eb87-d25e-4708-8490-9fda893f7655",
+      "kind": "settlement",
+      "state": "reconciled",
+      "error": null
+    },
+    {
+      "id": "447928db-1939-4947-b4eb-4074098cd89a",
+      "kind": "settlement",
+      "state": "succeeded",
+      "error": null
+    },
+    {
+      "id": "ed02df82-e66b-4c3c-9b16-58862de3b236",
+      "kind": "refund",
+      "state": "reconciled",
+      "error": null
+    },
+    {
+      "id": "2d32c5a2-db83-4557-805e-3b068dc760d2",
+      "kind": "evidence",
+      "state": "succeeded",
+      "error": null
+    },
+    {
+      "id": "92d59bcc-32bd-4054-b5c1-0b8ef74145bc",
+      "kind": "evidence",
+      "state": "succeeded",
+      "error": null
+    },
+    {
+      "id": "215826e0-82b1-42d9-a97e-43415c008d67",
+      "kind": "evidence",
+      "state": "succeeded",
+      "error": null
+    },
+    {
+      "id": "dfc2b982-3b3c-4c90-ade7-33a8a027b047",
+      "kind": "evidence",
+      "state": "succeeded",
+      "error": null
+    }
+  ],
+  "merchantSettlement": {
+    "network": "eip155:84532",
+    "claims": [],
+    "settle": {
+      "transaction": "0x613cb4edb83e9dda424e0142d2801d4beea3ea69dce34e76293b8e0f1cf01a19"
+    },
+    "alreadySettled": false,
+    "before": {
+      "network": "eip155:84532",
+      "blockNumber": "46670631",
+      "observedAt": "2026-09-11T06:52:31.029Z",
+      "channelId": "0xfe09c8abe0e73fdb6d6b9631b17fe712c9712bf731079a2ffdd0f05698cce29a",
+      "balanceBaseUnits": "100000",
+      "claimedBaseUnits": "30000",
+      "payerBalanceBaseUnits": "14879874",
+      "receiverBalanceBaseUnits": "20000",
+      "receiverAggregateClaimedBaseUnits": "30000",
+      "receiverAggregateSettledBaseUnits": "0",
+      "withdrawalAmountBaseUnits": "0",
+      "withdrawalInitiatedAt": 0,
+      "refundNonce": "0"
+    },
+    "after": {
+      "network": "eip155:84532",
+      "blockNumber": "46670633",
+      "observedAt": "2026-09-11T06:52:35.862Z",
+      "channelId": "0xfe09c8abe0e73fdb6d6b9631b17fe712c9712bf731079a2ffdd0f05698cce29a",
+      "balanceBaseUnits": "100000",
+      "claimedBaseUnits": "30000",
+      "payerBalanceBaseUnits": "14879874",
+      "receiverBalanceBaseUnits": "50000",
+      "receiverAggregateClaimedBaseUnits": "30000",
+      "receiverAggregateSettledBaseUnits": "30000",
+      "withdrawalAmountBaseUnits": "0",
+      "withdrawalInitiatedAt": 0,
+      "refundNonce": "0"
+    },
+    "receiverIncreaseBaseUnits": "30000"
+  },
+  "refund": {
+    "after": {
+      "balanceBaseUnits": "30000",
+      "blockNumber": "46670696",
+      "channelId": "0xfe09c8abe0e73fdb6d6b9631b17fe712c9712bf731079a2ffdd0f05698cce29a",
+      "claimedBaseUnits": "30000",
+      "network": "eip155:84532",
+      "observedAt": "2026-09-11T07:06:30.913Z",
+      "payerBalanceBaseUnits": "14949874",
+      "receiverAggregateClaimedBaseUnits": "30000",
+      "receiverAggregateSettledBaseUnits": "30000",
+      "receiverBalanceBaseUnits": "50000",
+      "refundNonce": "1",
+      "withdrawalAmountBaseUnits": "0",
+      "withdrawalInitiatedAt": 0
+    },
+    "before": {
+      "balanceBaseUnits": "100000",
+      "blockNumber": "46670695",
+      "channelId": "0xfe09c8abe0e73fdb6d6b9631b17fe712c9712bf731079a2ffdd0f05698cce29a",
+      "claimedBaseUnits": "30000",
+      "network": "eip155:84532",
+      "observedAt": "2026-09-11T07:06:30.898Z",
+      "payerBalanceBaseUnits": "14879874",
+      "receiverAggregateClaimedBaseUnits": "30000",
+      "receiverAggregateSettledBaseUnits": "30000",
+      "receiverBalanceBaseUnits": "50000",
+      "refundNonce": "0",
+      "withdrawalAmountBaseUnits": "0",
+      "withdrawalInitiatedAt": 0
+    },
+    "matchedChannelCalldata": true,
+    "network": "eip155:84532",
+    "returnedBaseUnits": "70000",
+    "transaction": "0x64ecbc01ebe9d608141e59776ee3309e0f25d2db8927c924f903ced8e4472e39"
+  },
+  "currentChainSnapshot": {
+    "network": "eip155:84532",
+    "blockNumber": "46673461",
+    "observedAt": "2026-09-11T08:26:51.709Z",
+    "channelId": "0xfe09c8abe0e73fdb6d6b9631b17fe712c9712bf731079a2ffdd0f05698cce29a",
+    "balanceBaseUnits": "30000",
+    "claimedBaseUnits": "30000",
+    "payerBalanceBaseUnits": "14949874",
+    "receiverBalanceBaseUnits": "50000",
+    "receiverAggregateClaimedBaseUnits": "30000",
+    "receiverAggregateSettledBaseUnits": "30000",
+    "withdrawalAmountBaseUnits": "0",
+    "withdrawalInitiatedAt": 0,
+    "refundNonce": "1"
+  },
+  "evidence": {
+    "workspace": {
+      "events": 12,
+      "confirmed": 12,
+      "pending": 0,
+      "eventChainValid": true
+    },
+    "buyer": {
+      "events": 24,
+      "confirmed": 24,
+      "pending": 0,
+      "eventChainValid": true
+    },
+    "merchant": {
+      "events": 11,
+      "confirmed": 11,
+      "pending": 0,
+      "eventChainValid": true
+    },
+    "consensusReadback": {
+      "network": "hedera:testnet",
+      "topic": "0.0.10433469",
+      "independentlyVerified": 47,
+      "failures": 0,
+      "pending": 0
+    }
+  },
+  "headless": {
+    "ok": true,
+    "checkedAt": "2026-09-11T06:46:30.581Z",
+    "pid": 69838,
+    "mode": "fresh-process-session-only",
+    "nativeAddonsDisabled": true,
+    "physicalDisconnectVerified": false,
+    "ledgerInterfacesBefore": null,
+    "ledgerInterfacesAfter": null,
+    "newDeviceSignatures": 0,
+    "channelId": "0xfe09c8abe0e73fdb6d6b9631b17fe712c9712bf731079a2ffdd0f05698cce29a",
+    "before": {
+      "spent": "20000",
+      "reserved": "0",
+      "window": "20000"
+    },
+    "after": {
+      "spent": "30000",
+      "reserved": "0",
+      "window": "30000"
+    },
+    "result": {
+      "ok": true,
+      "query": "{ agents(first: 3, orderBy: totalFeedback, orderDirection: desc) { id agentId agentWallet totalFeedback } _meta { block { number } } }",
+      "source": {
+        "chain": "bsc-chapel",
+        "subgraphId": "BTjind17gmRZ6YhT9peaCM13SvWuqztsmqyfjpntbg3Z"
+      },
+      "observedAt": "2026-09-11T06:46:30.223Z",
+      "reputation": {
+        "advisoryOnly": true,
+        "reviewersFiltered": false,
+        "measurementSchema": "unspecified",
+        "warning": "Feedback counts and raw sample values are not spending authority or a comparable trust score."
+      },
+      "paid": {
+        "amount": "10000",
+        "amountBaseUnits": "10000",
+        "asset": "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
+        "network": "eip155:84532",
+        "scheme": "batch-settlement",
+        "txId": null,
+        "txHash": null,
+        "stage": "voucher_accepted"
+      },
+      "rows": [
+        {
+          "id": "97:158",
+          "agentId": "158",
+          "agentWallet": "0x25f75573799a3aa37760d6be4b862aca70599b49",
+          "totalFeedback": "6",
+          "sampleMean": null,
+          "measurements": []
+        },
+        {
+          "id": "97:1",
+          "agentId": "1",
+          "agentWallet": "0x80de10e23b7a4c424d0af8ecbcf9d460a073967c",
+          "totalFeedback": "5",
+          "sampleMean": null,
+          "measurements": []
+        },
+        {
+          "id": "97:2210",
+          "agentId": "2210",
+          "agentWallet": "0x38c6fc4a5525b37f9545423a7132157f69ce08da",
+          "totalFeedback": "4",
+          "sampleMean": null,
+          "measurements": []
+        }
+      ],
+      "data": {
+        "agents": [
+          {
+            "id": "97:158",
+            "agentId": "158",
+            "agentWallet": "0x25f75573799a3aa37760d6be4b862aca70599b49",
+            "totalFeedback": "6"
+          },
+          {
+            "id": "97:1",
+            "agentId": "1",
+            "agentWallet": "0x80de10e23b7a4c424d0af8ecbcf9d460a073967c",
+            "totalFeedback": "5"
+          },
+          {
+            "id": "97:2210",
+            "agentId": "2210",
+            "agentWallet": "0x38c6fc4a5525b37f9545423a7132157f69ce08da",
+            "totalFeedback": "4"
+          }
+        ],
+        "_meta": {
+          "block": {
+            "number": 130361425
+          }
+        }
+      },
+      "sourceMetadata": {
+        "block": {
+          "number": 130361425
+        }
+      },
+      "sourceAttempts": [
+        {
+          "chain": "base-sepolia",
+          "status": "unavailable",
+          "error": "Graph gateway: subgraph not found: GjQEDgEKqoh5Yc8MUgxoQoRATEJdEiH7HbocfR1aFiHa"
+        },
+        {
+          "chain": "bsc-chapel",
+          "status": "available"
+        }
+      ]
+    },
+    "paymentResponse": "eyJzdWNjZXNzIjp0cnVlLCJwYXllciI6IjB4NTdhMmE0N2NhMjJhZTUyODY3YzUzMTNjNGQ5YWI0MzA3MGQ3YzIwMiIsInRyYW5zYWN0aW9uIjoiIiwibmV0d29yayI6ImVpcDE1NTo4NDUzMiIsImFtb3VudCI6IiIsImV4dHJhIjp7ImNoYW5uZWxTdGF0ZSI6eyJjaGFubmVsSWQiOiIweGZlMDljOGFiZTBlNzNmZGI2ZDZiOTYzMWIxN2ZlNzEyYzk3MTJiZjczMTA3OWEyZmZkZDBmMDU2OThjY2UyOWEiLCJiYWxhbmNlIjoiMTAwMDAwIiwidG90YWxDbGFpbWVkIjoiMCIsIndpdGhkcmF3UmVxdWVzdGVkQXQiOjAsInJlZnVuZE5vbmNlIjoiMCIsImNoYXJnZWRDdW11bGF0aXZlQW1vdW50IjoiMzAwMDAifSwiY2hhcmdlZEFtb3VudCI6IjEwMDAwIn19"
+  },
+  "agentIsolation": {
+    "checkedAt": "2026-09-11T06:16:31.222Z",
+    "image": "node@sha256:83f487e0a63425e5b4d146fb5e5be574bcbe1b7b843d3ebafdd95eaf7767a7e5",
+    "requestId": "957688fe-0730-42db-9ea1-ff6b3d640b45",
+    "probe": true,
+    "isolation": {
+      "uid": 1000,
+      "externalNetworkInterfaces": 0,
+      "walletPasswordPresent": false,
+      "readOnlyApplication": true,
+      "networkMode": "none",
+      "readOnlyRootfs": true,
+      "nonRoot": true,
+      "capabilitiesDropped": [
+        "ALL"
+      ],
+      "noNewPrivileges": true,
+      "hostDataMounts": 0,
+      "codeMountReadOnly": true
+    },
+    "result": {
+      "ok": true,
+      "kind": "live-isolated-agent-denials",
+      "paymentsAttempted": 0,
+      "checks": [
+        {
+          "path": "/api/state",
+          "expected": 403,
+          "actual": 403
+        },
+        {
+          "path": "/api/tasks",
+          "expected": 403,
+          "actual": 403
+        },
+        {
+          "path": "/api/tasks",
+          "expected": 400,
+          "actual": 400
+        },
+        {
+          "path": "/api/tasks",
+          "expected": 403,
+          "actual": 403
+        }
+      ]
+    },
+    "ok": true
+  },
+  "agentPaid": {
+    "checkedAt": "2026-09-11T06:20:55.126Z",
+    "image": "node@sha256:83f487e0a63425e5b4d146fb5e5be574bcbe1b7b843d3ebafdd95eaf7767a7e5",
+    "requestId": "live-isolated-agent-20260911-v1",
+    "probe": false,
+    "isolation": {
+      "uid": 1000,
+      "externalNetworkInterfaces": 0,
+      "walletPasswordPresent": false,
+      "readOnlyApplication": true,
+      "networkMode": "none",
+      "readOnlyRootfs": true,
+      "nonRoot": true,
+      "capabilitiesDropped": [
+        "ALL"
+      ],
+      "noNewPrivileges": true,
+      "hostDataMounts": 0,
+      "codeMountReadOnly": true
+    },
+    "result": {
+      "ok": true,
+      "kind": "deterministic-paid-agent-comparison",
+      "requestId": "live-isolated-agent-20260911-v1",
+      "source": {
+        "chain": "bsc-chapel",
+        "subgraphId": "BTjind17gmRZ6YhT9peaCM13SvWuqztsmqyfjpntbg3Z"
+      },
+      "sourceMetadata": {
+        "block": {
+          "number": 130358080
+        }
+      },
+      "observedAt": "2026-09-11T06:21:09.462Z",
+      "comparison": [
+        {
+          "registration": "97:158",
+          "wallet": "0x25f75573799a3aa37760d6be4b862aca70599b49",
+          "indexedFeedback": "6"
+        },
+        {
+          "registration": "97:1",
+          "wallet": "0x80de10e23b7a4c424d0af8ecbcf9d460a073967c",
+          "indexedFeedback": "5"
+        },
+        {
+          "registration": "97:2210",
+          "wallet": "0x38c6fc4a5525b37f9545423a7132157f69ce08da",
+          "indexedFeedback": "4"
+        },
+        {
+          "registration": "97:1776",
+          "wallet": "0x3c0051722f04cd25563c250a62f8fcb88e4b88d6",
+          "indexedFeedback": "4"
+        },
+        {
+          "registration": "97:1868",
+          "wallet": "0x54b291874e41effc8b74768258a11785b476cc2a",
+          "indexedFeedback": "3"
+        }
+      ],
+      "interpretation": "Feedback counts are not trust scores or permission to spend. Raw measurements and provenance remain in the original result.",
+      "payment": {
+        "amount": "10000",
+        "amountBaseUnits": "10000",
+        "asset": "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
+        "network": "eip155:84532",
+        "scheme": "batch-settlement",
+        "txId": null,
+        "txHash": null,
+        "stage": "voucher_accepted"
+      }
+    },
+    "ok": true
+  },
+  "consensusReadback": {
+    "checkedAt": "2026-09-11T08:26:47.412Z",
+    "network": "hedera:testnet",
+    "topic": "0.0.10433469",
+    "expectedPublisher": {
+      "account": "0.0.10440893",
+      "publicKey": "302d300706052b8104000a03220003d4b7138780f678bd3a08dee166a8d7c4b3a86e1082df8d2d48d40e1b8cca8200"
+    },
+    "verified": [
+      {
+        "eventId": "eb253fd3-c21f-410c-8c41-1cc0c612c4b0",
+        "kind": "refund.reconciled",
+        "sequence": 39,
+        "consensusTimestamp": "1789110456.813541710",
+        "eventHash": "e947118114c33223ff8c1698f502b67b0eff1d94f1b670ebe40d170be11dc4d1",
+        "signatureVerified": true
+      },
+      {
+        "eventId": "572d0e75-71ca-43e4-abd9-e5d01f05b0a9",
+        "kind": "operator.stopped",
+        "sequence": 38,
+        "consensusTimestamp": "1789110454.953670182",
+        "eventHash": "62b5f395f26f8dc7761dd619bc8dcc3d9a766eddbea0d65d4db8d3002a7a5249",
+        "signatureVerified": true
+      },
+      {
+        "eventId": "b7827086-c817-4bc5-9396-2739b4060c17",
+        "kind": "merchant.revenue_reconciled",
+        "sequence": 37,
+        "consensusTimestamp": "1789110452.561769104",
+        "eventHash": "3319a269bfb3ea3d3cb21920f4451fd157e6c294410b9355c74a49ef2ee6b19b",
+        "signatureVerified": true
+      },
+      {
+        "eventId": "e358f9ce-48bf-4227-b9d1-eff95e73a70d",
+        "kind": "merchant.reconciliation_failed",
+        "sequence": 36,
+        "consensusTimestamp": "1789110451.008462104",
+        "eventHash": "a54466316a6520285b26d26c27cbb71e71e99db96b52d9f5ff691069f4917950",
+        "signatureVerified": true
+      },
+      {
+        "eventId": "b2d53d2e-21d6-4b26-94cc-92e5db50a9a3",
+        "kind": "task.blocked",
+        "sequence": 35,
+        "consensusTimestamp": "1789110447.755148104",
+        "eventHash": "6c3b1ba550add9a46a2afe5f977d1e8b4f365e1b531956bf552997bb0bd2e90f",
+        "signatureVerified": true
+      },
+      {
+        "eventId": "8a6798c4-de03-45e5-a341-60ace90f37fc",
+        "kind": "task.queued",
+        "sequence": 34,
+        "consensusTimestamp": "1789110445.848963104",
+        "eventHash": "b933cf25a1f53c18d5bc11434d8cc7c77c06a51e5338c1126c59bff0d04cbcb4",
+        "signatureVerified": true
+      },
+      {
+        "eventId": "a5817d9f-3f2c-459a-85e4-59e02b8509ea",
+        "kind": "task.succeeded",
+        "sequence": 24,
+        "consensusTimestamp": "1789108466.611337521",
+        "eventHash": "3790a9714ace34c0436b3bb1811116a1fa22df711b18879bac3e02d6cdf6e5be",
+        "signatureVerified": true
+      },
+      {
+        "eventId": "837fb3b1-20e0-4ed1-a6d8-b7dd41f3b7c2",
+        "kind": "task.queued",
+        "sequence": 23,
+        "consensusTimestamp": "1789108464.755785104",
+        "eventHash": "85e475a386a4d323857a5c027582a43604aac2736fad0bfcbf26959a93332163",
+        "signatureVerified": true
+      },
+      {
+        "eventId": "06e1d19e-39cd-4feb-a8cd-afd140af058a",
+        "kind": "agent.capability_created",
+        "sequence": 22,
+        "consensusTimestamp": "1789108463.302944388",
+        "eventHash": "f7d691567f3e616fe7c2475b3281ed82804fd04cfc3575087d23e03d0d7f16d9",
+        "signatureVerified": true
+      },
+      {
+        "eventId": "0d863ee8-ab50-4d12-94a9-8013cce3b766",
+        "kind": "task.succeeded",
+        "sequence": 21,
+        "consensusTimestamp": "1789108461.319228104",
+        "eventHash": "ea811975a16fbd90efe7389f09797d6312dc71c32dea9fa6477e59c17cd98c2b",
+        "signatureVerified": true
+      },
+      {
+        "eventId": "31350625-6390-4bab-b68c-f5641fc932c7",
+        "kind": "task.queued",
+        "sequence": 20,
+        "consensusTimestamp": "1789108459.302262343",
+        "eventHash": "0bea98147bf8c646d1c15a75fe460b33f18944ad74303897077283a1e0b13258",
+        "signatureVerified": true
+      },
+      {
+        "eventId": "f011f430-aaa1-4477-bedd-eae71fd95ce2",
+        "kind": "operator.scope_saved",
+        "sequence": 19,
+        "consensusTimestamp": "1789108457.170211595",
+        "eventHash": "08eb9d1f2fd92861e12d8abd929d7121daf314a275173ca889858e7814f1a278",
+        "signatureVerified": true
+      },
+      {
+        "eventId": "980678a4-09d2-4ed9-a697-0b0a216657e8",
+        "kind": "channel.reconciled",
+        "sequence": 54,
+        "consensusTimestamp": "1789112076.879101104",
+        "eventHash": "7f60d35b567e90b2f756b95f943dab36b668971da9f268e8a195b8c4e52b3b09",
+        "signatureVerified": true
+      },
+      {
+        "eventId": "5e599c24-5c08-4d1a-81e4-d1fe63b4fa6b",
+        "kind": "refund.transaction_confirmed",
+        "sequence": 53,
+        "consensusTimestamp": "1789110685.205038664",
+        "eventHash": "b7129849bb66b6dab09fdab0ed1b4e1c96b702dfb91026cd4ec374a940bef199",
+        "signatureVerified": true
+      },
+      {
+        "eventId": "1ad285d9-667f-47e8-8044-2898996753b5",
+        "kind": "refund.failed_or_uncertain",
+        "sequence": 52,
+        "consensusTimestamp": "1789110683.254153104",
+        "eventHash": "d2e6a51b865534d225d5b190cd4a08342e4fbb56d026da338ee3423bcb2f2f05",
+        "signatureVerified": true
+      },
+      {
+        "eventId": "8339e31a-aedf-4301-9b96-b59b75823ec0",
+        "kind": "refund.requested",
+        "sequence": 51,
+        "consensusTimestamp": "1789110681.394212831",
+        "eventHash": "89f8c788349357c3b283213b4c35c4fc027de2a18a3e816cc1838236baf6e1bc",
+        "signatureVerified": true
+      },
+      {
+        "eventId": "5bdfa7ff-f240-4070-a431-3cd26371ae2f",
+        "kind": "mandate.stopped",
+        "sequence": 50,
+        "consensusTimestamp": "1789110679.711322104",
+        "eventHash": "3358ade746829eebaaaaa047718f736a9af21a453dc4f30fa41030714d2e5aca",
+        "signatureVerified": true
+      },
+      {
+        "eventId": "55eb0347-f512-4c5a-b329-8d8bbb2a5e80",
+        "kind": "mandate.stopped",
+        "sequence": 49,
+        "consensusTimestamp": "1789110677.856039400",
+        "eventHash": "ce87dd3c6269c1db92312b3d8bbedba850d187654ed208a1681a785468390f01",
+        "signatureVerified": true
+      },
+      {
+        "eventId": "368c4f95-8435-48cb-8e92-df39ed85bbde",
+        "kind": "request.error",
+        "sequence": 48,
+        "consensusTimestamp": "1789110479.825841104",
+        "eventHash": "8029faffac7914b551983e4add01c823fed1c78b7fce8b8f42680157ecde635f",
+        "signatureVerified": true
+      },
+      {
+        "eventId": "4ea36391-2166-4c78-be9f-dd3a05d1d895",
+        "kind": "request.started",
+        "sequence": 47,
+        "consensusTimestamp": "1789110477.931681104",
+        "eventHash": "8ea1a2cdcd2e5a8e12690a0eb2496403f9bf860006ac3d29851e3bb876ce4af4",
+        "signatureVerified": true
+      },
+      {
+        "eventId": "93b2022d-2d39-4c8b-988b-294496ae7b39",
+        "kind": "payment.accepted",
+        "sequence": 46,
+        "consensusTimestamp": "1789110474.581712007",
+        "eventHash": "13abb4694f6a15d6b3f4d41a31ddd6711aadad418bf2359a8f20d54b481ad3de",
+        "signatureVerified": true
+      },
+      {
+        "eventId": "8714a500-2d2c-433e-9ea1-8d07a4e5714d",
+        "kind": "request.signed",
+        "sequence": 45,
+        "consensusTimestamp": "1789110472.865214686",
+        "eventHash": "7ebc052b3aa3bc335ae421eb72fd3c9d801ea0050d842b201c59e31ea6809359",
+        "signatureVerified": true
+      },
+      {
+        "eventId": "9a6add5d-445f-444c-b768-7d9e9232d8a3",
+        "kind": "request.reserved",
+        "sequence": 44,
+        "consensusTimestamp": "1789110469.205435104",
+        "eventHash": "cedfb0d767c156eb22689d10bc0d77edfddb9d43d87850598c9303f6195fc6c8",
+        "signatureVerified": true
+      },
+      {
+        "eventId": "48bf6ae4-204d-4cf0-ab8e-a395ced969cb",
+        "kind": "request.started",
+        "sequence": 43,
+        "consensusTimestamp": "1789110467.508292780",
+        "eventHash": "6297d8be9146360e24e430c9243cd79b0314d3612be08779d9c3ca17e920b5d7",
+        "signatureVerified": true
+      },
+      {
+        "eventId": "1ea3e3ee-f0b5-4cf3-927d-868d30115cd7",
+        "kind": "payment.accepted",
+        "sequence": 42,
+        "consensusTimestamp": "1789110464.381695104",
+        "eventHash": "fbcc59a2568589ae6f2e21d12982c68f9479ed93ecbc6f68e45b55daef2b9eae",
+        "signatureVerified": true
+      },
+      {
+        "eventId": "04d39405-ed1f-45e2-b703-2215b2618c06",
+        "kind": "request.signed",
+        "sequence": 41,
+        "consensusTimestamp": "1789110462.559995104",
+        "eventHash": "88d6bad58975d7f026c9575429f026fded4168da6c570f34a2489713e1e1911a",
+        "signatureVerified": true
+      },
+      {
+        "eventId": "74da2f6c-e590-4df8-8ff8-b3f8b7ef35fc",
+        "kind": "request.reserved",
+        "sequence": 40,
+        "consensusTimestamp": "1789110460.755691104",
+        "eventHash": "307a8815a67a1385c4aa96b0c16bfae27118497a1ab4bd94096ce76ceb0884e7",
+        "signatureVerified": true
+      },
+      {
+        "eventId": "e09d6ac3-e203-40bc-aa20-ae9defa65457",
+        "kind": "request.started",
+        "sequence": 33,
+        "consensusTimestamp": "1789109057.082806104",
+        "eventHash": "407ea1fd368282d163192bd65121e5f4e104443e3113040514dcc4328e555e36",
+        "signatureVerified": true
+      },
+      {
+        "eventId": "78fdab58-05e8-4d44-9f3e-0ac7eb38d9d5",
+        "kind": "deposit.chain_confirmed",
+        "sequence": 32,
+        "consensusTimestamp": "1789109055.185046887",
+        "eventHash": "aba7825bb194f8af45ba2c98075fb1eb6d7739eb21ae11d1f82defd90c5b1a16",
+        "signatureVerified": true
+      },
+      {
+        "eventId": "bc0409b9-d5b7-4e90-9472-1e5530418500",
+        "kind": "payment.accepted",
+        "sequence": 31,
+        "consensusTimestamp": "1789109053.115282031",
+        "eventHash": "e1425d434c7ef749d2de7791ab3db4bd10a9fc8aad72440858e5ae18f082bc3d",
+        "signatureVerified": true
+      },
+      {
+        "eventId": "ef9920b4-47fe-4171-8cb2-97e9b5eecffe",
+        "kind": "request.signed",
+        "sequence": 30,
+        "consensusTimestamp": "1789109051.504038104",
+        "eventHash": "7f552cfb049f282d6fe458ccbb61709caba3b5c87d032eed5e16883b8da1838c",
+        "signatureVerified": true
+      },
+      {
+        "eventId": "703e758d-b202-48e2-9b62-6946d3694271",
+        "kind": "deposit.signature_verified",
+        "sequence": 29,
+        "consensusTimestamp": "1789109049.965429152",
+        "eventHash": "3a7e56e481066d3e1253620b23baf8902ca7af6196f45470e602cb0d6f9f4d8d",
+        "signatureVerified": true
+      },
+      {
+        "eventId": "d6ddfa3b-d987-41cc-9d66-00935ebcb2dd",
+        "kind": "deposit.authorization_requested",
+        "sequence": 28,
+        "consensusTimestamp": "1789108474.591858104",
+        "eventHash": "5810db4d16c179180a83415305fa24949292d31eef1165700b81bc794b2250e0",
+        "signatureVerified": true
+      },
+      {
+        "eventId": "24aa2fa6-efde-48f8-8fc6-855142f59ea5",
+        "kind": "request.reserved",
+        "sequence": 27,
+        "consensusTimestamp": "1789108472.388189104",
+        "eventHash": "2e30c962481fdcbd17066fa232c2092c27c414ca4b576467425fb220dc0eac68",
+        "signatureVerified": true
+      },
+      {
+        "eventId": "78bc7588-e62c-4c85-be04-2077447eab8d",
+        "kind": "request.started",
+        "sequence": 26,
+        "consensusTimestamp": "1789108470.573816279",
+        "eventHash": "54a68a9a37dc8726de1bae4d0bc279a1c5ff1ca28e7b6041c90ffc02541ab91f",
+        "signatureVerified": true
+      },
+      {
+        "eventId": "2847f96c-5280-4309-8aee-4732137cc1e7",
+        "kind": "mandate.configured",
+        "sequence": 25,
+        "consensusTimestamp": "1789108468.590951104",
+        "eventHash": "5cbd38464e8f1ba5bcee3c5824b85d0efa7d4b7096b9af32bb3c1320d4f3f52a",
+        "signatureVerified": true
+      },
+      {
+        "eventId": "59e349cf-6a2f-4729-bba0-e9aef02bceab",
+        "kind": "merchant.request_received",
+        "sequence": 65,
+        "consensusTimestamp": "1789113690.245449043",
+        "eventHash": "b1cc21e5c4ed2bd5dd387eabc80a964c867d3d692ded31f1c90e33619270bd97",
+        "signatureVerified": true
+      },
+      {
+        "eventId": "90ce0234-fde9-4c0f-9b47-e9a2669956f9",
+        "kind": "merchant.revenue_settled",
+        "sequence": 64,
+        "consensusTimestamp": "1789113688.771787812",
+        "eventHash": "00fb92f0d53ec9b406d1df6753b54eda5e9acebcc3da3f1645bfd78a8c5be7be",
+        "signatureVerified": true
+      },
+      {
+        "eventId": "71062370-e8f1-4300-8e3c-d08119b40a9e",
+        "kind": "merchant.claim_requested",
+        "sequence": 63,
+        "consensusTimestamp": "1789113685.745356104",
+        "eventHash": "e8c4eb2dbbdd471b9de35286ecfcf4c21b45c0b2fa1cd0fcfee193a5cb98f8e1",
+        "signatureVerified": true
+      },
+      {
+        "eventId": "d0b416e2-cd50-40bb-a39d-e6d55b25a500",
+        "kind": "merchant.lifecycle_failed",
+        "sequence": 62,
+        "consensusTimestamp": "1789113683.931438104",
+        "eventHash": "3d5af8ba10d1e8f8adc45780c8a70c55cb3451943358565ef9e21e6c0ee2381f",
+        "signatureVerified": true
+      },
+      {
+        "eventId": "cce038d6-e54a-4e2d-afdd-c6cba91d2b92",
+        "kind": "merchant.claim_requested",
+        "sequence": 61,
+        "consensusTimestamp": "1789113682.064161104",
+        "eventHash": "bbbd3a53983b0c94b78e4536f1c07eb5e02d4904b106cd55362aab8d0d62b6d8",
+        "signatureVerified": true
+      },
+      {
+        "eventId": "e84ff454-7a2c-4a99-98bf-3d3abe01083d",
+        "kind": "merchant.payment_accepted",
+        "sequence": 60,
+        "consensusTimestamp": "1789113678.824160800",
+        "eventHash": "dc07bf4dae54a8a5c07071787ae57cc8bfba62463df781b82044fe8c4d02ed7b",
+        "signatureVerified": true
+      },
+      {
+        "eventId": "ce6c1190-b0f2-44e3-944f-411a22979d7d",
+        "kind": "merchant.request_received",
+        "sequence": 59,
+        "consensusTimestamp": "1789113676.834016433",
+        "eventHash": "e49486401625ffb5de386d33bf47f78f492c5b9c8acf6e908c45fec59d0c8e15",
+        "signatureVerified": true
+      },
+      {
+        "eventId": "461e616b-c8d3-4fd2-a45b-beeef2fe3d9c",
+        "kind": "merchant.payment_accepted",
+        "sequence": 58,
+        "consensusTimestamp": "1789113675.079297181",
+        "eventHash": "0085ed8e65a373ca92d64b717720c04d8f18e60ad217b47594ce33257baea22c",
+        "signatureVerified": true
+      },
+      {
+        "eventId": "1f69017d-3d15-49b2-bb03-e11aa6a1faf3",
+        "kind": "merchant.request_received",
+        "sequence": 57,
+        "consensusTimestamp": "1789113673.178670194",
+        "eventHash": "10e885a827ba54db2ef681b138cffd570f4055339b6d12c0f820104697c2384c",
+        "signatureVerified": true
+      },
+      {
+        "eventId": "0457d24d-a33c-4e82-a69a-a14ec9cfde2e",
+        "kind": "merchant.payment_accepted",
+        "sequence": 56,
+        "consensusTimestamp": "1789113671.297799082",
+        "eventHash": "74279b5bb832427cf77575c308d60adbbf1af0bead1e0680adb20e6e1605efaa",
+        "signatureVerified": true
+      },
+      {
+        "eventId": "5e737df7-424a-43a0-aaf5-8e9e468ace35",
+        "kind": "merchant.request_received",
+        "sequence": 55,
+        "consensusTimestamp": "1789113669.286220886",
+        "eventHash": "47e6b01026805e7794f5e272ab1da3a45ec8c38f492debd4d496f91e99b89047",
+        "signatureVerified": true
+      }
+    ],
+    "failures": [],
+    "pending": 0,
+    "ok": true
+  },
+  "visual": {
+    "checkedAt": "2026-09-11T08:26:34.840Z",
+    "financialOperations": 0,
+    "networkInterceptions": 0,
+    "checks": [
+      {
+        "viewport": "desktop",
+        "violations": []
+      },
+      {
+        "viewport": "mobile",
+        "violations": []
+      }
+    ],
+    "screenshots": [
+      "/Users/Apple/Documents/mandate//.live-results/repair/visual-final/desktop.png",
+      "/Users/Apple/Documents/mandate//.live-results/repair/visual-final/mobile.png",
+      "/Users/Apple/Documents/mandate//.live-results/repair/visual-final/result-receipt.png"
+    ],
+    "accounting": {
+      "authorized": "0.10 USDC",
+      "spent": "0.03 USDC",
+      "returned": "0.07 USDC",
+      "furtherSpendingDisabled": true
+    },
+    "ok": true
+  }
+}

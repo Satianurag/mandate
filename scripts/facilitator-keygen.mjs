@@ -11,7 +11,7 @@
  */
 
 import { randomBytes } from "node:crypto";
-import { writeFile, access } from "node:fs/promises";
+import { writeFile, access, mkdir } from "node:fs/promises";
 import { constants } from "node:fs";
 import { ensureWalletPass } from "./load-wallet-pass.mjs";
 
@@ -23,6 +23,7 @@ if (!process.env.WALLET_PASS) {
   process.exit(1);
 }
 
+await mkdir(`${ROOT}/secrets`, {recursive:true,mode:0o700});
 const { seal } = await import(`${ROOT}/packages/gateway/src/keyring.ts`);
 const { privateKeyToAccount } = await import("viem/accounts");
 
@@ -39,7 +40,7 @@ for (const name of ["mandate-facilitator", "mandate-authorizer"]) {
   const sealed = await seal(name, raw);
   const address = privateKeyToAccount(`0x${raw.toString("hex")}`).address;
   raw.fill(0);
-  await writeFile(path, sealed, { mode: 0o600 });
+  await writeFile(path, sealed, { mode: 0o600, flag: "wx" });
   console.log(`${name}: ${address}  → secrets/${name}.enc`);
 }
 

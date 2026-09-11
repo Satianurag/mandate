@@ -21,9 +21,7 @@ const GATEWAY = "https://gateway.thegraph.com/api";
 // Current canonical mirror endpoints. NOT the stock `@x402/hedera` mirror
 // constants -- those still point at the legacy `*-public` hosts.
 const HEDERA_MIRRORS: Record<string, string> = {
-  "hedera:mainnet": "https://mainnet.mirrornode.hedera.com/api/v1",
   "hedera:testnet": "https://testnet.mirrornode.hedera.com/api/v1",
-  "hedera:previewnet": "https://previewnet.mirrornode.hedera.com/api/v1",
 };
 /** Entity-id shape, stock from `@x402/hedera` — identical to the hand-rolled regex this replaces. */
 const HEDERA_ID_RE = HEDERA_ENTITY_ID_REGEX;
@@ -58,7 +56,7 @@ export async function resolveHederaEvmAddress(
   mirrorBase: string,
   fetchFn: FetchFn = fetch
 ): Promise<string | null> {
-  const res = await fetchFn(`${mirrorBase}/accounts/${accountId}`);
+  const res = await fetchFn(`${mirrorBase}/accounts/${accountId}`, { signal: AbortSignal.timeout(15_000) });
   if (res.status === 404) return null;
   if (!res.ok) throw new Error(`Hedera mirror: HTTP ${res.status} for ${accountId}`);
   const body = (await res.json().catch(() => null)) as { evm_address?: string } | null;
@@ -81,19 +79,8 @@ export const AGENT0_TESTNET: Record<string, string> = {
   "monad-testnet": "8iiMH9sj471jbp7AwUuuyBXvPJqCEsobuHBeUEKQSxhU",
 };
 
-export const AGENT0_MAINNET: Record<string, string> = {
-  ethereum: "FV6RR6y13rsnCxBAicKuQEwDp8ioEGiNaWaZUmvr1F8k",
-  base: "43s9hQRurMGjuYnC1r2ZwS6xSQktbFyXMPMqGKUFJojb",
-  bsc: "D6aWqowLkWqBgcqmpNKXuNikPkob24ADXCciiP8Hvn1K",
-  polygon: "9q16PZv1JudvtnCAf44cBoxg82yK9SSsFvrjCY9xnneF",
-  monad: "4tvLxkczjhSaMiqRrCV1EyheYHyJ7Ad8jub1UUyukBjg",
-};
-
-/** One schema is shared across every deployment, so the same query works on all. */
-export const AGENT0_SUBGRAPHS: Record<string, string> = {
-  ...AGENT0_TESTNET,
-  ...AGENT0_MAINNET,
-};
+/** Hermetic fixture mirrors the runtime boundary: testnet deployments only. */
+export const AGENT0_SUBGRAPHS: Record<string, string> = { ...AGENT0_TESTNET };
 
 /**
  * Field names verified by schema introspection against the live subgraph on
@@ -260,9 +247,9 @@ export async function lookupCounterparty(
     validations += agent.validations.length;
   }
 
-  // ERC-8004 feedback values run 0-100 (confirmed against live Base data:
-  // observed means from 1.0 to 100.0). Normalise to 0..1 so the policy engine
-  // compares on one scale regardless of the registry's units.
+  // Legacy display statistic only. ERC-8004 permits heterogeneous units and
+  // reviewers are not vetted here. This value MUST NOT grant payment authority;
+  // the broker uses explicitly authorized counterparties and integer limits.
   const meanScore =
     live.length > 0
       ? clamp01(live.reduce((a, b) => a + b, 0) / live.length / 100)
@@ -310,6 +297,8 @@ export async function queryAgent0(
       authorization: `Bearer ${apiKey}`,
     },
     body: JSON.stringify({ query, variables }),
+    signal: AbortSignal.timeout(15_000),
+    redirect: "error",
   });
   const body = (await res.json().catch(() => null)) as
     | { data?: unknown; errors?: { message: string }[] }
@@ -318,6 +307,8 @@ export async function queryAgent0(
   if (body.errors?.length) {
     throw new Error(`Graph gateway: ${body.errors.map((e) => e.message).join("; ")}`);
   }
+  if (!res.ok) throw new Error(`Graph gateway: HTTP ${res.status}`);
+  if (body.data === undefined || body.data === null) throw new Error("Graph gateway returned no data");
   return body.data;
 }
 
@@ -328,6 +319,7 @@ export function getLastMcpToolsUsed(): string[] {
 }
 
 let discoveredCache: Record<string, string> | null = null;
+let discoveredAt = 0;
 
 /**
  * Production subgraph ID source: Subgraph MCP. Tests never hit this because
@@ -335,12 +327,16 @@ let discoveredCache: Record<string, string> | null = null;
  * back to AGENT0_SUBGRAPHS (that table is an observation, not a runtime default).
  */
 export async function resolveDiscoveredSubgraphs(apiKey: string): Promise<Record<string, string>> {
-  if (discoveredCache) return discoveredCache;
+  if (discoveredCache && Date.now() - discoveredAt < 5 * 60_000) return { ...discoveredCache };
   const { discoverAgent0DeploymentsWithKey } = await import("./discovery.ts");
   const { subgraphs, toolsUsed } = await discoverAgent0DeploymentsWithKey(apiKey);
   lastMcpToolsUsed = toolsUsed;
-  discoveredCache = subgraphs;
-  return subgraphs;
+  if (!Object.keys(subgraphs).length) throw new Error("Discovery returned no deployments");
+  const supported = new Set(["base-sepolia","ethereum-sepolia","bsc-chapel","monad-testnet"]);
+  discoveredCache = Object.fromEntries(Object.entries(subgraphs).filter(([chain]) => supported.has(chain)));
+  if (!Object.keys(discoveredCache).length) throw new Error("MCP discovery returned no supported testnet deployments");
+  discoveredAt = Date.now();
+  return { ...discoveredCache };
 }
 
 const clamp01 = (n: number) => Math.max(0, Math.min(1, n));

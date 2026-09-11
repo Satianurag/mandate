@@ -26,6 +26,8 @@ import { normaliseAmount } from "../../gateway/src/hedera.ts";
 import { nodeAdapter } from "../../gateway/src/http-adapter.ts";
 import { BLOCKY402_URL, CIRCLE_HEDERA_TESTNET_USDC_HTS } from "../../gateway/src/facilitators.ts";
 import { liveAnalyticsBody, type Agent0Row } from "../../gateway/src/analytics.ts";
+import { Journal } from "../../gateway/src/journal.ts";
+import { handlePaidRequest } from "../../gateway/src/paid-handler.ts";
 import { assertFacilitatorKinds } from "../../gateway/src/discovery.ts";
 
 export const SERVICE_NETWORK = "hedera:testnet";
@@ -35,6 +37,7 @@ export interface ServiceConfig {
   facilitatorUrl: string;
   port: number;
   host: string;
+  journalPath?: string;
   fetchRows?: (query: string) => Promise<Agent0Row[]>;
 }
 
@@ -112,58 +115,18 @@ export async function buildService(cfg: ServiceConfig): Promise<Server> {
   await assertFacilitatorKinds(cfg.facilitatorUrl, [`exact@${SERVICE_NETWORK}`]);
   await httpServer.initialize();
 
-  return createServer(async (req, res) => {
-    try {
-      const base = `http://${req.headers.host ?? "localhost"}`;
-      const adapter = nodeAdapter(req, base);
-      const path = new URL(req.url ?? "/", base).pathname;
-      const out = await httpServer.processHTTPRequest({
-        adapter,
-        path,
-        method: req.method ?? "GET",
-      });
-      if (out.type === "no-payment-required") {
-        res.writeHead(404).end();
-        return;
-      }
-      if (out.type === "payment-error") {
-        res.writeHead(out.response.status, out.response.headers);
-        res.end(JSON.stringify(out.response.body));
-        return;
-      }
-      // Verified: run the handler, then settle. The PAYMENT-RESPONSE headers
-      // from processSettlement are what the mandate client accrues its
-      // budget from — dropping them would let spend go unmetered.
-      const query = new URL(req.url ?? "/", base).searchParams.get("q") ?? "{ agents { id } }";
-      const settled = await httpServer.processSettlement(
-        out.paymentPayload,
-        out.paymentRequirements,
-        out.declaredExtensions,
-        { request: { adapter, path, method: req.method ?? "GET" } }
-      );
-      if (!settled.success) {
-        res.writeHead(402, { "content-type": "application/json" });
-        res.end(JSON.stringify({ error: settled.errorReason }));
-        return;
-      }
-      const { amount: human, symbol } = normaliseAmount(out.paymentRequirements);
-      try {
-        const body = await liveAnalyticsBody(
-          query,
-          { amount: human, asset: symbol, txId: settled.transaction },
-          { fetchRows: cfg.fetchRows }
-        );
-        res.writeHead(200, { "content-type": "application/json", ...settled.headers });
-        res.end(JSON.stringify(body));
-      } catch (e) {
-        res.writeHead(503, { "content-type": "application/json" });
-        res.end(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }));
-      }
-    } catch (e) {
-      res.writeHead(500, { "content-type": "application/json" });
-      res.end(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }));
-    }
+  const journal = new Journal(cfg.journalPath ?? "./state/hedera-service/merchant.sqlite");
+  const server = createServer((req, res) => {
+    void handlePaidRequest({ req, res, httpServer, journal,
+      prepare: query => liveAnalyticsBody(query, {}, { fetchRows: cfg.fetchRows }),
+    }).catch(e => {
+      console.error("Merchant handler failed:", e instanceof Error ? e.message : String(e));
+      if (!res.headersSent) res.writeHead(503, { "content-type": "application/json" });
+      res.end('{"error":"Merchant could not persist the request outcome"}');
+    });
   });
+  server.on("close", () => journal.close());
+  return server;
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
@@ -176,6 +139,6 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     process.exit(1);
   });
   server.listen(boot.port, boot.host, () =>
-    console.log(`paid service on ${boot.host}:${boot.port} (facilitator ${boot.facilitatorUrl})`)
+    console.log(`paid service on ${boot.host}:${(server.address() as { port: number }).port} (facilitator ${boot.facilitatorUrl})`)
   );
 }

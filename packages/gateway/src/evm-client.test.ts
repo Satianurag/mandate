@@ -6,6 +6,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { ClientEvmSigner } from "@x402/evm";
 import { createEvmX402Client } from "./evm-client.ts";
+import { Journal } from "./journal.ts";
 import { createMandateEvmClient } from "./client.ts";
 
 const stub: ClientEvmSigner = {
@@ -24,6 +25,8 @@ test("createEvmX402Client builds without an env private key", () => {
 
 test("createMandateEvmClient attaches policy hooks", () => {
   const { x402, getLastDecision } = createMandateEvmClient({
+    resourceUrl: "http://127.0.0.1:1/analytics",
+    journal: new Journal(":memory:"),
     evmSigner: stub,
     rpcUrl: "http://127.0.0.1:1",
     hederaCiphertext: Buffer.from("unused"),

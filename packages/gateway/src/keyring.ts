@@ -1,18 +1,10 @@
 /**
- * Ledger Key Ring custody.
- *
- * Mandate holds no plaintext secrets on disk and no secrets in environment
- * variables. Everything -- the Hedera payment key, the Graph gateway API key,
- * upstream service credentials -- is sealed with `wallet-cli ring encrypt` and
- * unsealed only for the lifetime of a single operation.
- *
- * The Ledger Key Ring Protocol encrypts under keys tied to the device
- * (AES-256-GCM, per-name derivation from a BIP32-style tree), so a blob sealed
- * once on a machine with the device attached can be opened later on a VPS or
- * CI runner with no device present. That non-USB path is the whole reason this
- * module exists.
- *
- * Docs: https://developers.ledger.com/docs/ai-tools/ledger-cli#key-ring
+ * Ledger Key Ring custody adapter. Ciphertext stays on disk; decrypt uses the
+ * CLI's password-protected member and network trustchain. After provisioning,
+ * Key Ring decryption need not use USB. The CLI still consumes WALLET_PASS in
+ * its child environment; same-user host processes are not isolated by this API.
+ * Only the trusted broker may invoke it. Agents run behind a separate boundary.
+ * Buffer cleanup is best-effort: derived JavaScript strings cannot be wiped.
  */
 
 import { spawn } from "node:child_process";

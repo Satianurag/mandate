@@ -1,70 +1,76 @@
 # Threat model
 
-State this honestly in the README and in the demo. Judges reward a team that
-knows the boundary of its own claims.
+## Scope
 
-## What Mandate fixes
+The verified deployment is a single trusted operator host with a constrained
+consumer, Base Sepolia USDC, a local merchant/facilitator, and Hedera testnet evidence.
+Mainnet use is disabled. This is not a claim of an independently audited production
+wallet, uniqueness oracle, general agent sandbox, or trustless data marketplace.
 
-**Plaintext keys on the agent host.** Ledger's own framing of the problem:
-"If an AI agent is spending money, it needs access to a private key to sign
-transactions. By definition, these keys are 'hot'." Mandate removes them from
-disk and from the environment. Secrets live sealed in the Ledger Key Ring and
-exist as plaintext only inside a single `withSecret` callback.
+## Protected boundaries
 
-**Unbounded autonomous spend.** A rolling budget and a per-call ceiling, with
-escalation to a physical device confirmation. This is the direct answer to
-incidents like the February 2026 OpenClaw agent, which mis-parsed a request for
-4 SOL and transferred its entire ~$250k token holding.
+Untrusted consumers cannot select another recipient/token/network, widen the
+reviewed query, invoke initial funding, administer the operator, or recover money.
+The live Docker probe attempted these operations and was denied. The consumer has
+no network interface outside its container, host credentials, or host-data mounts.
+It asks the trusted relay for a permitted task instead of receiving signing keys.
 
-**Blind counterparty trust.** Stock x402 clients pay whoever answers with a
-402. Mandate resolves the payee against the ERC-8004 registries first.
+The broker rejects unparseable amounts, unexpected requirements, expired scope,
+redirects, caller-supplied payment credentials and exhausted limits. Atomic integer
+reservations close the check-then-spend race. A submitted request of unknown outcome
+retains its reservation until the original evidence establishes what happened.
+A new process cannot attach different scope to the same mandate identity.
 
-**Unverifiable decision history.** Consensus timestamps on HCS give an ordering
-no application log can forge or backdate.
+Device approvals are cryptographically verified against the configured principal.
+Optional step-up approvals bind an action, nonce, amount, chain, recipient and
+expiry and are consumed once. Address verification and optional human-presence
+attestations are not payment approval. The core batch workspace does not silently
+override a blocked limit by asking for an unrelated signature.
 
-## What Mandate does NOT fix
+## Trusted components and residual risks
 
-**Facilitator vulnerabilities.** The 2026 audit of 15 facilitators found
-violations in every one of them — free shopping, asset theft, gas abuse,
-service denial (arXiv:2607.19545). Those live in the facilitator's own verify
-and settle logic. Mandate is a client. It cannot patch a server it does not
-run. What it does do is bound the blast radius: a compromised facilitator can
-still misbehave, but it cannot spend more than the policy window allows, and
-every attempt is on the consensus record.
+The operator host can observe secrets while they are used. `wallet-cli` receives
+its Key Ring password in a child environment; another process with the same host
+user authority can inspect it. A protected Key Ring member is custody plumbing,
+not process isolation or a trusted execution environment. The consumer boundary
+works only when the consumer is actually launched with the supplied confinement.
 
-**Prompt injection into the agent.** If the agent is manipulated into wanting
-to pay a legitimate, well-reputed service for something useless, policy allows
-it. Reputation scores the counterparty, not the intent. The per-call ceiling
-and rolling budget are the only defence here, and they are a cap, not a cure.
+The broker and facilitator create JavaScript strings/account closures from secret
+bytes. Buffer cleanup is best-effort and cannot promise erasure of those copies.
+A compromised broker with the delegated key can misuse authority up to the
+contractual channel bounds; broker-only URL/window/expiry rules are not guaranteed
+against compromise of the broker itself.
 
-**A compromised Mandate host.** An attacker with code execution on the gateway
-can observe the unsealed key during its lifetime in memory. The Key Ring
-protects secrets at rest and in transit between machines. It does not create a
-TEE.
+The merchant can fail to deliver useful work or honestly report incomparable data.
+Preparing a read-only result before charging limits one failure mode, not all
+service-quality risk. Feedback counts and heterogeneous measurement values are
+not a trust score or proof of identity uniqueness. Reputation does not enlarge the
+reviewed spending authority.
 
-**Step-up binding in clear mode.** The default step-up verifies the address on
-the device screen (presence + tap) but does not produce a signature over the
-amount and recipient — that binding exists only in message/EIP-712 mode, which
-needs blind signing until the ERC-7730 registry entry merges. On a compromised
-host, a tap obtained for one payment context could be followed by a different
-payment. The console display is the human's only check in clear mode.
+On-chain proof still relies on the configured testnet and RPC responses. The
+implementation checks the chain and matching receipt/calldata/transfers and uses
+consistent snapshots. This is not a light-client proof, audited contract claim,
+or protection against a fully compromised operator/RPC environment.
 
-**The password.** `WALLET_PASS` must come from the OS keychain. Written into a
-command it lands in shell history, the process list, and CI logs — at which
-point the ciphertext is openable by whoever reads them.
+A local event hash chain detects changes relative to a known head. It does not
+stop the operator rewriting all local files before any external anchor exists.
+Confirmed HCS anchors bind hashes and publisher signatures to consensus; they do
+not prove the original data source was honest. Pending anchors are never described
+as already confirmed. Readback failures remain visible.
 
-## Failure direction
+See [dependency security](DEPENDENCIES.md). Patched transitive versions and a
+version-checked image parser guard are applied reproducibly. The upstream
+`elliptic` implementation warning remains; the repository does not claim a zero-risk
+supply chain or a clean advisory report by hiding transitive packages.
 
-Every degraded path resolves toward refusal:
+## Deliberately excluded claims
 
-| Failure | Result |
-|---|---|
-| Subgraph unreachable | counterparty treated as unregistered → `step_up` |
-| Device absent, locked, or timed out | `deny` |
-| Amount unparseable | `deny` |
-| HCS write failing | queued and retried; never blocks or opens the gate |
+No mainnet financial operation is supported. The live test did not demonstrate a
+physically unplugged or remotely provisioned VPS broker, on-device ERC-7730 labels,
+a running LLM fleet, universal ERC-8004 reputation scores, or a permissionless
+network-wide identity/uniqueness proof. Descriptor lint, unit tests, recorded device
+traces, and real chain transactions are different kinds of evidence.
 
-The one asymmetry worth naming: a stale Agent0 subgraph ID returns an empty
-result rather than an error, which silently degrades every counterparty to
-"unrated" and turns every allow into a step-up. Noisy, not dangerous — but
-re-resolve the IDs on Day 3.
+Ledger explicitly documents the same-user environment risk and device-free
+post-provisioning decryption:
+https://developers.ledger.com/docs/ai-tools/ledger-cli

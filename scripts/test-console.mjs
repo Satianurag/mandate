@@ -1,0 +1,80 @@
+#!/usr/bin/env node
+// Real browser + real local HTTP application. No network interception or fabricated balances.
+import assert from 'node:assert/strict';
+import { mkdtemp, readFile, rm, mkdir } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { chromium } from '@playwright/test';
+import AxeBuilder from '@axe-core/playwright';
+import { createOperatorApp } from '../packages/gateway/src/operator.ts';
+const root = new URL('..', import.meta.url).pathname;
+const directory = await mkdtemp(join(tmpdir(), 'mandate-browser-'));
+const evidence = join(root, '.live-results/repair/browser');
+await mkdir(evidence, { recursive: true });
+const app = await createOperatorApp({ root, dataDir: directory, port: 0 });
+await new Promise(resolve => app.server.listen(0, '127.0.0.1', resolve));
+const origin = `http://127.0.0.1:${app.server.address().port}`;
+const token = (await readFile(join(directory, 'operator-token'), 'utf8')).trim();
+const browser = await chromium.launch(existsSync('/Applications/Google Chrome.app') ? { channel: 'chrome', headless: true } : { headless: true });
+const report = { checkedAt: new Date().toISOString(), financialOperations: 0, networkMocks: 0, checks: [], screenshots: [] };
+try {
+  const browserContext = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
+  const page = await browserContext.newPage();
+  const pageErrors = [];
+  page.on('pageerror', error => pageErrors.push(error.message));
+  await page.goto(origin);
+  await page.getByRole('heading', { name: /Your agent works/ }).waitFor();
+  assert.equal(await page.locator('#workspace').isVisible(), false);
+  await page.goto(`${origin}/#token=${token}`);
+  await page.getByRole('heading', { name: 'One task. Clear boundaries.' }).waitFor();
+  assert.equal(new URL(page.url()).hash, '');
+  assert.equal(await page.getByRole('button', { name: 'Run paid task', exact: true }).isEnabled(), false);
+  report.checks.push('operator login uses a real server session; URL token is removed; no unfunded success is shown');
+  await page.keyboard.press('Tab');
+  assert.notEqual(await page.evaluate(() => document.activeElement.tagName), 'BODY');
+  await page.getByRole('button', { name: 'Review authority', exact: true }).click();
+  await page.locator('#operatorAddress').fill('0x0000000000000000000000000000000000000001');
+  await page.locator('#receiver').fill('0x0000000000000000000000000000000000000002');
+  await page.locator('#receiverAuthorizer').fill('0x0000000000000000000000000000000000000003');
+  await page.locator('#serviceUrl').fill('http://127.0.0.1:1/analytics');
+  await page.locator('#ceilingInput').fill('1.234567');
+  await page.getByRole('button', { name: 'Save reviewed scope', exact: true }).click();
+  await page.getByText('Reviewed scope saved. No funds have been authorized or moved.').waitFor();
+  assert.equal(await page.locator('#cap').innerText(), '1.234567 USDC');
+  assert.equal(await page.locator('#mandateStatus').innerText(), 'Not funded');
+  assert.equal(await page.getByRole('button', { name: 'Create scoped agent access' }).isEnabled(), false);
+  await page.getByRole('button', { name: 'Run paid task', exact: true }).click();
+  await page.getByText(/Review and explicitly authorize initial funding/).waitFor();
+  const actualState = await page.evaluate(async () => (await fetch('/api/state')).json());
+  assert.equal(actualState.config.ceilingBaseUnits, '1234567');
+  assert.equal(actualState.tasks.length, 0);
+  report.checks.push('edited limits persist exactly in SQLite-backed workspace configuration; checkbox is not simulated Ledger approval');
+  await page.getByRole('button', { name: 'Stop new work', exact: true }).click();
+  await page.getByText('New work stopped and agent capabilities revoked. Existing payments were not reversed.').waitFor();
+  await page.reload();
+  await page.locator('#mandateStatus').filter({ hasText: 'Stopped' }).waitFor();
+  assert.equal(await page.getByRole('button', { name: 'Run paid task', exact: true }).isEnabled(), false);
+  report.checks.push('stop is a persisted backend state, survives refresh and disables new tasks');
+  for (const viewport of [{ name:'desktop', width:1440, height:1000 }, { name:'mobile', width:390, height:844 }]) {
+    await page.setViewportSize({ width:viewport.width,height:viewport.height });
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `${viewport.name} overflow`);
+    const audit = await new AxeBuilder({ page }).withTags(['wcag2a','wcag2aa','wcag21aa']).analyze();
+    const serious = audit.violations.filter(v => ['critical','serious'].includes(v.impact));
+    report.checks.push({ viewport:viewport.name, axeViolations:audit.violations.map(v=>({id:v.id,impact:v.impact,nodes:v.nodes.map(n=>n.target)})) });
+    const path = join(evidence, `${viewport.name}-real-backend-test.png`);
+    await page.screenshot({ path, fullPage:true }); report.screenshots.push(path);
+    assert.deepEqual(serious, [], `${viewport.name} accessibility violations: ${serious.map(v=>v.id).join(',')}`);
+  }
+  await page.getByRole('button', { name: 'Review authority', exact:true }).click();
+  await page.keyboard.press('Escape');
+  assert.equal(await page.locator('#configDialog').isVisible(), false);
+  assert.deepEqual(pageErrors, []);
+  report.checks.push('desktop/mobile real-browser layout, keyboard navigation, dialog dismissal, and no JavaScript page errors');
+  report.ok = true;
+} finally {
+  const { writeFile } = await import('node:fs/promises');
+  await writeFile(join(evidence,'report.json'),JSON.stringify(report,null,2));
+  await browser.close(); await app.close(); await rm(directory,{recursive:true,force:true});
+}
+console.log(JSON.stringify(report,null,2));

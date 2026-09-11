@@ -39,9 +39,9 @@ if (!process.env.WALLET_PASS) {
 
 const network = process.env.MANDATE_HEDERA_NETWORK ?? "hedera:testnet";
 const sdkNetwork =
-  network === "hedera:mainnet" ? "mainnet" : network === "hedera:testnet" ? "testnet" : null;
+  network === "hedera:testnet" ? "testnet" : null;
 if (!sdkNetwork) {
-  console.error(`HCS11Client supports hedera:mainnet/testnet only, got ${network}`);
+  console.error(`HCS11Client supports hedera:testnet only (mainnet disabled), got ${network}`);
   process.exit(1);
 }
 
@@ -87,9 +87,8 @@ function topicFromInscription(inscription) {
 }
 
 function mirrorBase(sdkNetwork) {
-  return sdkNetwork === "mainnet"
-    ? "https://mainnet-public.mirrornode.hedera.com"
-    : "https://testnet.mirrornode.hedera.com";
+  if (sdkNetwork !== "testnet") throw new Error("Testnet-only UAID readback");
+  return "https://testnet.mirrornode.hedera.com";
 }
 
 async function profileTopicFromAccountMemo(accountId, sdkNetwork) {
@@ -132,10 +131,7 @@ async function inscribeViaDirectHcs(profile, accountId, privateKeyHex, sdkNetwor
   const { Client, PrivateKey, TopicCreateTransaction, TopicMessageSubmitTransaction } =
     await import("@hiero-ledger/sdk");
   const PK = PrivateKey.fromStringECDSA(privateKeyHex);
-  const client =
-    sdkNetwork === "mainnet"
-      ? Client.forMainnet().setOperator(accountId, PK)
-      : Client.forTestnet().setOperator(accountId, PK);
+  const client = Client.forTestnet().setOperator(accountId, PK);
   const profileJson = JSON.stringify(profile);
   try {
     const create = await new TopicCreateTransaction().setTopicMemo("hcs-1:0").execute(client);

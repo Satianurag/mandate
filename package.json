@@ -2,16 +2,16 @@
   "name": "mandate",
   "private": true,
   "version": "0.1.0",
-  "description": "A hardware-signed authorization envelope for AI agents. Approve once on your Ledger; the agent works at machine speed inside bounds it cannot widen.",
+  "description": "Testnet-only Ledger-funded agent payments with a scoped broker, durable accounting, authenticated evidence and a live operator workspace.",
   "workspaces": [
     "packages/*"
   ],
   "engines": {
-    "node": ">=22.6"
+    "node": ">=22.13"
   },
   "scripts": {
     "preflight": "bash scripts/preflight.sh",
-    "gateway": "npm run dev -w @mandate/gateway",
+    "gateway": "node --experimental-strip-types packages/gateway/src/operator.ts",
     "service": "npm run dev -w @mandate/service",
     "seal:keys": "bash scripts/seal-keys.sh",
     "seal:hedera": "bash scripts/seal-hedera.sh",
@@ -42,7 +42,7 @@
     "setup:treasury": "node --experimental-strip-types scripts/provision-treasury.mjs",
     "e2e:payment": "node --experimental-strip-types scripts/e2e-payment.mjs",
     "e2e:verdicts": "node --experimental-strip-types scripts/e2e-verdicts.mjs",
-    "boot": "bash scripts/boot-operator.sh",
+    "boot": "node --experimental-strip-types scripts/stack.mjs",
     "e2e:hedera-exact": "node --experimental-strip-types scripts/e2e-payment.mjs",
     "e2e:hedera-usdc": "node --experimental-strip-types scripts/e2e-hedera-usdc.mjs",
     "e2e:erc7730": "node --experimental-strip-types scripts/e2e-erc7730.mjs",
@@ -56,7 +56,33 @@
     "build": "npm run build --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
     "verify": "bash scripts/verify.sh",
-    "device": "bash scripts/ring-watch.sh"
+    "device": "bash scripts/ring-watch.sh",
+    "console": "node --experimental-strip-types packages/gateway/src/operator.ts",
+    "console:open": "node scripts/open-console.mjs",
+    "test:ui": "node --experimental-strip-types scripts/test-console.mjs",
+    "agent": "node scripts/run-agent.mjs",
+    "live:readiness": "node --experimental-strip-types scripts/live-preflight.mjs",
+    "live:workspace": "node --experimental-strip-types scripts/live-workspace.mjs",
+    "live:headless": "node --experimental-strip-types scripts/live-headless.mjs",
+    "verify:descriptors": "node --experimental-strip-types scripts/e2e-erc7730.mjs",
+    "mandate:reconcile": "node scripts/operator-task.mjs reconcile",
+    "verify:linux": "bash scripts/clean-linux-verify.sh",
+    "postinstall": "node scripts/apply-security-patches.mjs"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "devDependencies": {
+    "@axe-core/playwright": "4.13.0",
+    "@playwright/test": "1.63.0"
+  },
+  "overrides": {
+    "protobufjs@<8": "7.6.6",
+    "protobufjs@>=8 <9": "8.8.0",
+    "@grpc/grpc-js@>=1.12.0 <1.13.0": "1.12.7",
+    "ws@>=8 <9": "8.21.3",
+    "uuid@<11.1.1": "11.1.1",
+    "bn.js@>=5 <6": "5.2.5",
+    "decode-uri-component": "0.5.0",
+    "file-type@>=13 <22": "21.3.4",
+    "axios@>=1 <2": "1.20.0"
+  }
 }

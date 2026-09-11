@@ -11,7 +11,6 @@
  */
 
 export const HEDERA_MIRROR_TESTNET = "https://testnet.mirrornode.hedera.com/api/v1";
-export const HEDERA_MIRROR_MAINNET = "https://mainnet.mirrornode.hedera.com/api/v1";
 
 export interface TopicMessage {
   consensus_timestamp: string;

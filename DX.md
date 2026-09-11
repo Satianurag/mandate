@@ -1,190 +1,110 @@
-# Developer experience feedback
+# Ledger integration and developer-experience report
 
-> Ledger's ETHOnline brief states that DX feedback is **judged equally with
-> code**. This file is written continuously during the build, not reconstructed
-> from memory on the last day.
+**Observed on 11 September 2026.** These are reproducible integration observations,
+not claims that every upstream behavior is a defect or that descriptors reached a
+device. The canonical execution evidence is
+[`docs/verification/live-proof-2026-09-11.json`](docs/verification/live-proof-2026-09-11.json).
 
-Format — one entry per friction, with evidence a maintainer can act on:
+## Integration actually used
 
-```
-## Friction NN — one-line summary
-Docs page:  <url or path>
-Expected:   what the docs led me to believe would happen
-Observed:   exact stderr / exit code / timestamp
-Cost:       minutes lost
-Fix:        proposed doc diff or PR link
-```
+The operator host ran wallet-cli 2.1.0, Device Management Kit 1.9.0, Ethereum Signer
+Kit 1.18.0, Context Module 2.5.0, x402 2.25.0, viem 2.56.3 and Hiero SDK 2.88.0.
+The lockfile and dependency-security report record transitive updates separately.
+Tests ran on the Mac and in a clean Node 22 Linux container without host credentials.
 
-Target: ten entries, with a proposed patch attached to two or three. Entries
-without evidence are opinions; entries with a diff are contributions.
+Key Ring seals the delegated session, facilitator, authorizer and service credentials.
+The trusted broker invokes `wallet-cli ring decrypt` over pipes, uses the material
+for an operation, and wipes the original Buffer afterwards. That cleanup is not a
+promise that JavaScript strings or account closures have been erased.
 
----
+DMK resolves the configured Ledger address, requests the actual EIP-712 funding
+authorization, and verifies the returned signature against that principal. The live
+0.10-USDC funding then supported three 0.01-USDC calls without another payer signature.
+The consumer never received the Key Ring password, wallet key or Docker authority.
 
-## Friction 01 — `/supported` is the fastest way to validate a facilitator, and it is not signposted
+## Findings that help an integrator
 
-**Docs page:** https://docs.hedera.com/solutions/ai/x402
-**Expected:** the Hedera x402 page would show me how to confirm, in one call,
-that a given facilitator supports Hedera and what `feePayer` to expect.
-**Observed:** the page names Blocky402 as a supported facilitator but does not
-mention the `/supported` endpoint, the CAIP-2 network string, or the fee-payer
-discovery flow. I found it by reading the facilitator spec separately. A single
-`curl` returns everything needed to start:
+### 1. Device presence is not approval of an action
 
-```
-$ curl -s https://api.testnet.blocky402.com/supported
-{"kinds":[...,{"x402Version":2,"scheme":"exact","network":"hedera:testnet",
- "extra":{"feePayer":"0.0.7162784"}}], ...}
-```
+**Expected:** approval binds the action, amount, receiver, network and freshness.
+**Pre-audit behavior:** address confirmation was presented as consent to a payment
+whose context appeared only in the host terminal.
+**Current behavior:** action approvals require a real expected-principal signature,
+action digest, nonce and expiry; the nonce is consumed transactionally. Presence is
+separate and its signature is cryptographically checked. The main batch workspace
+blocks an exhausted scope instead of pretending an address check widened it.
 
-**Cost:** ~25 minutes, spread across three docs sources.
-**Fix:** add a "Verify your facilitator" snippet to the Hedera x402 page with
-exactly the curl above and a one-line reading of the response. Proposed as a
-docs PR.
+Reproduce the rejection boundaries with `stepup.test.ts` and `presence.test.ts`.
+Those use real ephemeral cryptographic signatures as test inputs; they do not claim
+that a physical device was used in the deterministic suite.
 
----
+### 2. Report the actual clear-signing path
 
-## Friction 02 — Key Ring headless usage is documented, but the VPS story is the whole feature and is buried
+The live funding trace reported `originTokenPresent=false`, `calFilters=error`,
+and `verdict=clear-basic`. The signature was valid and the channel funded, but that
+is not evidence that CAL/ERC-7730 field labels appeared on the device. The application
+persists the report next to the funding signature's digest.
 
-**Docs page:** https://developers.ledger.com/docs/ai-tools/ledger-cli#key-ring
-**Expected:** given that "deploy Key Ring to environments without USB ports" is
-a headline hacking direction on the ETHOnline track page, I expected the docs
-to open with the provisioning→transport→headless-decrypt lifecycle.
-**Observed:** stdin/stdout support and `WALLET_PASS` are documented, but as
-notes after the file-based examples. The question a hackathon builder actually
-has on minute one — *what exactly do I move to the VPS, and what do I not?* —
-is not answered directly.
-**Cost:** TBD (fill in after Day 1 provisioning).
-**Fix:** a short "Headless deployment" section showing the two-machine flow end
-to end. Draft to attach.
+`npm run verify:descriptors` separately runs the official linter on the USDC and
+batch descriptors. Missing tooling exits nonzero; schema-only validation must be
+requested explicitly and is labeled schema-only. Full local lint passed during this
+run. Registry acceptance and hardware rendering are not inferred from that result.
 
----
+Useful upstream improvement: make the distinction between generic clear signing,
+legacy paths, CAL filters, and successfully provided device context conspicuous in
+integrator-facing results. This is integration feedback, not an assertion that the
+current SDK is unsafe merely because optional context resolution failed.
 
-## Friction 03 — `ring init` requires the Ledger Sync device app, and nothing says so
+### 3. Be precise about headless behavior
 
-**Docs page:** https://developers.ledger.com/docs/ai-tools/ledger-cli#key-ring
-**Severity:** blocking for a first-time user.
+The Ledger documentation describes device-free Key Ring decryption after member
+provisioning. That does not automatically mean an application can restart without
+constructing a device signer. The original `openMandate` always did so.
 
-**Expected:** the Key Ring docs give exactly one setup instruction —
+`resumeMandate` now has no payer signing capability and needs an existing pinned,
+funded channel. A fresh process with `node --no-addons` completed a real paid request
+with zero new Ledger signatures. This proves that broker restart path with native
+HID unavailable to that process. The Ledger remained connected to the Mac; a physically
+unplugged host or separately provisioned VPS was not part of the completed live proof.
+A proposed cross-host member-profile handoff was not executed. No credential export
+is hidden behind the headless claim.
 
-> "Run `ring init` once to provision the key ring via the device, and always
-> protect it with a password."
+### 4. Preserve identity and signature encoding
 
-Nothing about a prerequisite device app. The ETHOnline track page makes
-`wallet-cli ring` a headline requirement and is likewise silent.
+The adapter joins DMK signature fields into the format expected by the stock x402
+client, normalizes the recovery byte, rejects unsupported chains before signing,
+and verifies the returned address. Unit regressions cover short `r`/`s` fields and
+recovery-byte normalization. Do not bypass these checks with success-shaped strings.
 
-**Observed:** on a factory-fresh device, unlocked, `ring init` fails:
+### 5. Authentication must extend beyond encrypted key storage
 
-```
-$ wallet-cli ring init --name mandate-host
-Generating member credentials…
-Connect device, open Ledger Sync app — provisioning your Ledger Key Ring…
-[✖] An unknown error occurred talking to the Ledger.
-```
+Ledger documents that another process running as the same user can inspect the CLI
+password environment. Mandate's consumer therefore runs in a separate constrained
+Docker execution environment. The observed boundary checks covered network isolation,
+non-root/read-only execution, absence of host-data mounts/passwords, and rejection of
+operator, funding, mainnet-override and wider-query requests. Encryption alone is not
+the claimed isolation mechanism.
 
-The Key Ring is LKRP, and LKRP's device-side counterpart is the **Ledger Sync**
-app (github.com/LedgerHQ/app-ledger-sync). It must be installed AND open before
-`ring init` will do anything.
+## Operational failures retained as evidence
 
-The gap is specifically between the two clients. Ledger's own writeup of LKRP
-in Ledger Live says that when you enable Ledger Sync there, *"the Ledger Sync
-device app is installed automatically and the user gets prompted to open it."*
-**wallet-cli does neither** — it does not install the app, does not prompt, and
-reports the failure as "An unknown error occurred talking to the Ledger."
+A claim succeeded before an immediate merchant sweep failed. Recovery now reads
+already-claimed revenue and sweeps it without requiring a new voucher. A refund
+succeeded before a public RPC returned `block not found`; the original transaction
+was later reconciled by parsing its multicall, transfers and consistent snapshots.
+Some HCS submissions returned `UNKNOWN`; the outbox retained them and readback-aware
+retries completed their anchors. These are payment/RPC integration observations,
+not Ledger device defects. The failed attempts remain in the recorded history.
 
-**Cost:** ~35 minutes, most of it spent suspecting USB, the cable, and the
-device lock state — because the error names none of the three things actually
-wrong (app missing / app not open / that an app is needed at all).
+## Verification commands
 
-**Fix — three separate, cheap improvements:**
+`npm run verify` checks deterministic security and lifecycle behavior.
+`npm run test:ui` checks the real local HTTP workspace in Chrome/Chromium.
+`npm run verify:linux` performs a clean install and offline execution check.
+`npm run verify:descriptors` checks the current descriptors with the official tool.
+Live signatures or funds are requested only through the reviewed operator workflow;
+none of these deterministic commands are a disguised payment operation.
 
-1. **Docs.** Add a Prerequisites line to the Key Ring section: *"`ring init`
-   requires the Ledger Sync app on the device. Install it from Ledger Live
-   (My Ledger → Ledger Sync), then open it before running `ring init`."*
-2. **Error message.** Replace "An unknown error occurred talking to the Ledger"
-   with the actual precondition, e.g. *"The Ledger Sync app is not installed or
-   not open. Install it from My Ledger, open it on the device, and retry."*
-   The CLI already knows which app it wants — it printed the name one line
-   earlier.
-3. **Preflight.** `wallet-cli ring init` could detect the missing app the way
-   Ledger Live does and either install it or say plainly that it cannot.
-
-Item 2 alone would have saved the whole 35 minutes. Happy to open a docs PR for
-item 1.
-
----
-
-## Friction 04 — Graph docs print the testnet x402 hostname backwards
-
-**Docs page:** `@graphprotocol/client-x402` README (Environments table)
-**Expected:** `https://testnet.gateway.thegraph.com/api/x402` with `chain: base-sepolia`.
-**Observed:** that name is NXDOMAIN. The live host is
-`https://gateway.testnet.thegraph.com/api/x402` — HTTP 402, `exact@eip155:84532`,
-Circle Sepolia USDC, amount 42 (measured 10 Sep 2026). Production
-`gateway.thegraph.com/api/x402` still bills `eip155:8453` for a Sepolia subgraph
-ID (F31).
-**Cost:** days assuming the documented host was the product.
-**Fix:** publish the swapped hostname (or a CNAME). Mandate pays the live host
-(`npm run e2e:graph-x402`), never mainnet.
-
----
-
-## Friction 05 — Substreams Base Sepolia: Pinax lists it, StreamingFast markdown does not
-
-**Docs page:** Pinax app network list vs StreamingFast supported-chains markdown
-**Expected:** one canonical gRPC host for `base-sepolia` and a named `substreams run` example.
-**Observed 10 Sep:** `basesepolia.substreams.pinax.network` resolves
-(`64.203.83.125`, `209.249.216.189`); `base-sepolia.substreams.pinax.network`
-is ENOTFOUND. StreamingFast docs still show Base **mainnet** only.
-**Cost:** ~25 minutes.
-**Fix:** one row in both providers' chain tables: host, TLS port, auth header.
-
----
-
-## Friction 06 — Hashio rejects Foundry's 32-byte hash as `eth_getCode` block tag
-
-**Docs page:** https://ethereum.org/en/developers/docs/apis/json-rpc/#eth_getcode
-and https://github.com/hashgraph/hedera-docs/blob/main/evm/differences/json-rpc-differences.mdx
-**Expected:** `forge script --broadcast` against Hashio deploys CREATE2 vanity
-contracts (x402 `contracts/evm/README.md`).
-**Observed 10 Sep:** Foundry sent `eth_getCode [CREATE2, 0x<32-byte hash>]`.
-Hashio `-39012` (QUANTITY|TAG is `"latest"` / `"0x<number>"`, not a hash).
-Adapter maps that slot; `--slow` waits for Hashio confirmation before the next
-nonce. After that, all `0x4020…` vanity addresses have code (F28).
-**Cost:** one documented RPC rewrite + sequential broadcast; no custom scheme.
-**Fix:** keep the Hashio adapter; never invent a Hedera `upto` scheme.
-
----
-
-## Friction 07 — upto `settleWithPermit` simulation must eth_call *as* the facilitator
-
-**Docs page:** https://github.com/x402-foundation/x402/blob/main/contracts/evm/src/x402UptoPermit2Proxy.sol
-**Expected:** wiring `toFacilitatorEvmSigner` with a viem `publicClient.readContract` is enough for `/verify` to simulate `settle` / `settleWithPermit`.
-**Observed 10 Sep (live Base Sepolia, two Ledger EIP-712 taps):** `/verify` returned `permit2_allowance_required` even after the client attached `eip2612GasSponsoring`. The proxy reverts `UnauthorizedFacilitator` unless `msg.sender == witness.facilitator`. viem `eth_call` defaults `from` to `0x0`, the sim always fails, and the stock diagnostic then reports missing Permit2 allowance (which is still 0 until the sponsored permit lands).
-**Cost:** two full device sessions (~15 minutes) chasing a Permit2 allowance that EIP-2612 is supposed to replace.
-**Fix:** pass `account: submitter.address` on facilitator `readContract` so simulation runs as the advertised facilitator. x402's `UptoEvmScheme` itself is correct; the signer wiring is the footgun.
-
----
-
-## Friction 08 — CREATE2 x402 escrow on Hedera cannot receive HTS USDC
-
-**Docs page:** https://docs.hedera.com/learn/core-concepts/tokens/airdrops
-and x402 `contracts/evm/README.md` (CREATE2 vanity addresses)
-**Expected:** after Circle faucet USDC on the payer, stock
-`BatchSettlementEvmScheme` deposits via Permit2 into the canonical
-`0x4020…0003` escrow on `eip155:296`.
-**Observed 10 Sep:** payer `0.0.10440893` holds 20 USDC. Merchant 402 correctly
-advertises `assetTransferMethod=permit2` (HTS facade has no EIP-3009).
-`USDC.approve(Permit2)` succeeds (`0x4147c417…bd0422`). Facilitator `/verify`
-simulates `deposit` and Hashio returns
-`TRANSFER_FROM_FAILED, TOKEN_NOT_ASSOCIATED_TO_ACCOUNT`. The escrow account
-`0.0.10454274` is `memo=lazy-created account`,
-`max_automatic_token_associations=0`. `TokenAssociateTransaction` →
-`INVALID_SIGNATURE`. `ContractUpdateTransaction` →
-`MODIFYING_IMMUTABLE_CONTRACT`. HIP-904 airdrop is pending and unclaimable
-by bytecode that has no HTS associate/claim function.
-**Cost:** one Circle faucet wait + three live `/verify` rounds after funding.
-**Fix (Hedera / x402):** CREATE2-deployed EVM contracts that must hold HTS
-need `maxAutomaticTokenAssociations=-1` at lazy-create time, or an official
-associate path that does not require an admin key. Do not ship a wrapper
-scheme.
-
+Primary sources:
+https://developers.ledger.com/docs/ai-tools/ledger-cli
+https://docs.x402.org/schemes/batch-settlement
+https://nodejs.org/api/cli.html

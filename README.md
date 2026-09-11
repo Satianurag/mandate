@@ -1,163 +1,177 @@
 # Mandate
 
-**Approve once on your Ledger. Your agent then works at machine speed inside a
-signed, budget-capped envelope it cannot widen.**
+**Testnet-only, Ledger-funded access to paid agent services.** A person reviews a
+spending envelope, an isolated consumer performs useful paid work through a trusted
+broker, and the workspace shows the actual charges, blocked requests, settlement,
+and remaining-funds recovery.
 
-ETHOnline 2026 — Ledger, The Graph, Hedera.
+The verified workspace uses **Base Sepolia USDC** for payments, **testnet Agent0
+subgraphs** for real query results, and **Hedera testnet** for authenticated evidence.
+There is no mainnet mode. Ledger and x402 supply the signing and channel primitives;
+Mandate supplies the constrained execution, durable accounting, recovery, and UI.
 
----
+## What was demonstrated live
 
-## The arithmetic problem
+The 11 September 2026 run used one 0.10-USDC funding authorization, completed three
+0.01-USDC paid queries, blocked a fourth at a 0.03-USDC hourly limit, revoked agent
+access, paid the merchant 0.03 USDC, and returned 0.07 USDC to the payer. This is real
+testnet activity, not a unit-test fixture. Both intermediate network failures and
+their recovery are retained in the evidence.
 
-Hardware approval is per-transaction. Agents act thousands of times per hour.
+[Public run proof](docs/verification/live-proof-2026-09-11.json) contains the exact
+channel, receipts, query provenance, observed balances, and signing report.
+[Audit acceptance](docs/AUDIT-REMEDIATION.md) separates implementation, deterministic
+tests, live observations, and excluded claims.
 
-A research agent doing one task might make four hundred sub-cent data queries.
-Nobody taps a device four hundred times. So every agent framework does the only
-thing left: it puts a hot key in an environment variable and hopes. Ledger names
-the consequence directly — *"these keys are 'hot', meaning they are online and
-connected to the internet."*
+The device path recorded **clear-basic**, not ERC-7730. The descriptor lint result
+is separate from what happened on the device. A fresh broker process also completed
+a paid call with native HID bindings disabled; a physically unplugged or separately
+provisioned VPS broker was not demonstrated. These are not interchangeable claims.
 
-That mismatch, not a lack of ideas, is why hardware security has not reached AI
-agents.
+## Verify from a clean checkout without keys or funds
 
-## The move
+Use Node 22.13 or newer, npm, and the committed lockfile:
 
-Stop approving **transactions**. Approve a **mandate**: one hardware-signed
-envelope with a budget, a scope, an expiry and an escalation rule. The agent
-runs freely inside it, cryptographically unable to exceed what the human
-authorized. The device is consulted again only when the agent tries to leave.
-
-This needs no new infrastructure. The x402
-[`batch-settlement`](https://x402.org/x402-batch-settlement/) scheme already
-does it: the buyer deposits into an on-chain escrow once, then signs off-chain
-cumulative vouchers per request, which the server verifies with *"simple
-signature math, with no chain lookups required during the request"* and redeems
-in batches later.
-
-Read that as a security primitive rather than a payments optimisation:
-
-| Batch settlement | Ledger Agent Policy |
-|---|---|
-| escrow deposit | budget |
-| cumulative voucher | metered consumption |
-| `withdrawDelay` | expiry |
-| refund path | revocation |
-| per-request ceiling | scope |
-
-**The x402 escrow channel is the on-chain expression of a Ledger Agent Policy.**
-One device tap opens it. Everything afterwards is bounded by that signature.
-
-## Ledger's own triad, one sponsor per layer
-
-From [Mapping the Agentic AI Infrastructure Landscape](https://www.ledger.com/blog-mapping-the-agentic-ai-infrastructure-landscape):
-
-| Ledger's words | Layer | Owner |
-|---|---|---|
-| "Identity tells you who the agent is" | ERC-8004, hardware-anchored, resolved via Agent0 subgraphs | The Graph |
-| **"Authorization tells you what it's allowed to do"** | **The mandate — Clear-signed, enforced by an escrow ceiling** | **Ledger** |
-| "Evidence proves what it actually did" | Every decision and voucher on an HCS topic | Hedera |
-
-Ledger states they solve the middle row — *"runtime control, the unsolved
-problem others circle around"* — and treat the outer two as complementary.
-
-## The mandate
-
-```yaml
-mandate: research-agent-07
-principal: did:ledger:zQ3sh…        # hardware-anchored, ERC-8004 registered
-expires: 2026-09-14T12:00:00Z       # becomes the channel withdrawDelay
-
-budget:
-  ceiling: 50 USDC                  # becomes the escrow deposit
-  window: 24h
-  escalate_at: 90%
-
-allow:
-  - graph.query:
-      max_price: 0.01 USDC          # per-request ceiling; server may charge less
-      subgraphs: [verified, agent0/*]
-
-escalate:                           # → device tap required
-  - counterparty.erc8004.score < 0.7
-  - counterparty.registered == false
-
-deny:                               # → refused, no signature produced
-  - counterparty.feedback.revoked
-  - quoted_price > advertised_price * 1.5
+```sh
+npm ci
+npm run verify
+npx playwright install chromium
+npm run test:ui
 ```
 
-Every field maps to something real. Nothing is decorative.
+The deterministic suite starts its own local services and contains isolated test
+fixtures. Those fixtures do not enter the operator application or its live proof.
+Browser tests operate a real local HTTP app and SQLite state; they do not intercept
+network requests to invent balances or approvals.
 
-## No `.env`
+For a fresh Linux dependency installation and an offline runtime check:
 
-There is deliberately no `.env` and no secret in the environment. Credentials are
-sealed with `wallet-cli ring encrypt` and unsealed for the lifetime of a single
-operation, then zeroed. A blob sealed once with the device attached opens later
-on a VPS with no device present.
-
-## Getting started — one command reproduces everything checkable
-
-```bash
-npm install && npm run verify
+```sh
+npm run verify:linux
 ```
 
-`verify` runs the hermetic suite in every workspace with an **empty
-environment** (no keys, no network, no device), imports every module, scans
-for committed secrets, checks the docs against the code (fee-payer
-invariant, Graph 200-on-error, findings log agreement), and confirms the
-pinned toolchain versions against npm. Zero env required; anyone can run it.
+That Docker build excludes local credentials, channels, device data, and evidence
+logs. Its verification container has no external network. The source image and
+agent runtime are pinned by digest. See [dependency security](docs/DEPENDENCIES.md)
+for patched transitive dependencies, parser guards, and remaining upstream risk.
 
-Operator flows (need the Key Ring + testnet funds) build on top:
+## Open the workspace without making a payment
 
-```bash
-npm run preflight          # toolchain, Key Ring, facilitator, Graph key
+```sh
+npm run console
+# In a second terminal:
+npm run console:open
 ```
 
-`preflight` seals and unseals a throwaway value with no device attached, and
-confirms the Blocky402 testnet facilitator advertises Hedera. Verified:
-`hedera:testnet`, scheme `exact`, feePayer `0.0.7162784`.
+The application binds only to `127.0.0.1:8410`. The launcher reads the local
+operator token and opens an authenticated session; the token is removed from the
+URL immediately. Do not copy that token, the private capability files, or the Key
+Ring profile into chat, public files, or a tunnel. Startup does not sign or spend.
 
-The mandate demo (one tap, then vouchers):
+## Configure the real testnet stack
 
-```bash
-npm run mandate:keygen && npm run facilitator:keygen
-# fund the payer with Base Sepolia USDC + the submitter with ETH (links printed)
-cp mandate.example.yaml mandate.yaml   # set salt + receiver
-npm run check:mandate && npm run mandate:open
+Prerequisites are an unlocked Ledger with Ethereum installed, password-protected
+`wallet-cli` Key Ring provisioning, sealed credentials, and small testnet balances.
+The CLI version used for the live proof was 2.1.0. The key password must be entered
+by the operator and stored in the OS keychain, never written into a command or file.
+
+Provisioning scripts are explicit, refuse to overwrite existing ciphertext, and
+print public addresses rather than keys:
+
+```sh
+npm run mandate:keygen
+npm run facilitator:keygen
 ```
 
-## Status
+The required sealed files are `secrets/mandate-session.enc`,
+`secrets/mandate-facilitator.enc`, `secrets/mandate-authorizer.enc`, and
+`secrets/graph.enc`. `secrets/hedera.enc` is needed for HCS publication. Existing
+Key Ring setup tools remain available; review their prerequisites before using
+one, and never delete a key that still authorizes an old channel.
 
-| Component | State |
-|---|---|
-| Policy engine | implemented, hermetic suite green, F18 hybrid locked in |
-| Key Ring custody | **provisioned and proven headless (F11)** |
-| Reputation lookup (Agent0) | implemented; Hedera `0.0.x` → EVM alias resolution (F20) |
-| Device step-up (DMK) | implemented, live `STEPUP_OK` (clear mode) |
-| Mandate client (`DmkEvmSigner` + ceiling strategy) | implemented; live proof = `npm run mandate:open` |
-| Self-hosted facilitator + mandate service | implemented, strict-booting; live proof = `npm run mandate:open` |
-| HCS audit (payments + mandates) + mirror read-back | implemented — every record carries the operator UAID (F25); needs topic id; Key Ring creds only |
-| Treasury top-up (HIP-423 time-locked schedule) | live `TOPUP_SCHEDULED` `0.0.10456090` (`npm run treasury:topup`, F26) |
-| Hedera paid service (Blocky402) | stock `exact@hedera:testnet` (HBAR + Circle USDC); distinct merchant via `npm run setup:merchant` |
-| Operator console | HTML+CSS at [`console/`](console/) — Fleet · Mandate · Approvals · Evidence |
+Set public configuration in your process environment. For example, the Base
+Sepolia RPC is `https://sepolia.base.org`; `MANDATE_SERVICE_RECEIVER` must be your
+reviewed, non-payer testnet receiver. Set `MANDATE_HEDERA_ACCOUNT_ID` and
+`MANDATE_HCS_TOPIC_ID` to the testnet account/topic for evidence. These are public
+identifiers, not private keys. The stack can also read the allowlisted literal
+public values in the ignored `.live-results/operator-ids.env` file; it does not
+execute that file as shell code.
 
-- [`docs/DX.md`](docs/DX.md) — the developer journey per sponsor, command by command
-- [`docs/sponsor-case.md`](docs/sponsor-case.md) — why each sponsor wants this
-- [`docs/plan.md`](docs/plan.md) — day-by-day, with the cut order
-- [`docs/architecture.md`](docs/architecture.md) — which rail does what, and the invariants
-- [`docs/FINDINGS.md`](docs/FINDINGS.md) — running log of everything measured live
-- [`docs/threat-model.md`](docs/threat-model.md) — what this does *not* fix
+```sh
+npm run boot
+# In a second terminal:
+npm run console:open
+npm run live:readiness
+```
 
-## Scope of the claim
+Boot starts the facilitator on 8406, merchant on 8405, and operator on 8410. It
+does not touch Tailscale or another tunnel. Do not start a second copy over a
+running stack. Missing credentials or unsupported contracts produce errors, not
+fake readiness or a fallback network.
 
-Mandate bounds what an agent can spend and removes plaintext keys from the host.
-It does **not** fix the facilitator vulnerabilities found across all 15 audited
-x402 facilitators; those live in the facilitator. It caps the blast radius. It
-also does not read the agent's mind: a prompt-injected agent can still spend the
-budget on garbage. What is guaranteed is that the loss is capped at what a human
-deliberately authorized, is refundable through the channel, and is fully
-reconstructable from the HCS log.
+## Use one reviewed authority
 
-## Licence
+In the workspace, review the exact payer, recipient, token, authorizer, resource,
+expiry, lifetime deposit, per-call maximum, and rolling limit. Inspecting an offer
+only proposes values: it does not grant authority. Start with a small amount such
+as 0.10 USDC, 0.01 per call, and 0.03 per hour.
 
-MIT.
+Saving the review does not mean the Ledger signed. Explicit initial funding is
+required, the actual hardware signature is checked against the expected payer,
+and the channel is checked on-chain before the workspace calls it funded. Later
+calls use session vouchers and do not silently top up the channel.
+
+Create scoped agent access only after funding. With Docker running:
+
+```sh
+npm run agent -- --capability /absolute/path/printed/by/the/workspace.json --probe
+npm run agent -- --capability /absolute/path/printed/by/the/workspace.json
+```
+
+The container gets only a query and a bounded IPC interface. The trusted host
+relay keeps the scoped token; it exposes task submission/observation only. The
+consumer has no external network, no host-data mount, no wallet password, no
+Docker socket, and no authority to fund or widen scope. It produces a deterministic
+comparison of live registrations; this repository does not pretend to operate an
+LLM fleet.
+
+The CLI companion uses the same authenticated broker as the UI:
+
+```sh
+npm run mandate:open -- --request-id my-stable-request-id
+npm run mandate:refund -- --confirm-testnet
+npm run mandate:reconcile
+```
+
+Initial CLI funding additionally requires `--authorize-funding`. Reuse a request
+ID to observe an uncertain operation; do not create another charge to hide a lost
+response. See [recovery](docs/RECOVERY.md).
+
+## Security boundary and non-goals
+
+The contract constrains the channel identity, asset, receiver and funded liability.
+The broker enforces resource scope, task expiry, per-call and rolling limits, and
+revocation. A UI label is not an on-chain constraint. Withdrawal delay is not task
+expiry. A voucher acceptance is not a merchant bank balance or an on-chain sweep.
+
+The operator host, local relay, RPC/contract configuration, and merchant remain
+trusted components. Key Ring is not a trusted execution environment, and wiping
+a Buffer cannot erase JavaScript string copies. Testnet-only does not remove
+software risk. Read the [threat model](docs/threat-model.md).
+
+Legacy version-1 `mandate.yaml` and its channel files are preserved, not silently
+migrated into new spending authority. The old unauthenticated HTTP spending proxy
+is retired. Optional Hedera/upto, treasury, Substreams and identity utilities are
+not evidence that the verified Base Sepolia workspace exercised every optional
+integration. They must remain testnet-only and have separate explicit live gates.
+
+## Documentation
+
+[Architecture](docs/architecture.md) · [Recovery](docs/RECOVERY.md) ·
+[Ledger DX](DX.md) · [Current findings](docs/FINDINGS.md) ·
+[Walkthrough](docs/WALKTHROUGH.md) · [Dependency security](docs/DEPENDENCIES.md)
+
+Upstream references, checked during remediation:
+[Ledger Key Ring](https://developers.ledger.com/docs/ai-tools/ledger-cli),
+[x402 batch lifecycle](https://docs.x402.org/schemes/batch-settlement), and
+[Node CLI options](https://nodejs.org/api/cli.html).

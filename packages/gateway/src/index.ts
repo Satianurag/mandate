@@ -100,7 +100,8 @@ export async function proxyFetch(
       { status: 403, headers: { "content-type": "application/json" } }
     );
   }
-  const { x402, getLastDecision } = createMandateClient({
+  const { x402, getLastDecision, close } = createMandateClient({
+    resourceUrl: upstreamUrl,
     hederaCiphertext: hederaEnc,
     accountId,
     graphApiKey: graphKey,
@@ -123,57 +124,10 @@ export async function proxyFetch(
       );
     }
     throw e;
-  }
+  } finally { close(); }
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
-  // The audit trail is load-bearing: a gateway that cannot record verdicts
-  // must not serve. No silent degraded mode.
-  if (!HCS_TOPIC) {
-    console.error("Set MANDATE_HCS_TOPIC_ID before starting the gateway (npm run provision:hcs).");
-    process.exit(1);
-  }
-  const server = createServer(async (req, res) => {
-    const url = new URL(req.url ?? "/", `http://127.0.0.1:${PORT}`);
-    if (url.pathname !== "/proxy") {
-      res.writeHead(404).end("Use GET /proxy?q=…\n");
-      return;
-    }
-    const target = new URL(UPSTREAM);
-    target.search = url.search;
-
-    try {
-      // Forward the body so POST/PUT x402 flows survive the proxy; hop-by-hop
-      // and identity headers must not leak through (Host would misroute).
-      const chunks: Buffer[] = [];
-      for await (const c of req) chunks.push(c as Buffer);
-      const body = chunks.length ? Buffer.concat(chunks) : undefined;
-      const headers = { ...(req.headers as Record<string, string | string[] | undefined>) };
-      for (const h of ["host", "connection", "content-length", "transfer-encoding"]) delete headers[h];
-
-      const upstream = await proxyFetch(target.toString(), {
-        method: req.method ?? "GET",
-        headers: headers as HeadersInit,
-        body,
-      });
-      res.writeHead(upstream.status, {
-        "content-type": upstream.headers.get("content-type") ?? "application/json",
-      });
-      res.end(Buffer.from(await upstream.arrayBuffer()));
-    } catch (e) {
-      res.writeHead(500, { "content-type": "application/json" });
-      res.end(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }));
-    }
-  });
-
-  // Loopback by default: this proxy spends money on whoever calls it.
-  // Bind wider only behind an authenticated front door (MANDATE_HOST=0.0.0.0).
-  server.listen(PORT, HOST, () => {
-    console.log(`Mandate listening on ${HOST}:${PORT}`);
-    console.log(`  proxy        GET /proxy → ${UPSTREAM}`);
-    console.log(`  hedera       ${BLOCKY402_URL} · exact@hedera:testnet`);
-    console.log(`  per-call     ${DEFAULT_POLICY.perCallCeiling}`);
-    console.log(`  window       ${DEFAULT_POLICY.windowBudget} / ${DEFAULT_POLICY.windowMs / 3.6e6}h`);
-    console.log(`  custody      Ledger Key Ring (no .env secrets)`);
-  });
+  console.error("The unauthenticated legacy spending proxy is retired. Use npm run boot and the authenticated operator workspace.");
+  process.exitCode = 1;
 }

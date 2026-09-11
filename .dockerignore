@@ -1,0 +1,15 @@
+.git
+node_modules
+**/node_modules
+secrets
+state
+.live-results
+.device-results
+.venv
+.env
+.env.*
+mandate.yaml
+console/refs
+**/*.key
+**/*.pem
+**/*.enc

@@ -250,7 +250,7 @@ export async function buildCore(
         walletClient.writeContract(withHederaGas(args) as never) as Promise<`0x${string}`>,
       sendTransaction: (args) =>
         walletClient.sendTransaction(
-          withHederaGas({ ...args, account: submitter, chain })
+          { ...args, account: submitter, chain, ...(hederaGas ? { gas: 2_000_000n } : {}) }
         ),
       waitForTransactionReceipt: async (args) => {
         const receipt = await publicClient.waitForTransactionReceipt(args);
@@ -313,7 +313,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     const hederaEnc = join(root, "secrets/hedera.enc");
     const hederaRpc =
       process.env.MANDATE_HEDERA_EVM_RPC_URL ?? "https://testnet.hashio.io/api";
-    if (existsSync(hederaEnc)) {
+    if (process.env.MANDATE_ENABLE_HEDERA_EVM === "1" && existsSync(hederaEnc)) {
       hederaSubmitter = await unseal("hedera-payment", await readFile(hederaEnc));
       core = await buildCore(
         hederaRpc,

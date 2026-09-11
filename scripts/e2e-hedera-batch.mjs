@@ -232,6 +232,12 @@ try {
       const salt = `0x${randomBytes(32).toString("hex")}`;
       const sealedSession = await readFile(`${ROOT}/secrets/mandate-session.enc`);
       const mandate = await openKeyRingMandate({
+        scope: {
+          network: "eip155:296", serviceUrl: analytics, asset: usdc, receiver,
+          receiverAuthorizer: extra.receiverAuthorizer, withdrawDelay: extra.withdrawDelay,
+          expiresAt: new Date(Date.now() + 15 * 60_000).toISOString(),
+          ceilingBaseUnits: "30000", perCallBaseUnits: "30000", windowBaseUnits: "30000", windowMs: 3600000,
+        },
         rpcUrl: hederaRpc,
         storageRoot: dir,
         sessionKeyName: "mandate-session",
@@ -273,7 +279,7 @@ try {
         } else {
           console.log("APPROVE_PERMIT2_ALREADY", allowance.toString());
         }
-        const res = await mandate.fetch(`${analytics}?q=${encodeURIComponent("{ agents { id } }")}`);
+        const res = await mandate.fetch(`${analytics}?q=${encodeURIComponent("{ agents(first: 5) { id agentId agentWallet totalFeedback } }")}`);
         const text = await res.text();
         console.log("HTTP", res.status, text.slice(0, 800));
         await mkdir(`${ROOT}/.live-results`, { recursive: true });

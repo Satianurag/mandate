@@ -11,7 +11,7 @@
  */
 
 import { randomBytes } from "node:crypto";
-import { writeFile, access } from "node:fs/promises";
+import { writeFile, access, mkdir } from "node:fs/promises";
 import { constants } from "node:fs";
 import { ensureWalletPass } from "./load-wallet-pass.mjs";
 
@@ -47,17 +47,18 @@ try {
   process.exit(1);
 }
 
+await mkdir(`${ROOT}/secrets`, {recursive:true,mode:0o700});
 const { seal } = await import(`${ROOT}/packages/gateway/src/keyring.ts`);
 const raw = randomBytes(32);
 const sealed = await seal("mandate-session", raw);
 const { privateKeyToAccount } = await import("viem/accounts");
 const session = privateKeyToAccount(`0x${raw.toString("hex")}`).address;
 raw.fill(0);
-await writeFile(ENC, sealed, { mode: 0o600 });
+await writeFile(ENC, sealed, { mode: 0o600, flag: "wx" });
 
 console.log(`payer (device):   ${payer}`);
 console.log(`session (sealed): ${session}  — signs vouchers only, needs no funds`);
 console.log(`sealed → secrets/mandate-session.enc`);
 console.log(`\nFund the PAYER with Base Sepolia USDC: https://faucet.circle.com`);
 console.log(`USDC only — deposits are gasless EIP-3009, the device needs no ETH.`);
-console.log(`Then copy mandate.example.yaml → mandate.yaml, set the receiver, npm run mandate:open.`);
+console.log(`Then open the workspace, review authority, and explicitly request funding. The legacy file is not migrated. Original example: mandate.example.yaml → mandate.yaml, set the receiver, npm run mandate:open.`);

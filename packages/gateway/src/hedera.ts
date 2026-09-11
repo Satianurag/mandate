@@ -1,3 +1,4 @@
+import { assertTestnetNetwork } from "./testnet.ts";
 /**
  * Hedera specifics: amount normalisation and the sealed signer.
  *
@@ -44,6 +45,7 @@ export function normaliseAmount(
   requirements: PaymentRequirements,
   htsDecimals?: Record<string, number>
 ): { amount: number; symbol: string } {
+  assertTestnetNetwork(requirements.network);
   if (requirements.asset === HBAR_ASSET_ID) {
     return { amount: Number(requirements.amount) / TINYBARS_PER_HBAR, symbol: "HBAR" };
   }
@@ -85,8 +87,10 @@ export function createSealedHederaSigner(
 ): ClientHederaSigner {
   return {
     accountId,
-    createPartiallySignedTransferTransaction: (requirements: PaymentRequirements) =>
-      withSecret("hedera-payment", ciphertext, async (keyBytes) => {
+    createPartiallySignedTransferTransaction: (requirements: PaymentRequirements) => {
+      assertTestnetNetwork(requirements.network);
+      if (requirements.network !== "hedera:testnet") throw new Error("Hedera signer only signs hedera:testnet");
+      return withSecret("hedera-payment", ciphertext, async (keyBytes) => {
         const hex = keyBytes.toString("utf8").trim().replace(/^0x/, "");
         const delegate = createClientHederaSigner(
           accountId,
@@ -94,6 +98,7 @@ export function createSealedHederaSigner(
           { network: requirements.network }
         );
         return delegate.createPartiallySignedTransferTransaction(requirements);
-      }),
+      });
+    },
   };
 }

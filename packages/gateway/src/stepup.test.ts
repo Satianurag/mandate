@@ -1,5 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { Journal } from "./journal.ts";
+import { testApproval } from "../test-support/approval.ts";
 import { requireDeviceApproval, StepUpDenied } from "./stepup.ts";
 
 const req = {
@@ -21,26 +23,16 @@ const req = {
   timeoutMs: 1000,
 };
 
-test("device approval resolves true when the device signs", async () => {
-  let called = 0;
-  const ok = await requireDeviceApproval(req, {
-    signOnDevice: async () => {
-      called++;
-    },
-  });
-  assert.equal(ok, true);
-  assert.equal(called, 1);
+test("approval verifies a real signature and persists one-time consumption", async () => {
+  const journal = new Journal(":memory:"), deps = testApproval(journal);
+  assert.equal(await requireDeviceApproval(req, deps), true);
+  assert.equal(journal.db.prepare("SELECT state FROM approvals").get()?.state, "consumed");
+  journal.close();
 });
-
-test("device failure maps to StepUpDenied with the device message", async () => {
-  await assert.rejects(
-    () =>
-      requireDeviceApproval(req, {
-        signOnDevice: async () => {
-          throw new Error("Canceled by user (6982)");
-        },
-      }),
-    (e: unknown) =>
-      e instanceof StepUpDenied && /Canceled by user/.test(e.message)
-  );
+test("device denial, wrong signer and zero signatures fail closed", async () => {
+  const journal = new Journal(":memory:"), deps = testApproval(journal), other = testApproval(journal);
+  await assert.rejects(requireDeviceApproval(req, { ...deps, signOnDevice: async () => { throw new Error("Canceled by user (6982)"); } }), /Canceled by user/);
+  await assert.rejects(requireDeviceApproval(req, { ...deps, signOnDevice: other.signOnDevice }), /does not match/);
+  await assert.rejects(requireDeviceApproval(req, { ...deps, signOnDevice: async () => `0x${"00".repeat(65)}` }), StepUpDenied);
+  journal.close();
 });

@@ -31,7 +31,7 @@ test("discoverAgent0Deployments uses MCP tools and refuses an empty result", asy
     async callTool(name) {
       calls.push(name);
       if (name === "search_subgraphs_by_keyword") {
-        return "Agent0 on base-sepolia id 4yYAvQLFjBhBtdRCY7eUWo181VNoTSLLFd5M7FXQAi6u also ethereum FV6RR6y13rsnCxBAicKuQEwDp8ioEGiNaWaZUmvr1F8k";
+        return "Agent0 on base-sepolia id 4yYAvQLFjBhBtdRCY7eUWo181VNoTSLLFd5M7FXQAi6u also bsc chapel BTjind17gmRZ6YhT9peaCM13SvWuqztsmqyfjpntbg3Z";
       }
       return "";
     },
@@ -40,7 +40,7 @@ test("discoverAgent0Deployments uses MCP tools and refuses an empty result", asy
   const out = await discoverAgent0Deployments(mcp);
   assert.deepEqual(out.toolsUsed, ["search_subgraphs_by_keyword"]);
   assert.equal(out.subgraphs["base-sepolia"], "4yYAvQLFjBhBtdRCY7eUWo181VNoTSLLFd5M7FXQAi6u");
-  assert.ok(Object.values(out.subgraphs).includes("FV6RR6y13rsnCxBAicKuQEwDp8ioEGiNaWaZUmvr1F8k"));
+  assert.equal(out.subgraphs["bsc-chapel"], "BTjind17gmRZ6YhT9peaCM13SvWuqztsmqyfjpntbg3Z");
   assert.deepEqual(calls, ["search_subgraphs_by_keyword"]);
 
   const truncated: McpClient = {
@@ -82,12 +82,12 @@ test("discoverAgent0Deployments uses MCP tools and refuses an empty result", asy
       return JSON.stringify({
         subgraphs: [
           {
-            id: "43s9hQRurMGjuYnC1r2ZwS6xSQktbFyXMPMqGKUFJojb",
-            metadata: { displayName: "Agent0 Base" },
+            id: "GjQEDgEKqoh5Yc8MUgxoQoRATEJdEiH7HbocfR1aFiHa",
+            metadata: { displayName: "Agent0 BaseSepolia" },
           },
           {
             id: "4yYAvQLFjBhBtdRCY7eUWo181VNoTSLLFd5M7FXQAi6u",
-            metadata: { displayName: "Agent0 Base two" },
+            metadata: { displayName: "Agent0 BaseSepolia two" },
           },
         ],
       });
@@ -95,7 +95,7 @@ test("discoverAgent0Deployments uses MCP tools and refuses an empty result", asy
     async close() {},
   };
   const collideOut = await discoverAgent0Deployments(collide);
-  assert.equal(collideOut.subgraphs["base"], "43s9hQRurMGjuYnC1r2ZwS6xSQktbFyXMPMqGKUFJojb");
+  assert.equal(collideOut.subgraphs["base-sepolia"], "GjQEDgEKqoh5Yc8MUgxoQoRATEJdEiH7HbocfR1aFiHa");
   assert.equal(collideOut.subgraphs["subgraph-1"], "4yYAvQLFjBhBtdRCY7eUWo181VNoTSLLFd5M7FXQAi6u");
   assert.equal(collideOut.subgraphs["base-8"], undefined);
 

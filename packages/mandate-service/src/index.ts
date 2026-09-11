@@ -1,3 +1,8 @@
+import { completeMerchantLifecycle } from "../../gateway/src/merchant-lifecycle.ts";
+import { ESCROW_READ_ABI } from "../../gateway/src/reconciliation.ts";
+import { BATCH_SETTLEMENT_ADDRESS } from "@x402/evm";
+import { createHash, timingSafeEqual } from "node:crypto";
+import { readFile } from "node:fs/promises";
 /**
  * The EVM paid counterpart — subgraph analytics gated by batch-settlement.
  *
@@ -25,6 +30,9 @@ import {
 import { BatchSettlementEvmScheme } from "@x402/evm/batch-settlement/server";
 import { FileChannelStorage } from "@x402/evm/batch-settlement/server/file-storage";
 import { UptoEvmScheme } from "@x402/evm/upto/server";
+import { join } from "node:path";
+import { Journal } from "../../gateway/src/journal.ts";
+import { handlePaidRequest } from "../../gateway/src/paid-handler.ts";
 import { createPublicClient, http } from "viem";
 import { BASE_SEPOLIA } from "../../gateway/src/facilitators.ts";
 import { caip2ForChainId } from "../../gateway/src/chains.ts";
@@ -81,6 +89,10 @@ export interface ServiceConfig {
   priceBaseUnits?: string;
   /** Live `eth_chainId` must match. Default Base Sepolia. */
   chainId?: number;
+  autoSettlement?: boolean;
+  controlToken?: string;
+  claimIntervalSecs?: number;
+  settleIntervalSecs?: number;
   fetchRows?: (query: string) => Promise<Agent0Row[]>;
 }
 
@@ -229,13 +241,12 @@ export async function buildService(cfg: ServiceConfig): Promise<BuiltService> {
     extra.version = info.version;
   }
   if (info.transferMethod === "permit2") extra.assetTransferMethod = "permit2";
-  const resourceServer = new x402ResourceServer(new HTTPFacilitatorClient({ url: full.facilitatorUrl }));
-  resourceServer.register(
-    network,
-    new BatchSettlementEvmScheme(full.receiver, {
-      storage: new FileChannelStorage({ directory: full.storageDir }),
-    })
-  );
+  const facilitator = new HTTPFacilitatorClient({ url: full.facilitatorUrl });
+  const resourceServer = new x402ResourceServer(facilitator);
+  const batchScheme = new BatchSettlementEvmScheme(full.receiver, {
+    storage: new FileChannelStorage({ directory: full.storageDir }),
+  });
+  resourceServer.register(network, batchScheme);
   resourceServer.register(network, new UptoEvmScheme());
   const routes: RoutesConfig = {
     "GET /analytics": {
@@ -245,6 +256,7 @@ export async function buildService(cfg: ServiceConfig): Promise<BuiltService> {
         payTo: full.receiver,
         price: { asset: full.asset, amount: full.priceBaseUnits },
         extra,
+        maxTimeoutSeconds: 900,
       },
       description: "Subgraph analytics — $0.01 per call inside your mandate",
     },
@@ -258,7 +270,7 @@ export async function buildService(cfg: ServiceConfig): Promise<BuiltService> {
           ? { name: info.name, version: info.version }
           : { assetTransferMethod: "permit2" },
       },
-      description: "Usage-priced Agent0 sample — authorize up to $0.05, settle actual",
+      description: "Fixed-price Agent0 query with a capped authorization — authorize up to $0.05, settle actual",
       extensions: info.eip2612
         ? { eip2612GasSponsoring: {} }
         : { erc20ApprovalGasSponsoring: {} },
@@ -270,66 +282,84 @@ export async function buildService(cfg: ServiceConfig): Promise<BuiltService> {
   // call initialize()" — boot must not serve a half-wired server.
   await httpServer.initialize();
 
-  const server = createServer(async (req, res) => {
-    try {
-      const base = `http://${req.headers.host ?? "localhost"}`;
-      const adapter = nodeAdapter(req, base);
-      const path = new URL(req.url ?? "/", base).pathname;
-      const out = await httpServer.processHTTPRequest({
-        adapter,
-        path,
-        method: req.method ?? "GET",
+  const journal = new Journal(join(full.storageDir, "merchant.sqlite"));
+  const channelManager = batchScheme.createChannelManager(facilitator, network, full.asset);
+  const releaseMerchant = journal.own("merchant-service");
+  let lifecycleBusy = false;
+  const server = createServer((req, res) => {
+    if (["/admin/claim-settle","/admin/refund-receipts"].includes((req.url ?? "").split("?")[0] ?? "")) {
+      void (async () => {
+        if (req.method !== "POST" || req.headers.origin || !["127.0.0.1", "::1", "::ffff:127.0.0.1"].includes(req.socket.remoteAddress ?? "")) throw new Error("Local merchant administration only");
+        const offered = req.headers.authorization ?? "";
+        const wanted = `Bearer ${cfg.controlToken ?? ""}`;
+        if (!cfg.controlToken || !timingSafeEqual(createHash("sha256").update(offered).digest(), createHash("sha256").update(wanted).digest())) {
+          res.writeHead(401, {"content-type":"application/json"}).end('{"error":"Merchant admin authentication required"}'); return;
+        }
+        if (lifecycleBusy) { res.writeHead(409).end('{"error":"Settlement already in progress"}'); return; }
+        let text = "";
+        for await (const b of req) { text += String(b); if (text.length > 2048) throw new Error("Admin request too large"); }
+        const body = JSON.parse(text);
+        if (typeof body.channelId !== "string" || !/^0x[0-9a-fA-F]{64}$/.test(body.channelId)) throw new Error("A specific channel ID is required");
+        if ((req.url ?? "").split("?")[0] === "/admin/refund-receipts") {
+          const candidates:unknown[]=[];
+          for (const row of journal.db.prepare("SELECT response FROM outcomes WHERE response IS NOT NULL").all()) {
+            try {
+              const response=JSON.parse(String(row.response));
+              const encoded=response.headers?.["PAYMENT-RESPONSE"] ?? response.headers?.["payment-response"];
+              if (!encoded) continue;
+              const receipt=JSON.parse(Buffer.from(encoded,"base64").toString("utf8"));
+              const state=receipt.extra?.channelState;
+              if(receipt.success && receipt.network===network && state?.channelId?.toLowerCase()===body.channelId.toLowerCase() && BigInt(state.refundNonce??0)>0n && /^0x[0-9a-fA-F]{64}$/.test(receipt.transaction??""))candidates.push(receipt);
+            }catch{continue;}
+          }
+          res.writeHead(200,{"content-type":"application/json","cache-control":"no-store"}).end(JSON.stringify({network,candidates}));return;
+        }
+        lifecycleBusy = true;
+        try {
+          journal.event("merchant", null, "merchant.claim_requested", {channelId:body.channelId});
+          const result = await completeMerchantLifecycle({
+            claim: () => channelManager.claim({selectClaimChannels: channels => channels.filter(c => c.channelId.toLowerCase() === body.channelId.toLowerCase())}),
+            settle: () => channelManager.settle(),
+            receiverState: async () => {
+              const [claimed,settled] = await rpcClient(full.rpcUrl).readContract({address:BATCH_SETTLEMENT_ADDRESS,abi:ESCROW_READ_ABI,functionName:"receivers",args:[full.receiver,full.asset]});
+              return {claimed,settled};
+            },
+            record: (kind,data) => {journal.event("merchant",null,kind,data);},
+          });
+          res.writeHead(200, {"content-type":"application/json","cache-control":"no-store"}).end(JSON.stringify({network, ...result}));
+        } finally { lifecycleBusy = false; }
+      })().catch(e => {
+        journal.event("merchant", null, "merchant.lifecycle_failed", {message:e instanceof Error ? e.message : String(e)});
+        if (!res.headersSent) res.writeHead(400, {"content-type":"application/json"});
+        res.end(JSON.stringify({error:e instanceof Error ? e.message : String(e)}));
       });
-      if (out.type === "no-payment-required") {
-        res.writeHead(404).end();
-        return;
-      }
-      if (out.type === "payment-error") {
-        res.writeHead(out.response.status, out.response.headers);
-        res.end(JSON.stringify(out.response.body));
-        return;
-      }
-      // Verified: run the handler, then settle. The PAYMENT-RESPONSE headers
-      // from processSettlement are what advance the client's vouchers —
-      // dropping them would fork the channel state from the chain.
-      const query = new URL(req.url ?? "/", base).searchParams.get("q") ?? "{ agents { id } }";
-      const actual =
-        path === "/usage" ? { amount: full.priceBaseUnits } : undefined;
-      const settled = await httpServer.processSettlement(
-        out.paymentPayload,
-        out.paymentRequirements,
-        out.declaredExtensions,
-        { request: { adapter, path, method: req.method ?? "GET" } },
-        actual
-      );
-      if (!settled.success) {
-        console.error("mandate settle failed:", JSON.stringify(settled));
-        res.writeHead(402, { "content-type": "application/json" });
-        res.end(JSON.stringify({ error: settled.errorReason ?? settled }));
-        return;
-      }
-      try {
-        const body = await liveAnalyticsBody(
-          query,
-          {
-            amount: actual?.amount ?? full.priceBaseUnits,
-            asset: full.asset,
-            txHash: settled.transaction,
-            scheme: path === "/usage" ? "upto" : "batch-settlement",
-          },
-          { fetchRows: cfg.fetchRows }
-        );
-        res.writeHead(200, { "content-type": "application/json", ...settled.headers });
-        res.end(JSON.stringify(body));
-      } catch (e) {
-        res.writeHead(503, { "content-type": "application/json" });
-        res.end(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }));
-      }
-    } catch (e) {
-      res.writeHead(500, { "content-type": "application/json" });
-      res.end(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }));
+      return;
     }
+    void handlePaidRequest({ req, res, httpServer, journal,
+      prepare: query => liveAnalyticsBody(query, {}, { fetchRows: cfg.fetchRows }),
+      actualAmount: path => path === "/usage" ? full.priceBaseUnits : undefined,
+    }).catch(e => {
+      console.error("Merchant handler failed:", e instanceof Error ? e.message : String(e));
+      if (!res.headersSent) res.writeHead(503, { "content-type": "application/json" });
+      res.end('{"error":"Merchant could not persist the request outcome"}');
+    });
   });
+  server.once("listening", () => {
+    if (cfg.autoSettlement === false) return;
+    channelManager.start({
+      claimIntervalSecs: cfg.claimIntervalSecs ?? 60, settleIntervalSecs: cfg.settleIntervalSecs ?? 300, refundIntervalSecs: 3600,
+      maxClaimsPerBatch: 100,
+      selectClaimChannels: channels => {
+        if (channels.length) journal.event("merchant", null, "merchant.claim_requested", { count: channels.length });
+        return channels;
+      },
+      onClaim: result => { journal.event("merchant", null, "merchant.claim_confirmed", result); },
+      onSettle: result => { journal.event("merchant", null, "merchant.revenue_settled", result); },
+      onRefund: result => { journal.event("merchant", null, "merchant.refund_confirmed", result); },
+      onError: error => { journal.event("merchant", null, "merchant.lifecycle_failed", { message: error instanceof Error ? error.message : String(error) }); },
+    });
+  });
+  server.once("close", () => { void channelManager.stop().finally(() => { releaseMerchant(); journal.close(); }); });
   return { server, receiverAuthorizer };
 }
 
@@ -362,6 +392,9 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     const receiver = flag("--receiver") ?? need("MANDATE_SERVICE_RECEIVER");
     if (!/^0x[0-9a-fA-F]{40}$/.test(receiver)) throw new Error(`Not an address: ${receiver}.`);
     const { server } = await buildService({
+      autoSettlement: process.env.MANDATE_AUTO_SETTLEMENT !== "0",
+      controlToken: process.env.MANDATE_MERCHANT_ADMIN_TOKEN_FILE ? (await readFile(process.env.MANDATE_MERCHANT_ADMIN_TOKEN_FILE, "utf8")).trim() : undefined,
+      priceBaseUnits: process.env.MANDATE_PRICE_BASE_UNITS ?? PRICE_BASE_UNITS,
       facilitatorUrl: process.env.MANDATE_FACILITATOR_URL ?? "http://127.0.0.1:8406",
       rpcUrl,
       storageDir: process.env.MANDATE_SERVICE_STATE ?? "./state/mandate-service",

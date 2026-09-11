@@ -97,15 +97,15 @@ try {
       // Operator env may point MANDATE_FACILITATOR_URL at the local EVM facilitator.
       MANDATE_FACILITATOR_URL: "https://api.testnet.blocky402.com",
     });
-    await waitHttp(`http://127.0.0.1:${SVC_PORT}/analytics?q=${encodeURIComponent("{ agents { id } }")}`);
-    await unpaid(`http://127.0.0.1:${SVC_PORT}/analytics?q=${encodeURIComponent("{ agents { id } }")}`, "exact");
-    await unpaid(`http://127.0.0.1:${SVC_PORT}/usdc-analytics?q=${encodeURIComponent("{ agents { id } }")}`, "exact");
+    await waitHttp(`http://127.0.0.1:${SVC_PORT}/analytics?q=${encodeURIComponent("{ agents(first: 5) { id agentId agentWallet totalFeedback } }")}`);
+    await unpaid(`http://127.0.0.1:${SVC_PORT}/analytics?q=${encodeURIComponent("{ agents(first: 5) { id agentId agentWallet totalFeedback } }")}`, "exact");
+    await unpaid(`http://127.0.0.1:${SVC_PORT}/usdc-analytics?q=${encodeURIComponent("{ agents(first: 5) { id agentId agentWallet totalFeedback } }")}`, "exact");
   } else {
     console.log("SKIP hedera service 402 (set SERVICE_PAY_TO)");
   }
 
   const { liveAnalyticsBody } = await import(`${ROOT}/packages/gateway/src/analytics.ts`);
-  const body = await liveAnalyticsBody("{ agents { id } }", { scheme: "e2e-paid-query-body" });
+  const body = await liveAnalyticsBody("{ agents(first: 5) { id agentId agentWallet totalFeedback } }", { scheme: "e2e-paid-query-body" });
   const text = JSON.stringify(body);
   if (text.includes("agent-demo-1")) {
     throw new Error("live Agent0 body leaked agent-demo-1");

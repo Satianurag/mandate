@@ -44,6 +44,8 @@ await withSecret("hedera-payment", hederaEnc, async (key) => {
   );
 
   const response = await new TopicCreateTransaction()
+    .setSubmitKey(PrivateKey.fromStringECDSA(hex).publicKey)
+    .setAdminKey(PrivateKey.fromStringECDSA(hex).publicKey)
     .setTopicMemo("Mandate audit trail — ETHOnline 2026")
     .execute(client);
   const receipt = await response.getReceipt(client);

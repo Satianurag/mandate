@@ -15,13 +15,6 @@ const CHAIN_ALIASES: Array<[RegExp, string]> = [
   [/ethereum[_\s-]*sepolia|eth[_\s-]*sepolia/i, "ethereum-sepolia"],
   [/bsc[_\s-]*chapel|bnb[_\s-]*chapel|chapel|bsc[_\s-]*test/i, "bsc-chapel"],
   [/monad[_\s-]*test/i, "monad-testnet"],
-  [/base[_\s-]*mainnet/i, "base"],
-  [/\bpolygon\b/i, "polygon"],
-  [/ethereum[_\s-]*mainnet|agent0-mainnet/i, "ethereum"],
-  [/\bethereum\b(?![_\s-]*sepolia)/i, "ethereum"],
-  [/\bbase\b(?![_\s-]*sepolia)/i, "base"],
-  [/\bbsc\b|\bbnb\b/i, "bsc"],
-  [/\bmonad\b(?![_\s-]*test)/i, "monad"],
 ];
 
 export interface DiscoveryResult {

@@ -21,33 +21,39 @@ import { join } from "node:path";
 import { proxyFetch } from "./index.ts";
 import { decide } from "./client.ts";
 import { normaliseAmount } from "./hedera.ts";
-import { startStubFacilitator } from "./facilitator-stub.ts";
+import { startStubFacilitator } from "../test-support/facilitator.ts";
 import { buildService } from "../../service/src/index.ts";
 import type { PaymentRequired } from "./types.ts";
 
-const PORT = 8409;
-
-function startSpawnedService(facilitatorUrl: string): Promise<ChildProcess> {
-  // Hermetic: the suite must pass with ZERO ambient env (README's one-liner).
-  // Explicit CLI flags pin the test double; production resolves live.
-  const child = spawn(
-    process.execPath,
-    [
-      "--experimental-strip-types",
-      new URL("../../service/src/index.ts", import.meta.url).pathname,
-      "--pay-to",
-      "0.0.5005",
-    ],
-    {
-      env: {
-        ...process.env,
-        SERVICE_PORT: String(PORT),
-        MANDATE_FACILITATOR_URL: facilitatorUrl,
-      },
-      stdio: "ignore",
-    }
-  );
-  return new Promise((resolve) => setTimeout(() => resolve(child), 1500));
+function startSpawnedService(facilitatorUrl: string): Promise<{ child: ChildProcess; url: string }> {
+  const child = spawn(process.execPath, [
+    "--experimental-strip-types",
+    new URL("../../service/src/index.ts", import.meta.url).pathname,
+    "--pay-to", "0.0.5005",
+  ], {
+    env: {
+      PATH: process.env.PATH, HOME: process.env.HOME,
+      SERVICE_HOST: "127.0.0.1", SERVICE_PORT: "0",
+      MANDATE_FACILITATOR_URL: facilitatorUrl,
+    },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  return new Promise((resolve, reject) => {
+    let log = "";
+    const timer = setTimeout(() => {
+      child.kill();
+      reject(new Error(`Service did not become ready: ${log}`));
+    }, 20_000);
+    const failed = (e: Error) => { clearTimeout(timer); child.kill(); reject(e); };
+    child.once("error", failed);
+    child.once("exit", (code) => failed(new Error(`Service exited ${code}: ${log}`)));
+    child.stderr?.on("data", (b: Buffer) => { log = (log + b.toString()).slice(-8000); });
+    child.stdout?.on("data", (b: Buffer) => {
+      log = (log + b.toString()).slice(-8000);
+      const ready = /paid service on (127\.0\.0\.1:\d+)/.exec(log);
+      if (ready) { clearTimeout(timer); resolve({ child, url: `http://${ready[1]}` }); }
+    });
+  });
 }
 
 async function startInProcessService(
@@ -59,6 +65,7 @@ async function startInProcessService(
     facilitatorUrl,
     port: 0,
     host: "127.0.0.1",
+    journalPath: ":memory:",
     fetchRows: async () => [],
   });
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
@@ -69,8 +76,8 @@ async function startInProcessService(
 test("live 402 -> proxy -> fail-safe deny", async (t) => {
   const stub = await startStubFacilitator(t);
   const svc = await startSpawnedService(stub.url);
-  t.after(() => svc.kill());
-  const base = `http://localhost:${PORT}`;
+  t.after(() => svc.child.kill());
+  const base = svc.url;
 
   // v2 rides the offer in the PAYMENT-REQUIRED header (base64 JSON), not
   // the body -- same helper the mandate-service suite uses.
@@ -80,7 +87,7 @@ test("live 402 -> proxy -> fail-safe deny", async (t) => {
     return JSON.parse(Buffer.from(header, "base64").toString("utf8")) as PaymentRequired;
   };
 
-  const probe = await fetch(`${base}/analytics?q=${encodeURIComponent("{ agents { id } }")}`);
+  const probe = await fetch(`${base}/analytics?q=${encodeURIComponent("{ agents(first: 5) { id } }")}`);
   assert.equal(probe.status, 402, "service must challenge for payment");
   const challenge = readChallenge(probe);
   const req = challenge.accepts[0];
@@ -111,11 +118,15 @@ test("live 402 -> proxy -> fail-safe deny", async (t) => {
   const savedKey = process.env.MANDATE_HEDERA_KEY_ENC;
   const savedGraph = process.env.MANDATE_GRAPH_KEY_ENC;
   const savedTopic = process.env.MANDATE_HCS_TOPIC_ID;
+  const savedJournal = process.env.MANDATE_JOURNAL_PATH;
+  process.env.MANDATE_JOURNAL_PATH = join(dir, "gateway.sqlite");
   process.env.MANDATE_HEDERA_ACCOUNT_ID = "0.0.54321";
   process.env.MANDATE_HEDERA_KEY_ENC = fakeKey;
   process.env.MANDATE_GRAPH_KEY_ENC = fakeGraph;
   delete process.env.MANDATE_HCS_TOPIC_ID;
   t.after(() => {
+    if (savedJournal === undefined) delete process.env.MANDATE_JOURNAL_PATH;
+    else process.env.MANDATE_JOURNAL_PATH = savedJournal;
     if (savedAccount === undefined) delete process.env.MANDATE_HEDERA_ACCOUNT_ID;
     else process.env.MANDATE_HEDERA_ACCOUNT_ID = savedAccount;
     if (savedKey === undefined) delete process.env.MANDATE_HEDERA_KEY_ENC;
@@ -126,7 +137,7 @@ test("live 402 -> proxy -> fail-safe deny", async (t) => {
     else process.env.MANDATE_HCS_TOPIC_ID = savedTopic;
   });
 
-  const denied = await proxyFetch(`${base}/analytics?q=${encodeURIComponent("{ agents { id } }")}`, undefined, {
+  const denied = await proxyFetch(`${base}/analytics?q=${encodeURIComponent("{ agents(first: 5) { id } }")}`, undefined, {
     stepUp: {
       signOnDevice: async () => {
         throw new Error("no device in test");
@@ -231,7 +242,7 @@ test("complexity metering prices a bigger query higher", async (t) => {
 test("GET /usdc-analytics offers stock exact@hedera:testnet Circle USDC", async (t) => {
   const stub = await startStubFacilitator(t);
   const base = await startInProcessService(t, stub.url);
-  const res = await fetch(`${base}/usdc-analytics?q=${encodeURIComponent("{ agents { id } }")}`);
+  const res = await fetch(`${base}/usdc-analytics?q=${encodeURIComponent("{ agents(first: 5) { id } }")}`);
   assert.equal(res.status, 402);
   const header = res.headers.get("payment-required");
   assert.ok(header);

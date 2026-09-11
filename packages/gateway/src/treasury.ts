@@ -1,3 +1,4 @@
+import { assertHederaTestnet } from "./testnet.ts";
 /**
  * Scheduled-transaction treasury top-up leg (HIP-423 long-term schedules).
  *
@@ -31,12 +32,9 @@ import {
   Timestamp,
   TransferTransaction,
 } from "@hiero-ledger/sdk";
-import {
-  HEDERA_MIRROR_MAINNET,
-  HEDERA_MIRROR_TESTNET,
-} from "./evidence.ts";
+import { HEDERA_MIRROR_TESTNET } from "./evidence.ts";
 
-export type TreasuryNetwork = "testnet" | "mainnet";
+export type TreasuryNetwork = "testnet";
 
 /** HIP-423 caps schedule lifetimes at 2 months from creation. */
 export const MAX_SCHEDULE_LIFETIME_DAYS = 60;
@@ -45,7 +43,8 @@ export const MAX_SCHEDULE_LIFETIME_DAYS = 60;
 export const TOPUP_MEMO_PREFIX = "mandate-topup:";
 
 export function treasuryMirrorBase(network: TreasuryNetwork): string {
-  return network === "mainnet" ? HEDERA_MIRROR_MAINNET : HEDERA_MIRROR_TESTNET;
+  assertHederaTestnet(network);
+  return HEDERA_MIRROR_TESTNET;
 }
 
 export function topUpMemo(payerId: string, hbars: number): string {

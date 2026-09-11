@@ -1,18 +1,10 @@
+import { assertTestnetChain } from "./testnet.ts";
 /**
- * M1 — the Ledger as an x402 signer.
- *
- * DmkEvmSigner implements x402's ClientEvmSigner with a Ledger behind
- * signTypedData: every call is a physical tap. x402's batch-settlement
- * client calls it exactly once per mandate (the EIP-3009 deposit
- * authorization); afterwards the hot session key signs vouchers, which can
- * only inflate toward the mandate's fixed receiver, capped by the deposit.
- * The device approves the mandate's bounds, never each micropayment.
- *
- * On-chain reads are deliberately NOT implemented: the device cannot do
- * RPC. Call sites compose reads via x402's own
- * toClientEvmSigner(signer, publicClient). Retries live in the caller too —
- * a signer that silently re-prompts would be a consent transpiler, not a
- * consent gate. Live proof: `npm run mandate:open` taps once, then streams.
+ * Ledger DMK adapter for testnet EIP-712 signing. Every signing call uses the
+ * physical device and verifies its network before requesting a signature.
+ * The report distinguishes CAL/ERC-7730, clear-basic, legacy and unknown paths.
+ * Funding binds stock channel authority cryptographically; URL, rolling budget,
+ * and task expiry are broker rules, not device-screen or contract guarantees.
  */
 
 import type { ClientEvmSigner } from "@x402/evm";
@@ -149,7 +141,8 @@ export class DmkEvmSigner implements ClientEvmSigner {
 
   /**
    * One device tap per call. The typed data shown on screen is exactly what
-   * x402 passes — mandate bounds (receiver, token, max) under EIP-3009.
+   * x402 passes — the stock EIP-3009 authorization. Inspect the recorded signing report;
+   * do not infer on-device human-readable scope labels from application text.
    */
   async signTypedData(message: {
     domain: Record<string, unknown>;
@@ -157,6 +150,7 @@ export class DmkEvmSigner implements ClientEvmSigner {
     primaryType: string;
     message: Record<string, unknown>;
   }): Promise<`0x${string}`> {
+    assertTestnetChain(message.domain.chainId);
     this.signCalls++;
     const trace: DeviceActionTrace[] = [];
     try {

@@ -131,40 +131,18 @@ export function buildRecord(
   };
 }
 
-let queue: Promise<void> = Promise.resolve();
-
-/**
- * Submit to HCS. Never blocks the payment path — callers fire-and-forget,
- * and failures are logged, never thrown. Credentials are REQUIRED and must
- * come from the Key Ring via withSecret: there is deliberately no env-var
- * fallback, per invariant 1 (no plaintext secret in the environment).
- */
-export async function submit(
-  topicId: string,
-  record: AuditRecord,
-  creds: HederaOperatorCredentials
-): Promise<void> {
-  const op = creds;
-
-  queue = queue
-    .then(async () => {
-      const hex = op.privateKeyHex.startsWith("0x")
-        ? op.privateKeyHex.slice(2)
-        : op.privateKeyHex;
-      const client = Client.forTestnet();
-      client.setOperator(
-        AccountId.fromString(op.accountId),
-        PrivateKey.fromStringECDSA(hex)
-      );
-      await new TopicMessageSubmitTransaction()
-        .setTopicId(TopicId.fromString(topicId))
-        .setMessage(JSON.stringify(record))
-        .execute(client);
-      client.close();
-    })
-    .catch((err) => {
-      console.error("[audit] HCS submit failed (will not block payment):", err);
-    });
-
-  await queue;
+/** Legacy record publisher. Durable callers enqueue with Journal before invoking it. */
+export async function submit(topicId: string, record: AuditRecord, creds: HederaOperatorCredentials): Promise<void> {
+  const { Journal } = await import("./journal.ts");
+  const { flushOutbox } = await import("./evidence-publisher.ts");
+  const { join } = await import("node:path");
+  const journal = new Journal(process.env.MANDATE_AUDIT_JOURNAL ?? join(process.cwd(), "state/audit.sqlite"));
+  try {
+    const id = journal.event("legacy-audit", null, "audit.record", record);
+    const result = await flushOutbox(journal, { topic: topicId, account: creds.accountId,
+      key: PrivateKey.fromStringECDSA(creds.privateKeyHex.replace(/^0x/, "")), limit: 100 });
+    if (result.failed || !journal.events().some(e => e.id === id && e.anchor_state === "confirmed")) {
+      throw new Error("HCS anchor is not confirmed; the durable outbox retains it for retry");
+    }
+  } finally { journal.close(); }
 }

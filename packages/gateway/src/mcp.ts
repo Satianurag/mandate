@@ -46,7 +46,19 @@ export async function openSubgraphMcp(
   apiKey: string,
   opts: { url?: string; fetchFn?: FetchFn } = {}
 ): Promise<McpClient> {
-  const fetchFn = opts.fetchFn ?? fetch;
+  const baseFetch = opts.fetchFn ?? fetch;
+  const sessionAbort = new AbortController();
+  const fetchFn: FetchFn = (input, init) => baseFetch(input, {
+    ...init, redirect: "error", signal: AbortSignal.any([sessionAbort.signal, AbortSignal.timeout(30_000)]),
+  });
+  const bounded = async <T>(promise: Promise<T>, label: string): Promise<T> => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      return await Promise.race([promise, new Promise<T>((_, reject) => {
+        timer = setTimeout(() => { sessionAbort.abort(); reject(new Error(`MCP ${label} timed out`)); }, 20_000);
+      })]);
+    } finally { if (timer) clearTimeout(timer); }
+  };
   const base = new URL(opts.url ?? SUBGRAPH_MCP_SSE);
   const headers: Record<string, string> = {
     accept: "text/event-stream",
@@ -76,7 +88,8 @@ export async function openSubgraphMcp(
     while (!closed) {
       const { done, value } = await reader.read();
       if (done) break;
-      buf += dec.decode(value, { stream: true });
+      buf += dec.decode(value, { stream: true }).replace(/\r\n/g, "\n");
+      if (buf.length > 2_000_000) throw new Error("MCP event exceeds the response-size bound");
       buf = consumeSse(buf, (event, data) => {
         if (event === "endpoint") {
           endpointPath = data.trim();
@@ -108,9 +121,10 @@ export async function openSubgraphMcp(
   });
 
   const post = async (method: string, params: unknown): Promise<unknown> => {
-    const path = endpointPath ?? (await endpointP);
+    const path = endpointPath ?? (await bounded(endpointP, "endpoint discovery"));
     const rpcId = ++id;
     const url = new URL(path, base);
+    if (url.origin !== base.origin) throw new Error("MCP endpoint cannot redirect the API credential to another origin");
     const result = new Promise((resolve, reject) => {
       pending.set(rpcId, { resolve, reject });
     });
@@ -127,17 +141,17 @@ export async function openSubgraphMcp(
       pending.delete(rpcId);
       throw new Error(`MCP ${method} HTTP ${res.status}`);
     }
-    return result;
+    return bounded(result, method).finally(() => pending.delete(rpcId));
   };
 
-  await endpointP;
+  await bounded(endpointP, "endpoint discovery");
   await post("initialize", {
     protocolVersion: "2024-11-05",
     capabilities: {},
     clientInfo: { name: "mandate", version: "0.1.0" },
   });
   // notifications have no id; fire-and-forget
-  const path = endpointPath ?? (await endpointP);
+  const path = endpointPath ?? (await bounded(endpointP, "endpoint discovery"));
   await fetchFn(new URL(path, base).toString(), {
     method: "POST",
     headers: {
@@ -172,7 +186,9 @@ export async function openSubgraphMcp(
       return text;
     },
     async close() {
-      closed = true;
+      closed = true; sessionAbort.abort();
+      for (const waiter of pending.values()) waiter.reject(new Error("MCP session closed"));
+      pending.clear();
       await reader.cancel().catch(() => {});
       await pumping.catch(() => {});
     },
