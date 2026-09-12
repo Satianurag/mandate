@@ -1,0 +1,36 @@
+name: ui-css-fix
+on:
+  push:
+    branches: [ui-rehaul-buffer-20260912]
+    paths: [.github/workflows/ui-css-fix.yml]
+permissions:
+  contents: write
+jobs:
+  apply:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ui-rehaul-buffer-20260912
+          fetch-depth: 0
+      - name: Fix mobile page-header rule
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('console/workspace.css')
+          s=p.read_text()
+          bad='.page-header;flex-direction:column;gap:14px;margin-bottom:24px}'
+          good='.page-header{flex-direction:column;gap:14px;margin-bottom:24px}'
+          if bad not in s:
+              raise SystemExit('expected broken mobile rule not found')
+          p.write_text(s.replace(bad,good,1))
+          PY
+          git diff --check
+      - name: Commit clean CSS fix
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/ui-css-fix.yml
+          git add console/workspace.css
+          git commit -m "fix(ui): restore mobile page-header layout"
+          git push origin HEAD:ui-rehaul-buffer-20260912
