@@ -3,6 +3,10 @@
 // Presentation-only product polish. Core payment, Ledger, run and recovery logic stays in workspace.js/agents.js.
 (() => {
   const $ = id => document.getElementById(id);
+  const compatStyle = document.createElement('style');
+  compatStyle.textContent = 'body:not(.agent-mode) .compat-only{display:block!important}body:not(.agent-mode) #newMandate{display:none!important}';
+  document.head.append(compatStyle);
+  $('loginTitle')?.setAttribute('aria-label', 'Let the agent work. Keep spending controlled.');
 
   const clickHiddenCreate = () => $('newMandate')?.click();
   $('createAgentShortcut')?.addEventListener('click', clickHiddenCreate);
@@ -60,7 +64,6 @@
       ['Shared allowance', 'Approved total'],
       ['Per-call limit', 'Max per purchase'],
       ['Rolling limit', 'Max per hour'],
-      ['Ledger payer', 'From Ledger'],
       ['Funded software wallet', 'Destination'],
       ['Allowed services', 'Approved services'],
       ['Observed balance', 'Unused balance'],
@@ -80,7 +83,6 @@
     const match = raw.match(/^([0-9.]+) test USDC maximum per run · ([0-9.]+) per call/);
     if (match) node.textContent = `Run budget · ${match[1]} test USDC   ·   Max per purchase · ${match[2]} test USDC. This run cannot increase your Ledger budget.`;
   }
-
 
   function polishStatusCopy() {
     for (const id of ['agentHomeReadiness', 'agentReadiness']) {
