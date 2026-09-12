@@ -231,6 +231,7 @@
     <footer class="workspace-footer"><span>Mandate</span><span id="observedAt">State not loaded</span></footer>
 
     <div class="compat-only legacy-controls" aria-hidden="true">
+      <span id="taskHint" class="sr-only" role="status">Review a Mandate before running paid work.</span>
       <details class="task-diagnostics compat-panel" data-view="task">
         <summary>Single-query payment diagnostics</summary>
         <section class="task-panel" aria-labelledby="taskTitle">
@@ -241,7 +242,7 @@
             <label for="maxResults">Candidates to compare<select id="maxResults"><option value="2">2 candidates</option><option value="3">3 candidates</option><option value="5" selected>5 candidates</option><option value="8">8 candidates</option><option value="10">10 candidates</option></select></label>
             <label class="checkline" id="fundingConsent"><input id="authorizeFunding" type="checkbox"><span>Authorize initial escrow funding for this task on my Ledger. The device signature—not this checkbox—approves funding.</span></label>
             <div id="pendingIntent" class="notice compact" hidden><div><strong>Previous paid intent needs observation</strong><p id="pendingIntentText"></p></div><button id="checkPendingTask" class="secondary" type="button">Check existing task</button></div>
-            <div class="actions"><button id="runTask" class="primary" type="submit">Run paid task</button><span id="taskHint" class="subtle">Review a Mandate before running paid work.</span></div>
+            <div class="actions"><button id="runTask" class="primary" type="submit">Run paid task</button></div>
           </form>
           <div class="result-region" aria-live="polite"><div class="section-heading"><div><h3>Result</h3><p id="resultSource" class="subtle">No paid result yet</p></div></div><div id="result"></div></div>
         </section>
