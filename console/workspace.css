@@ -30,7 +30,7 @@ body.agent-mode .compat-only{display:none!important}
 body.agent-mode #agentHomePrimary{display:none}
 @media(max-width:680px){
   .sidebar-secondary{display:none}
-  .page-header;flex-direction:column;gap:14px;margin-bottom:24px}
+  .page-header{flex-direction:column;gap:14px;margin-bottom:24px}
   .page-header>.secondary{width:100%;align-self:stretch}
   .agent-card{grid-template-columns:1fr;grid-template-areas:"eyebrow" "title" "desc" "tools" "allowance" "actions";row-gap:5px;min-height:0}
   .agent-card .actions{margin-top:8px;width:100%}
