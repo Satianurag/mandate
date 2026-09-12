@@ -1,0 +1,22 @@
+name: agent-ui-verify
+on:
+  push:
+    branches: [ui-rehaul-buffer-20260912]
+    paths: [.github/workflows/agent-ui-verify.yml]
+jobs:
+  agent-browser:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:agents:ui
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: agent-product-browser-verification
+          path: .live-results/agent-integration/browser-fixture
