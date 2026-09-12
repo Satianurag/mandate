@@ -1,0 +1,51 @@
+name: ui-inline
+on:
+  push:
+    branches: [ui-rehaul-buffer-20260912]
+    paths: [.github/workflows/ui-inline.yml]
+permissions:
+  contents: write
+jobs:
+  assemble:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ui-rehaul-buffer-20260912
+          fetch-depth: 0
+      - name: Inline presentation layer
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          html = Path('console/workspace.html')
+          js = Path('console/product-ui.js')
+          css = Path('console/workspace.css')
+          text = html.read_text()
+          script = js.read_text()
+          needle = '  <script src="/product-ui.js" defer></script>\n'
+          if needle not in text:
+              raise SystemExit('product-ui script tag not found')
+          text = text.replace(needle, '')
+          text = text.replace('</body>', '<script>\n' + script + '\n</script>\n</body>')
+          html.write_text(text)
+          css_text = css.read_text()
+          touch = '\n/* Product interaction target floor. */\n.text-button,summary{min-height:44px}.text-button{min-width:44px}\n'
+          if 'Product interaction target floor.' not in css_text:
+              css.write_text(css_text + touch)
+          PY
+          rm console/product-ui.js
+          node --check <(python - <<'PY'
+          from bs4 import BeautifulSoup
+          from pathlib import Path
+          soup = BeautifulSoup(Path('console/workspace.html').read_text(), 'html.parser')
+          print(next(tag.string for tag in soup.find_all('script') if tag.string and 'Presentation-only product polish' in tag.string))
+          PY
+          ) || true
+          git diff --check
+      - name: Commit assembled UI
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add console/workspace.html console/workspace.css console/product-ui.js
+          git commit -m "fix(ui): inline product polish into served workspace"
+          git push origin HEAD:ui-rehaul-buffer-20260912
