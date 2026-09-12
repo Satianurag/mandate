@@ -1,0 +1,5 @@
+UI reference screenshots used while refining the Mandate workspace (Buffer web, Aug 2026).
+
+buffer-web-aug-2026.zip   Local Mobbin export — Buffer web product screens, Aug 2026.
+                            Stored as a zip because individual PNGs are gitignored and
+                            the archive exceeds GitHub's single-file limit without LFS.
