@@ -26,9 +26,9 @@ function fixture() {
     withdrawDelay: 900,
     salt: `0x${"11".repeat(32)}`,
   };
-  const channelId = computeChannelId(config, 84532);
+  const channelId = computeChannelId(config, 8453);
   const snapshot: ChannelSnapshot = {
-    network: "eip155:84532", blockNumber: "1", observedAt: "2026-09-11T00:00:00.000Z", channelId,
+    network: "eip155:8453", blockNumber: "1", observedAt: "2026-09-11T00:00:00.000Z", channelId,
     balanceBaseUnits: "100000", claimedBaseUnits: "30000", payerBalanceBaseUnits: "0", receiverBalanceBaseUnits: "0",
     receiverAggregateClaimedBaseUnits: "30000", receiverAggregateSettledBaseUnits: "30000",
     withdrawalAmountBaseUnits: "0", withdrawalInitiatedAt: 0, refundNonce: "0",
@@ -38,7 +38,7 @@ function fixture() {
     gas: 100000n, maxFeePerGas: 1000n, maxPriorityFeePerGas: 100n,
   });
   const base: Omit<PreparedWithdrawalTransaction, "planHash"> = {
-    version: 1, kind: "initiate", network: "eip155:84532", chainId: 84532, channelId,
+    version: 1, kind: "initiate", network: "eip155:8453", chainId: 8453, channelId,
     contract: getAddress(BATCH_SETTLEMENT_ADDRESS), payer: account.address, token: config.token, receiver: config.receiver,
     withdrawDelay: config.withdrawDelay, amountBaseUnits: "70000", callData: encoded.callData, selector: encoded.selector,
     nonce: 2, gas: "100000", maxFeePerGas: "1000", maxPriorityFeePerGas: "100", maxGasCostWei: "100000000",

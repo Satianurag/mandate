@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { assertPaymentScope, assertRequestScope, validateScope } from "./scope.ts";
 import type { PaymentRequirements } from "@x402/core/types";
-const s = validateScope({ network: "eip155:84532", serviceUrl: "http://127.0.0.1:8405/analytics", asset: "0x0000000000000000000000000000000000000001", receiver: "0x0000000000000000000000000000000000000002", receiverAuthorizer: "0x0000000000000000000000000000000000000003", withdrawDelay: 86400, expiresAt: new Date(Date.now()+3600000).toISOString(), ceilingBaseUnits: "5000000", perCallBaseUnits: "10000", windowBaseUnits: "100000", windowMs: 3600000 });
+const s = validateScope({ network: "eip155:8453", serviceUrl: "http://127.0.0.1:8405/analytics", asset: "0x0000000000000000000000000000000000000001", receiver: "0x0000000000000000000000000000000000000002", receiverAuthorizer: "0x0000000000000000000000000000000000000003", withdrawDelay: 86400, expiresAt: new Date(Date.now()+3600000).toISOString(), ceilingBaseUnits: "5000000", perCallBaseUnits: "10000", windowBaseUnits: "100000", windowMs: 3600000 });
 const r: PaymentRequirements = { scheme: "batch-settlement", network: s.network, asset: s.asset, payTo: s.receiver, amount: "10000", maxTimeoutSeconds: 60, extra: { receiverAuthorizer: s.receiverAuthorizer, withdrawDelay: s.withdrawDelay } };
 test("scope rejects changed recipient, asset, network, channel, price and expiry", () => {
   assertPaymentScope(s,r);

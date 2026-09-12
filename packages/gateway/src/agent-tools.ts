@@ -17,8 +17,8 @@ export interface GraphToolSource {
 export interface AgentToolConfiguration {
   agent0?: { endpoint: string; source: ResearchSourceScope; detailed?: boolean };
   protocols?: GraphToolSource[];
-  /** Explicit first-party testnet service URLs, not a claim that public vendors accept test tokens. */
-  testnetEndpoints?: Partial<Record<AgentToolId, string>>;
+  /** Explicit approved HTTP service endpoints; payments remain inside the reviewed mainnet authority. */
+  endpoints?: Partial<Record<AgentToolId, string>>;
 }
 function exactFields(input: Record<string, unknown>, fields: string[]): void {
   if (Object.keys(input).some(k => !fields.includes(k))) throw new Error("Tool arguments contain an unsupported field");
@@ -90,10 +90,10 @@ export function createAgentTools(config: AgentToolConfiguration = {}): AgentTool
     tools.push({ id: "graph-protocol", description: `Query verified protocol datasets: ${sources.map(s => `${s.id} (${s.label}): ${s.queries.map(q => `${q.id} — ${q.description}`).join("; ")}`).join("\n")}`, inputSchema: { type: "object", properties: { sourceId: { type: "string", enum: sources.map(s => s.id) }, queryId: { type: "string" } }, required: ["sourceId", "queryId"], additionalProperties: false },
       request(input) { exactFields(input, ["sourceId", "queryId"]); const source = sources.find(s => s.id === input.sourceId), query = source?.queries.find(q => q.id === input.queryId); if (!source || !query) throw new Error("Choose a reviewed source and query from the tool description"); return { url: source.endpoint, method: "POST", body: JSON.stringify({ query: query.query }) }; }, sources: observedSources });
   }
-  const hederaEndpoint = config.testnetEndpoints?.["hedera-analysis"];
+  const hederaEndpoint = config.endpoints?.["hedera-analysis"];
   if (hederaEndpoint) {
     const sourceIds = [...(config.protocols ?? []).map(s => s.id), ...(config.agent0 ? ["agent0"] : [])];
-    tools.push({ id: "hedera-analysis", description: "Buy a reproducible evidence-quality analysis, settled natively on Hedera testnet. protocol-quality checks complete-day trends, anomalous valuations and concentration using fresh Graph reads. candidate-check examines selected Agent0 candidates, feedback diversity, revocations, validation coverage and missing capabilities. This service does not test arbitrary candidate endpoints or guarantee trust.",
+    tools.push({ id: "hedera-analysis", description: "Buy a reproducible evidence-quality analysis, paid through the reviewed Base mainnet service. protocol-quality checks complete-day trends, anomalous valuations and concentration using fresh Graph reads. candidate-check examines selected Agent0 candidates, feedback diversity, revocations, validation coverage and missing capabilities. This service does not test arbitrary candidate endpoints or guarantee trust.",
       inputSchema: { type: "object", properties: { mode: { type: "string", enum: ["protocol-quality", "candidate-check"] }, sourceId: { type: "string", enum: sourceIds }, agentIds: { type: "array", items: { type: "string" }, minItems: 1, maxItems: 5 } }, required: ["mode", "sourceId"], additionalProperties: false },
       request(input) {
         exactFields(input, ["mode", "sourceId", "agentIds"]);
@@ -105,22 +105,22 @@ export function createAgentTools(config: AgentToolConfiguration = {}): AgentTool
         return { url: hederaEndpoint, method: "POST", body: JSON.stringify(input) };
       }, sources: observedSources });
   }
-  if (config.testnetEndpoints) {
+  if (config.endpoints) {
     for (const tool of tools) {
-      const endpoint = config.testnetEndpoints[tool.id];
+      const endpoint = config.endpoints[tool.id];
       if (!endpoint) continue;
       const url = new URL(endpoint);
-      if (!(url.protocol === "https:" || url.protocol === "http:" && url.hostname === "127.0.0.1") || url.username || url.password || url.search || url.hash) throw new Error("Invalid first-party testnet endpoint");
+      if (!(url.protocol === "https:" || url.protocol === "http:" && url.hostname === "127.0.0.1") || url.username || url.password || url.search || url.hash) throw new Error("Invalid first-party mainnet endpoint");
       if (tool.id === "crypto-prices") {
-        tool.description = "Retrieve a fresh Coinbase public spot-price observation for BTC, ETH or SOL. Mandate sells this data service for testnet USDC; Coinbase does not accept the payment.";
+        tool.description = "Retrieve a fresh Coinbase public spot-price observation for BTC, ETH or SOL. Mandate sells this data service for mainnet USDC; Coinbase does not accept the payment.";
         tool.inputSchema = { type: "object", properties: { coins: { type: "array", items: { type: "string", enum: ["BTC", "ETH", "SOL"] }, minItems: 1, maxItems: 3 } }, required: ["coins"], additionalProperties: false };
       }
       const validate = tool.request;
       tool.request = input => { validate(input); return { url: url.toString(), method: "POST", body: JSON.stringify(input) }; };
-      tool.description = `Mandate-hosted testnet x402 service. ${tool.description.replace(/through Exa's x402 endpoint|through Otto's x402 endpoint|through APIToll's x402 endpoint/g, "through the configured live data provider")}`;
+      tool.description = `Mandate-hosted mainnet x402 service. ${tool.description.replace(/through Exa's x402 endpoint|through Otto's x402 endpoint|through APIToll's x402 endpoint/g, "through the configured live data provider")}`;
     }
     // Testnet profiles never accidentally fall through to a mainnet vendor.
-    return tools.filter(t => Boolean(config.testnetEndpoints?.[t.id]));
+    return tools.filter(t => Boolean(config.endpoints?.[t.id]));
   }
   return tools;
 }

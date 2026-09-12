@@ -8,17 +8,17 @@ const close=(server:Server)=>new Promise<void>(resolve=>{server.close(()=>resolv
 async function fixture(t:{after:(fn:()=>Promise<void>)=>void},failProvider=false){
  const counts={verified:0,settled:0,provided:0};
  const facilitator=createServer(async(req,res)=>{req.resume();await new Promise<void>(resolve=>req.on('end',resolve));res.setHeader('content-type','application/json');
-  if(req.url==='/supported')res.end(JSON.stringify({kinds:[{x402Version:2,scheme:'exact',network:'eip155:84532'}],extensions:[],signers:{}}));
+  if(req.url==='/supported')res.end(JSON.stringify({kinds:[{x402Version:2,scheme:'exact',network:'eip155:8453'}],extensions:[],signers:{}}));
   else if(req.url==='/verify'){counts.verified++;res.end(JSON.stringify({isValid:true,payer:'0x0000000000000000000000000000000000000001'}));}
-  else if(req.url==='/settle'){counts.settled++;res.end(JSON.stringify({success:true,transaction:`0x${'ab'.repeat(32)}`,network:'eip155:84532'}));}
+  else if(req.url==='/settle'){counts.settled++;res.end(JSON.stringify({success:true,transaction:`0x${'ab'.repeat(32)}`,network:'eip155:8453'}));}
   else{res.statusCode=404;res.end('{}');}
  });
  const facilitatorUrl=await listen(facilitator),journal=new Journal(':memory:');
- const server=await createAgentToolService({network:'eip155:84532',payTo:'0x0000000000000000000000000000000000000002',facilitatorUrl,journal,providers:[{id:'crypto-prices',description:'Controlled fixture data',amountBaseUnits:'1000',validate(input){if(Object.keys(input).some(k=>k!=='coin')||!['ETH','BTC'].includes(String(input.coin)))throw new Error('Unsupported fixture input');},async execute(input){counts.provided++;await new Promise(r=>setTimeout(r,15));if(failProvider)throw new Error('Controlled provider failure');return {coin:input.coin,fixtureOnly:true};}}]});
+ const server=await createAgentToolService({network:'eip155:8453',payTo:'0x0000000000000000000000000000000000000002',facilitatorUrl,journal,providers:[{id:'crypto-prices',description:'Controlled fixture data',amountBaseUnits:'1000',validate(input){if(Object.keys(input).some(k=>k!=='coin')||!['ETH','BTC'].includes(String(input.coin)))throw new Error('Unsupported fixture input');},async execute(input){counts.provided++;await new Promise(r=>setTimeout(r,15));if(failProvider)throw new Error('Controlled provider failure');return {coin:input.coin,fixtureOnly:true};}}]});
  const origin=await listen(server);t.after(async()=>{await close(server);await close(facilitator);journal.close();});
  const request=(body:unknown,headers:Record<string,string>={})=>fetch(`${origin}/tools/crypto-prices`,{method:'POST',headers:{'content-type':'application/json',...headers},body:JSON.stringify(body)});
  const quote=await request({coin:'ETH'});assert.equal(quote.status,402);const required=decodePaymentRequiredHeader(quote.headers.get('payment-required')!);await quote.body?.cancel();
- const client=new x402Client();client.register('eip155:84532',new ExactEvmScheme(privateKeyToAccount(`0x${'44'.repeat(32)}`)));
+ const client=new x402Client();client.register('eip155:8453',new ExactEvmScheme(privateKeyToAccount(`0x${'44'.repeat(32)}`)));
  const payload=await client.createPaymentPayload(required),signature=encodePaymentSignatureHeader(payload);
  return {request,counts,signature,origin};
 }

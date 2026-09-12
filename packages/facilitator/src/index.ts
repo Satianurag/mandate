@@ -12,13 +12,13 @@
  *
  * Networks: whatever `eth_chainId` + `getCode` on the operator RPC(s)
  * actually return (x402 `.register(caip2, scheme)`). Envelope merchants
- * stay on Base Sepolia (`eip155:84532`). Hedera EVM `eip155:296` is
+ * stay on Base mainnet (`eip155:8453`). Hedera EVM `eip155:296` is
  * registered when Hashio has the CREATE2 vanity stack (F28) and
  * `secrets/hedera.enc` can submit HBAR gas. Paid HTS deposits into that
  * escrow are blocked by Hedera association (F28); do not invent a wrapper.
  *
  * Keys (sealed in the Key Ring, never on disk or in env):
- * - mandate-facilitator: Base Sepolia settlement txs (needs testnet ETH).
+ * - mandate-facilitator: Base mainnet settlement txs (needs testnet ETH).
  * - hedera-payment: Hedera EVM settlement txs (needs testnet HBAR).
  * - mandate-authorizer: the receiverAuthorizer — signs claim/refund EIP-712
  *   so the paid service doesn't hold a hot claiming key.
@@ -50,8 +50,8 @@ import { privateKeyToAccount } from "viem/accounts";
 import { unseal } from "../../gateway/src/keyring.ts";
 import { caip2ForChainId, viemChain } from "../../gateway/src/chains.ts";
 
-export const FACILITATOR_NETWORK = "eip155:84532";
-export const FACILITATOR_CHAIN_ID = 84532;
+export const FACILITATOR_NETWORK = "eip155:8453";
+export const FACILITATOR_CHAIN_ID = 8453;
 
 export interface FacilitatorCore {
   verify(

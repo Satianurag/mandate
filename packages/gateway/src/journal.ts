@@ -261,7 +261,7 @@ export class Journal {
     this.transaction(() => {
       const row=this.mandate(id), scope=row ? JSON.parse(row.descriptor) : null;
       const effectiveCeiling=this.effectiveAgentCeiling(id,String(scope?.ceilingBaseUnits??"0"));
-      if(!row || row.channel_id || row.deposit!=="funded" || !["stopped","closed"].includes(row.state) || proof.network!=="eip155:84532" || scope.network!==proof.network || String(scope.asset).toLowerCase()!==proof.asset.toLowerCase() || row.session?.toLowerCase()!==proof.from.toLowerCase() || row.payer?.toLowerCase()!==proof.to.toLowerCase() || !/^0x[0-9a-fA-F]{64}$/.test(proof.transaction) || !proof.chainVerified || units(proof.returnedBaseUnits,true)>units(effectiveCeiling)) throw new Error("Return proof does not bind to the reviewed exact-agent allowance");
+      if(!row || row.channel_id || row.deposit!=="funded" || !["stopped","closed"].includes(row.state) || proof.network!=="eip155:8453" || scope.network!==proof.network || String(scope.asset).toLowerCase()!==proof.asset.toLowerCase() || row.session?.toLowerCase()!==proof.from.toLowerCase() || row.payer?.toLowerCase()!==proof.to.toLowerCase() || !/^0x[0-9a-fA-F]{64}$/.test(proof.transaction) || !proof.chainVerified || units(proof.returnedBaseUnits,true)>units(effectiveCeiling)) throw new Error("Return proof does not bind to the reviewed exact-agent allowance");
       if(this.requests(id).some(r=>["reserved","signed","uncertain"].includes(r.state))) throw new Error("Pending payments must be reconciled before closing the allowance");
       const prior=this.db.prepare("SELECT data FROM events WHERE mandate_id=? AND kind='agent.unspent_returned' ORDER BY seq DESC LIMIT 1").get(id) as {data:string}|undefined;
       if(row.state==="closed") {if(!prior || JSON.parse(prior.data).transaction!==proof.transaction)throw new Error("Conflicting agent return proof");return;}
@@ -271,7 +271,7 @@ export class Journal {
   closeEmptyAgentWallet(id:string, proof:{network:string;asset:string;account:string;balanceBaseUnits:string;block:string}):void {
     this.transaction(()=>{
       const row=this.mandate(id),scope=row?JSON.parse(row.descriptor):null;
-      if(!row || row.state!=="stopped" || row.deposit!=="funded" || row.channel_id || proof.network!=="eip155:84532" || scope.network!==proof.network || scope.asset.toLowerCase()!==proof.asset.toLowerCase() || row.session?.toLowerCase()!==proof.account.toLowerCase() || proof.balanceBaseUnits!=="0" || !/^[0-9]+$/.test(proof.block))throw new Error("An exact-agent empty-wallet closure needs an observed matching testnet balance");
+      if(!row || row.state!=="stopped" || row.deposit!=="funded" || row.channel_id || proof.network!=="eip155:8453" || scope.network!==proof.network || scope.asset.toLowerCase()!==proof.asset.toLowerCase() || row.session?.toLowerCase()!==proof.account.toLowerCase() || proof.balanceBaseUnits!=="0" || !/^[0-9]+$/.test(proof.block))throw new Error("An exact-agent empty-wallet closure needs an observed matching testnet balance");
       if(this.requests(id).some(r=>["reserved","signed","uncertain"].includes(r.state)))throw new Error("Pending payments prevent closure");
       const paid=this.requests(id).filter(r=>r.state==="accepted"&&r.network===proof.network&&r.asset.toLowerCase()===proof.asset.toLowerCase()).reduce((sum,r)=>sum+units(r.charged??"0"),0n);
       const effectiveCeiling=units(this.effectiveAgentCeiling(id,String(scope.ceilingBaseUnits)),true);

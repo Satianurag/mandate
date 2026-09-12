@@ -11,8 +11,6 @@ import { digest, type Journal } from "./journal.ts";
 import { AgentFundingController } from "./agent-funding.ts";
 import { AgentReturnController } from "./agent-return.ts";
 import type { ClientEvmSigner } from "@x402/evm";
-import { hederaSettlementVerifier } from "./agent-hedera.ts";
-import { createSealedHederaSigner } from "./hedera.ts";
 import type { AgentModel, AgentToolExecutor } from "./agent-runtime.ts";
 export interface AgentServices {
   model: AgentModel; executor: AgentToolExecutor; authorityId: string;
@@ -37,7 +35,7 @@ export async function loadAgentServices(dataDir: string, journal: Journal): Prom
   try {
     const config = JSON.parse(text) as AgentRuntimeConfiguration;
     if (config.version !== 1) throw new Error("Unsupported agent runtime configuration version");
-    if (config.authority.network !== "eip155:84532") throw new Error("The deployed agent workspace is testnet-only");
+    if (config.authority.hedera || config.sealedHederaKey || config.authority.network !== "eip155:8453") throw new Error("The deployed agent workspace is mainnet-only");
     if (config.authority.toolConfigurationHash && config.authority.toolConfigurationHash !== digest(config.tools)) throw new Error("Agent tool definitions changed after the authority was reviewed");
     const model = new VertexAgentModel(validateVertexConfig({ ...config.vertex }));
     const rpc = new URL(config.rpcUrl);
@@ -49,13 +47,6 @@ export async function loadAgentServices(dataDir: string, journal: Journal): Prom
       const loader = await import(new URL("../../../scripts/load-wallet-pass.mjs", import.meta.url).href) as { ensureWalletPass: () => Promise<string> };
       if (!await loader.ensureWalletPass()) throw new Error("Unlock the provisioned Ledger Key Ring through the OS keychain; never paste a password into the app");
     };
-    let hedera;
-    if (config.authority.hedera) {
-      if (!/^[A-Za-z0-9_-]+\.enc$/.test(config.sealedHederaKey?.file ?? "")) throw new Error("A local sealed Hedera key is required");
-      const ciphertext = await readFile(join(dataDir, config.sealedHederaKey!.file));
-      const delegate = createSealedHederaSigner(ciphertext, config.authority.hedera.accountId);
-      hedera = { signer: { accountId: delegate.accountId, createPartiallySignedTransferTransaction: async (requirements: import("@x402/core/types").PaymentRequirements) => { await ensureKeyRing(); return delegate.createPartiallySignedTransferTransaction(requirements); } }, verify: hederaSettlementVerifier() };
-    }
     const address = getAddress(config.authority.spendingAddress);
     const spendingSigner: ClientEvmSigner = {
       address,
@@ -70,8 +61,8 @@ export async function loadAgentServices(dataDir: string, journal: Journal): Prom
         });
       },
     };
-    const executor = new ExactAgentExecutor({ authority: config.authority, journal, tools: createAgentTools(config.tools), hedera,
-      receiptLookupUrls: Object.values(config.tools.testnetEndpoints ?? {}), receiptLocator: evmAgentReceiptLocator(config.rpcUrl, config.authority.network),
+    const executor = new ExactAgentExecutor({ authority: config.authority, journal, tools: createAgentTools(config.tools),
+      receiptLookupUrls: Object.values(config.tools.endpoints ?? {}), receiptLocator: evmAgentReceiptLocator(config.rpcUrl, config.authority.network),
       verify: chainSettlementVerifier(config.rpcUrl, config.authority.network), signer: spendingSigner });
     const funding = config.funding ? new AgentFundingController({ authority: config.authority, journal, rpcUrl: config.rpcUrl, facilitatorUrl: config.funding.facilitatorUrl,
       signer: async () => { await ensureKeyRing(); const { DmkEvmSigner } = await import("./dmksigner.ts"); return DmkEvmSigner.create({ timeoutMs: 120000 }); } }) : undefined;
@@ -90,7 +81,7 @@ export async function loadAgentServices(dataDir: string, journal: Journal): Prom
       const effectiveCeiling = journal.effectiveAgentCeiling(a.id, config.authority.ceilingBaseUnits);
       if (BigInt(totals.spent) + BigInt(totals.reserved) >= BigInt(effectiveCeiling)) return { ready: false, reason: "The shared spending allowance is exhausted. Increase it with an explicit Ledger approval or return unused funds." };
       if (BigInt(totals.window) >= BigInt(config.authority.windowBaseUnits)) return { ready: false, reason: "The rolling spending limit is reached. Wait for the reviewed window to clear." };
-      return { ready: true, reason: "Ready: testnet x402 services, live data, and a Ledger-funded bounded allowance." };
+      return { ready: true, reason: "Ready: mainnet x402 services, live data, and a Ledger-funded bounded allowance." };
     };
     return { services: { model, executor, authorityId: config.authority.id, readiness, funding, returns, inspect, reconcilePayment: (id, hint) => executor.reconcile(id, hint) }, reason: readiness().reason };
   } catch (e) { return { services: null, reason: `Agent setup needs attention: ${e instanceof Error ? e.message : "invalid configuration"}` }; }

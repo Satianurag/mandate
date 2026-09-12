@@ -5,8 +5,6 @@ WORKDIR /opt/mandate
 COPY package.json package-lock.json ./
 COPY packages/facilitator/package.json ./packages/facilitator/package.json
 COPY packages/gateway/package.json ./packages/gateway/package.json
-COPY packages/mandate-service/package.json ./packages/mandate-service/package.json
-COPY packages/service/package.json ./packages/service/package.json
 COPY scripts/apply-security-patches.mjs ./scripts/apply-security-patches.mjs
 RUN npm ci --no-audit --no-fund
 COPY --chown=node:node packages ./packages

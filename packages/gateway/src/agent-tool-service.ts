@@ -1,4 +1,4 @@
-/** Real first-party testnet tools over stock x402. Providers supply live data, never fixtures. */
+/** Real first-party mainnet tools over stock x402. Providers supply live data, never fixtures. */
 import { createServer, type IncomingMessage } from "node:http";
 import { HTTPFacilitatorClient, x402ResourceServer, x402HTTPResourceServer, type RoutesConfig } from "@x402/core/server";
 import { ExactEvmScheme } from "@x402/evm/exact/server";
@@ -25,23 +25,24 @@ async function bodyOf(req: IncomingMessage): Promise<Record<string, unknown>> {
   return body as Record<string, unknown>;
 }
 export async function createAgentToolService(input: {
-  network: "eip155:84532" | "hedera:testnet"; payTo: string; facilitatorUrl: string;
+  network: "eip155:8453" | "hedera:testnet"; payTo: string; facilitatorUrl: string;
   journal: Journal; providers: PaidAgentProvider[];
 }) {
+  if(input.network!=="eip155:8453")throw new Error("Paid services support Base mainnet USDC only");
   const core = new x402ResourceServer(new HTTPFacilitatorClient({ url: input.facilitatorUrl }));
-  if (input.network === "eip155:84532") core.register(input.network, new ExactEvmScheme());
+  if (input.network === "eip155:8453") core.register(input.network, new ExactEvmScheme());
   else core.register(input.network, new ExactHederaScheme());
   const routes: RoutesConfig = {};
   for (const provider of input.providers) {
     if (!/^[1-9]\d{0,5}$/.test(provider.amountBaseUnits)) throw new Error("Tool price must be a bounded positive base-unit amount");
     routes[`POST /tools/${provider.id}`] = { accepts: { scheme: "exact", network: input.network, payTo: input.payTo,
-      price: { asset: input.network === "eip155:84532" ? EXACT_USDC[input.network] : CIRCLE_HEDERA_TESTNET_USDC_HTS, amount: provider.amountBaseUnits,
-        ...(input.network === "eip155:84532" ? { extra: { name: "USDC", version: "2", assetTransferMethod: "eip3009" } } : {}) }, maxTimeoutSeconds: 120 }, description: provider.description };
+      price: { asset: input.network === "eip155:8453" ? EXACT_USDC[input.network] : CIRCLE_HEDERA_TESTNET_USDC_HTS, amount: provider.amountBaseUnits,
+        ...(input.network === "eip155:8453" ? { extra: { name: "USD Coin", version: "2", assetTransferMethod: "eip3009" } } : {}) }, maxTimeoutSeconds: 120 }, description: provider.description };
   }
   const httpServer = new x402HTTPResourceServer(core, routes); await httpServer.initialize();
   const server = createServer({ maxHeaderSize: 131072 }, (req, res) => { void (async () => {
     const path = new URL(req.url ?? "/", "http://127.0.0.1").pathname;
-    if (path === "/healthz" && req.method === "GET") { writeStored(res, { status: 200, headers: {}, body: JSON.stringify({ service: "mandate-agent-tools", network: input.network, providers: input.providers.map(p => ({ id: p.id, description: p.description, amountBaseUnits: p.amountBaseUnits })), testnet: true }) }); return; }
+    if (path === "/healthz" && req.method === "GET") { writeStored(res, { status: 200, headers: {}, body: JSON.stringify({ service: "mandate-agent-tools", network: input.network, providers: input.providers.map(p => ({ id: p.id, description: p.description, amountBaseUnits: p.amountBaseUnits })), mainnet: true }) }); return; }
     const provider = input.providers.find(p => path === `/tools/${p.id}`);
     if (!provider || req.method !== "POST" || req.url?.includes("?")) { writeStored(res, { status: 404, headers: {}, body: '{"error":"Unknown tool"}' }); return; }
     let body: Record<string, unknown>;

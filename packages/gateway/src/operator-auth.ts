@@ -45,21 +45,16 @@ export class OperatorAuth {
     this.cookie(res, `mandate_session=${session}; HttpOnly; SameSite=Strict; Path=/; Max-Age=28800`);
     return { role: "operator", csrf, sessionHash };
   }
-  prepareWorkspaceTransition(res: ServerResponse): void {
-    const now = Date.now(), transition = fresh();
-    this.journal.db.prepare("DELETE FROM operator_workspace_transitions WHERE expires_at<?").run(now);
-    this.journal.db.prepare("INSERT INTO operator_workspace_transitions VALUES(?,?)").run(hash(transition), now + 10 * 60000);
-    this.cookie(res, `mandate_workspace=${transition}; HttpOnly; SameSite=Strict; Path=/workspace; Max-Age=600`);
-  }
-  loginFromWorkspaceTransition(req: IncomingMessage, res: ServerResponse): Principal | null {
-    const token = /(?:^|;\s*)mandate_workspace=([A-Za-z0-9_-]{43})(?:;|$)/.exec(req.headers.cookie ?? "")?.[1];
-    if (!token) return null;
-    const transitionHash = hash(token), now = Date.now();
-    const row = this.journal.db.prepare("SELECT expires_at FROM operator_workspace_transitions WHERE hash=? AND expires_at>?").get(transitionHash, now) as
-      { expires_at: number } | undefined;
-    this.journal.db.prepare("DELETE FROM operator_workspace_transitions WHERE hash=?").run(transitionHash);
-    this.cookie(res, "mandate_workspace=; HttpOnly; SameSite=Strict; Path=/workspace; Max-Age=0");
-    return row ? this.createOperatorSession(res, now) : null;
+  /** Opening the trusted local document establishes its HttpOnly session directly. */
+  loginFromLocalNavigation(req: IncomingMessage, res: ServerResponse, origin: string): void {
+    const peer = req.socket.remoteAddress;
+    if (!['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(peer ?? '') ||
+        req.headers.forwarded || req.headers['x-forwarded-for'] || req.headers['x-forwarded-host']) return;
+    if (req.headers['sec-fetch-mode'] !== 'navigate' || req.headers['sec-fetch-dest'] !== 'document') return;
+    // A clicked link may originate elsewhere; hidden frames and background fetches cannot open a session.
+    if (req.headers['sec-fetch-site'] !== 'same-origin' && req.headers['sec-fetch-user'] !== '?1') return;
+    try { this.authenticate(req, origin); return; } catch { /* Missing or expired session. */ }
+    this.createOperatorSession(res);
   }
   checkOrigin(req: IncomingMessage, origin: string): void {
     if (req.headers.origin !== origin) throw new HttpError(403, "Operator mutations require the exact local Origin");
@@ -90,7 +85,7 @@ export class OperatorAuth {
     }
     const token = /(?:^|;\s*)mandate_session=([A-Za-z0-9_-]{43})(?:;|$)/.exec(req.headers.cookie ?? "")?.[1];
     const row = token ? this.journal.db.prepare("SELECT csrf FROM operator_sessions WHERE hash=? AND expires_at>?").get(hash(token), Date.now()) as { csrf: string } | undefined : undefined;
-    if (!token || !row) throw new HttpError(401, "Connect this browser using npm run console:open");
+    if (!token || !row) throw new HttpError(401, "Reload the local workspace to reconnect");
     if (!["GET", "HEAD"].includes(req.method ?? "GET")) {
       this.checkOrigin(req, origin);
       if (req.headers["x-mandate-csrf"] !== row.csrf) throw new HttpError(403, "Missing or invalid operator CSRF token");

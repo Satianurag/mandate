@@ -5,7 +5,7 @@ import { validateScope, type MandateScope } from "./scope.ts";
 import { units } from "./journal.ts";
 export interface MandateFile extends MandateScope {
   version: 2;
-  network: "eip155:84532";
+  network: "eip155:8453";
   rpcUrl: string;
   salt: `0x${string}`;
   operatorAddress: `0x${string}`;
@@ -25,7 +25,7 @@ export function parseMandateFile(text: string): MandateFile {
   if (d.version !== 2) fail("version", "must be 2");
   const allowed = new Set(["version","network","rpcUrl","serviceUrl","ceilingBaseUnits","perCallBaseUnits","windowBaseUnits","windowMs","salt","receiver","asset","receiverAuthorizer","withdrawDelay","expiresAt","operatorAddress","sessionKey","derivationPath","storageRoot","researchSource"]);
   for (const k of Object.keys(d)) if (!allowed.has(k)) fail(k, "is not a recognized authority field");
-  if (d.network !== "eip155:84532") fail("network", "must be eip155:84532 for the Ledger operator workspace");
+  if (d.network !== "eip155:8453") fail("network", "must be eip155:8453 for the Ledger operator workspace");
   for (const f of ["rpcUrl","serviceUrl","sessionKey","storageRoot","expiresAt"] as const) {
     if (typeof d[f] !== "string" || !(d[f] as string).trim()) fail(f, "must be a non-empty string");
   }
@@ -43,7 +43,7 @@ export function parseMandateFile(text: string): MandateFile {
   if (!/^[A-Za-z0-9_-]{1,64}$/.test(String(d.sessionKey))) fail("sessionKey", "must be a safe Key Ring name");
   if (d.derivationPath !== undefined && (typeof d.derivationPath !== "string" || !/^44'\/60'\/[0-9]+'\/[0-9]+\/[0-9]+$/.test(d.derivationPath))) fail("derivationPath", "must be an Ethereum BIP-44 path");
   const result = { ...d, derivationPath: d.derivationPath ?? "44'/60'/0'/0/0" } as unknown as MandateFile;
-  return { ...result, ...validateScope(scopeOf(result)), network: "eip155:84532" };
+  return { ...result, ...validateScope(scopeOf(result)), network: "eip155:8453" };
 }
 export function scopeOf(m: MandateFile): MandateScope {
   return { network: m.network, serviceUrl: m.serviceUrl, asset: m.asset, receiver: m.receiver,

@@ -4,8 +4,8 @@ import { parseMandateFile } from "./mandate-config.ts";
 
 const GOOD = `
 version: 2
-network: eip155:84532
-rpcUrl: https://sepolia.base.org
+network: eip155:8453
+rpcUrl: https://mainnet.base.org
 serviceUrl: http://127.0.0.1:8405/analytics
 ceilingBaseUnits: "5000000"
 salt: "0x${"ab".repeat(32)}"
@@ -38,11 +38,11 @@ test("parses a valid mandate file and checksums the receiver", () => {
 
 test("rejects wrong version, network, and malformed fields by name", () => {
   assert.throws(() => parseMandateFile(GOOD.replace("version: 2", "version: 3")), /"version"/);
-  assert.throws(() => parseMandateFile(GOOD.replace("eip155:84532", "eip155:1")), /"network"/);
+  assert.throws(() => parseMandateFile(GOOD.replace("eip155:8453", "eip155:1")), /"network"/);
   assert.throws(() => parseMandateFile(GOOD.replace('"5000000"', '"5.0"')), /"ceilingBaseUnits"/);
   assert.throws(() => parseMandateFile(GOOD.replace("ab".repeat(32), "ab")), /"salt"/);
   assert.throws(() => parseMandateFile(GOOD.replace("0x000000000000000000000000000000000000dEaD", "nope")), /"receiver"/);
-  assert.throws(() => parseMandateFile(GOOD.replace("https://sepolia.base.org", "gopher://x")), /"rpcUrl"/);
+  assert.throws(() => parseMandateFile(GOOD.replace("https://mainnet.base.org", "gopher://x")), /"rpcUrl"/);
   assert.throws(() => parseMandateFile("[]"), /mapping/);
   assert.throws(() => parseMandateFile(":\n: bad"), /invalid YAML/);
 });

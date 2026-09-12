@@ -32,7 +32,7 @@ test("joinSignature pads short r/s and normalizes 0/1-style v to 27/28", () => {
 
 test("withExplicitEip712DomainType adds Ledger-compatible canonical domain schema without mutation", () => {
   const original = {
-    domain: { name: "USDC", version: "2", chainId: 84532, verifyingContract: "0x036CbD53842c5426634e7929541eC2318f3dCF7e" },
+    domain: { name: "USDC", version: "2", chainId: 8453, verifyingContract: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" },
     types: { ReceiveWithAuthorization: [{ name: "from", type: "address" }] } as Record<string, unknown>,
     primaryType: "ReceiveWithAuthorization",
     message: { from: "0x0000000000000000000000000000000000000001" },
@@ -50,7 +50,7 @@ test("withExplicitEip712DomainType adds Ledger-compatible canonical domain schem
 
 test("withExplicitEip712DomainType preserves an explicit caller domain schema", () => {
   const domain = [{ name: "chainId", type: "uint256" }];
-  const original = { domain: { chainId: 84532 }, types: { EIP712Domain: domain }, primaryType: "Ping", message: {} };
+  const original = { domain: { chainId: 8453 }, types: { EIP712Domain: domain }, primaryType: "Ping", message: {} };
   const normalized = withExplicitEip712DomainType(original);
   assert.deepEqual(normalized.types.EIP712Domain, domain);
 });
@@ -58,7 +58,7 @@ test("withExplicitEip712DomainType preserves an explicit caller domain schema", 
 
 test("Ledger domain normalization preserves the exact EIP-712 digest", () => {
   const original = {
-    domain: { name: "USDC", version: "2", chainId: 84532, verifyingContract: "0x036CbD53842c5426634e7929541eC2318f3dCF7e" },
+    domain: { name: "USDC", version: "2", chainId: 8453, verifyingContract: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" },
     types: {
       ReceiveWithAuthorization: [
         { name: "from", type: "address" },

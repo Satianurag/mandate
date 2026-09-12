@@ -18,12 +18,12 @@ const core: FacilitatorCore = {
       {
         x402Version: 2,
         scheme: "batch-settlement",
-        network: "eip155:84532",
+        network: "eip155:8453",
         extra: { receiverAuthorizer: "0x0000000000000000000000000000000000000002" },
       },
     ],
     extensions: [],
-    signers: { "eip155:84532": ["0x0000000000000000000000000000000000000003"] },
+    signers: { "eip155:8453": ["0x0000000000000000000000000000000000000003"] },
   }),
 };
 
@@ -103,7 +103,7 @@ test("buildCore refuses the wrong chain or missing settlement contracts", async 
   }
   const keys = () => ({ submitter: randomBytes(32), authorizer: randomBytes(32) });
 
-  const good = await stubRpc({ chainId: 84532, code: "0x6001600101" });
+  const good = await stubRpc({ chainId: 8453, code: "0x6001600101" });
   const core = await buildCore(good, keys());
   assert.equal(typeof core.verify, "function");
   const supported = core.getSupported();
@@ -116,12 +116,12 @@ test("buildCore refuses the wrong chain or missing settlement contracts", async 
   const good296 = await stubRpc({ chainId: 296, code: "0x6001600101" });
   const dual = await buildCore(good296, keys(), core as never);
   const dualKinds = dual.getSupported().kinds;
-  assert.ok(dualKinds.some((k) => k.scheme === "batch-settlement" && k.network === "eip155:84532"));
+  assert.ok(dualKinds.some((k) => k.scheme === "batch-settlement" && k.network === "eip155:8453"));
   assert.ok(dualKinds.some((k) => k.scheme === "batch-settlement" && k.network === "eip155:296"));
 
   const wrongChain = await stubRpc({ chainId: 1, code: "0x6001600101" });
   await assert.rejects(() => buildCore(wrongChain, keys()), /not a mandate testnet/);
-  const noContract = await stubRpc({ chainId: 84532, code: "0x" });
+  const noContract = await stubRpc({ chainId: 8453, code: "0x" });
   await assert.rejects(() => buildCore(noContract, keys()), /No contract at/);
 });
 

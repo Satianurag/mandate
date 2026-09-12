@@ -18,13 +18,13 @@ import { HTTPFacilitatorClient } from "@x402/core/http";
 export const BLOCKY402_URL = "https://api.testnet.blocky402.com";
 
 /**
- * Base Sepolia USDC + chain facts, single-sourced for the mandate service.
+ * Base mainnet USDC + chain facts, single-sourced for the mandate service.
  * Observed against the live chain; the service boot gate re-asserts the
  * deployment before serving.
  */
 export const BASE_SEPOLIA = {
-  chainId: 84532,
-  usdc: "0x036CbD53842c5426634e7929541eC2318f3dCF7e" as const,
+  chainId: 8453,
+  usdc: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" as const,
 } as const;
 
 /** Circle Hedera testnet USDC HTS id (https://developers.circle.com/stablecoins/usdc-contract-addresses). */

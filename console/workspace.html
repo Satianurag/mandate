@@ -1,111 +1,90 @@
 <!doctype html>
-<html lang="en">
-<head>
+<html lang="en"><head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="color-scheme" content="light">
   <title>Mandate | Workspace</title>
   <link rel="icon" href="/favicon.svg">
   <link rel="stylesheet" href="/workspace.css">
-  <script src="/workspace.js" defer></script>
-  <script src="/agents.js" defer></script>
-</head>
-<body>
+
+
+<script src="/workspace.js" defer></script><script src="/agents.js" defer></script><script src="/setup.js" defer></script></head>
+<body class="agent-mode is-connected">
 <a class="skip" href="#main">Skip to workspace</a>
 
 <header class="topbar">
-  <a class="brand" href="/" aria-label="Mandate testnet workspace">
+  <a class="brand" href="/" aria-label="Mandate mainnet workspace">
     <span class="brand-symbol" aria-hidden="true">M</span>
     <span>Mandate</span>
-    <span class="brand-tag">TESTNET</span>
+    <span class="brand-tag">MAINNET</span>
   </a>
   <div class="connection">
     <span id="connectionDot" class="dot"></span>
     <span id="connectionText" role="status">Connecting</span>
-    <button id="logout" class="quiet" hidden>Disconnect</button>
   </div>
 </header>
 
-<aside id="appSidebar" class="app-sidebar" aria-label="Workspace navigation" hidden>
-  <button class="new-task-button" data-navigate="task" type="button">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+<aside id="appSidebar" class="app-sidebar" aria-label="Workspace navigation">
+  <button class="new-task-button" data-navigate="agents" type="button">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>
     <span>New task</span>
   </button>
-  <button id="newMandate" class="compat-only" type="button" tabindex="-1">New Mandate</button>
+
 
   <nav aria-label="Primary navigation">
     <button class="nav-item active" data-navigate="home" aria-current="page" type="button">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-8H9v8H4a1 1 0 0 1-1-1z"/></svg>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-8H9v8H4a1 1 0 0 1-1-1z"></path></svg>
       <span>Home</span>
     </button>
-    <button class="nav-item" data-navigate="task" type="button" aria-label="Run task">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+    <button class="nav-item" data-navigate="agents" type="button" aria-label="Run task">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"></path></svg>
       <span>New task</span>
     </button>
     <button class="nav-item" data-navigate="history" type="button" aria-label="Task history">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11a9 9 0 1 1 2 7M3 5v6h6m3-4v5l3 2"/></svg>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11a9 9 0 1 1 2 7M3 5v6h6m3-4v5l3 2"></path></svg>
       <span>Runs</span>
     </button>
-    <button class="nav-item" data-navigate="authority" type="button" aria-label="Spending & limits">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="15" rx="3"/><path d="M3 10h18M16 15h3"/></svg>
+    <button class="nav-item" data-navigate="authority" type="button" aria-label="Spending &amp; limits">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="15" rx="3"></rect><path d="M3 10h18M16 15h3"></path></svg>
       <span>Ledger budget</span>
     </button>
-    <button class="nav-item dev-nav" data-navigate="evidence" type="button" aria-label="Activity & receipts">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 11h1v5h1"/></svg>
-      <span class="dev-label">Developer details</span>
+    <button class="nav-item dev-nav" data-navigate="evidence" type="button" aria-label="Receipts">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 8h.01M11 11h1v5h1"></path></svg>
+      <span class="dev-label">Receipts</span>
     </button>
-  </nav>
+  <button class="nav-item" data-navigate="settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="3"/><circle cx="15" cy="17" r="3"/></svg><span>Settings</span></button></nav>
 
   <div class="sidebar-spacer"></div>
   <div class="sidebar-bottom">
     <span class="workspace-avatar">M</span>
-    <div><strong>My workspace</strong><span>Local · Testnet</span></div>
+    <div><strong>My workspace</strong><span>Local · Mainnet</span></div>
   </div>
 </aside>
 
 <main id="main">
-  <section id="loginPanel" class="login panel" aria-labelledby="loginTitle">
-    <span class="login-mark" aria-hidden="true">M</span>
-    <p class="eyebrow">MANDATE WORKSPACE</p>
-    <h1 id="loginTitle">Let the agent work.<br>Keep spending controlled.</h1>
-    <p class="lead">Open the authenticated local workspace. Payment keys stay behind the broker, and paid work stays inside reviewed testnet limits.</p>
-    <div class="command">npm run console:open</div>
-    <p class="subtle">This opens an authenticated session without printing the access token.</p>
-    <details class="support-disclosure">
-      <summary>Trouble connecting?</summary>
-      <form id="loginForm">
-        <label for="token">Operator access token</label>
-        <input id="token" type="password" autocomplete="off" spellcheck="false" required>
-        <button class="primary" type="submit">Connect workspace</button>
-      </form>
-    </details>
-    <p id="loginError" class="error" role="alert"></p>
-  </section>
 
-  <div id="workspace" hidden>
-    <section class="heading dashboard-heading compat-heading" aria-hidden="true">
-      <div class="greeting"><span class="greeting-icon">·</span><div><h1 id="dashboardGreeting">Home</h1><p id="dashboardDate" class="subtle"></p></div></div>
-      <span id="agentHeaderStatus" class="badge neutral agent-only">Checking allowance</span>
-    </section>
 
-    <div id="globalMessage" class="message" role="status" aria-live="polite" hidden></div>
+  <div id="workspace">
+
+
+    <div id="globalMessage" class="message" role="status" aria-live="polite" hidden=""></div>
 
     <section id="homeView" data-view="home" class="product-view home-view">
-      <section id="agentHomeOverview" class="agent-home agent-only" hidden aria-labelledby="agentHomeTitle">
+      <section id="agentHomeOverview" class="agent-home" aria-labelledby="agentHomeTitle">
         <div class="page-header">
           <div>
             <p class="eyebrow">WORKSPACE</p>
             <h1 id="agentHomeTitle">Let the agent work.</h1>
             <p class="page-subtitle">Delegate a goal. Mandate keeps the approved spending boundary around it.</p>
           </div>
-          <button id="agentHomePrimary" class="primary">New task</button>
+          <button id="agentHomePrimary" class="primary" data-navigate="agents">New task</button>
         </div>
 
         <div class="home-budget-strip" aria-label="Agent budget summary">
           <button class="budget-hero" type="button" data-navigate="authority">
             <span>Available</span>
             <strong id="agentHomeRemaining">0</strong>
-            <small>test USDC ready for approved work</small>
+            <small>USDC ready for approved work</small>
           </button>
           <div class="budget-stat"><span>Approved</span><strong id="agentHomeCeiling">Not funded</strong><small>Ledger-approved total</small></div>
           <div class="budget-stat"><span>Spent</span><strong id="agentHomeSpent">0</strong><small>Confirmed payments</small></div>
@@ -122,26 +101,10 @@
       </section>
 
       <!-- Compatibility/recovery shell. It is visible only when the agent stack is not configured. -->
-      <div class="compat-only legacy-home-shell" aria-hidden="true">
-        <div class="legacy-home-card">
-          <div>
-            <p class="eyebrow">LOCAL WORKSPACE</p>
-            <h2>Review a Mandate before paid work.</h2>
-            <p class="subtle">The source-bound operator tools remain available for recovery and test environments. Agent mode hides this surface.</p>
-          </div>
-          <button class="secondary" data-navigate="authority" type="button">Review authority</button>
-        </div>
-        <div class="legacy-overview" aria-label="Mandate accounting">
-          <div><span>Spending limit</span><strong id="cap">Not configured</strong><small id="capLabel">Configured ceiling</small></div>
-          <div><span>Budget used</span><strong id="budgetPercent">—</strong><small id="budgetNote">Review your spending limit</small></div>
-          <div><span>Tasks completed</span><strong id="completedCount">0</strong><small id="completedNote">In this Mandate</small></div>
-          <div><span>Accepted / reserved / remaining</span><strong><span id="spent">—</span> · <span id="reserved">—</span> · <span id="remaining">—</span></strong><small>Testnet accounting</small></div>
-        </div>
-        <span id="recentCount" class="sr-only"></span><div id="recentWork" class="legacy-recent"></div><span id="attentionCount" class="sr-only"></span><div id="attentionList" class="legacy-recent"></div>
-      </div>
+
     </section>
 
-    <section class="panel agents-panel product-view" data-view="task" hidden aria-labelledby="agentsTitle">
+    <section class="panel agents-panel product-view" data-view="agents" hidden="" aria-labelledby="agentsTitle">
       <div class="page-header compact-page-header">
         <div>
           <p class="eyebrow">NEW TASK</p>
@@ -152,16 +115,20 @@
       </div>
       <div class="section-heading agent-picker-heading"><div><h2>Choose an agent</h2><p>Each agent has a bounded per-run budget and a fixed set of capabilities.</p></div></div>
       <div id="agentCards" class="agent-cards" aria-live="polite"><p class="subtle">Loading agents…</p></div>
-      <div id="agentPendingSubmission" class="notice" hidden>
+      <div id="agentPendingSubmission" class="notice" hidden="">
         <div><strong>Existing request is still being checked</strong><p id="agentPendingSubmissionText"></p></div>
         <button id="agentObserveSubmission" class="secondary" type="button">Check status</button>
       </div>
       <p id="agentReadiness" class="readiness-line subtle" role="status"></p>
-      <button id="agentReviewShortcut" class="text-button budget-shortcut agent-only" type="button">Review Ledger budget</button>
-      <div id="agentRunDetail" class="agent-run-detail" hidden></div>
-    </section>
+      <button id="agentReviewShortcut" class="text-button budget-shortcut" type="button">Review Ledger budget</button>
 
-    <section id="agentAllowancePanel" class="panel agent-only product-view budget-view" data-view="authority" hidden aria-labelledby="agentAllowanceTitle">
+    </section><section class="panel product-view" data-view="task" hidden=""><div class="page-header"><div><p class="eyebrow">RUN DETAIL</p><h1>Results &amp; progress</h1></div><button class="secondary" data-navigate="history">All runs</button></div><p id="noSelectedRun" class="empty-inline">Choose a run from Runs to see its result.</p><div id="agentRunDetail" class="agent-run-detail" hidden=""></div></section><section class="panel product-view" data-view="settings" hidden=""><div class="page-header"><div><p class="eyebrow">SETTINGS</p><h1>Model &amp; connection</h1><p class="page-subtitle">Gemini 3.5 Flash plans, chooses tools and reasons through your task using your gcloud account.</p></div></div><p id="setupReadiness" role="status"></p><div class="setup-section"><div class="form-grid"><label>Google Cloud project<input id="setupProject" autocomplete="off" placeholder="your-project-id"></label><label>Region<input id="setupLocation" value="global"></label><label>Vertex model<input id="setupModel" value="gemini-3.5-flash"></label><label>Base mainnet RPC<input id="setupRpc" type="url" value="https://mainnet.base.org"></label><label>Funding facilitator<input id="setupFacilitator" type="url" placeholder="https://your-facilitator.example"></label><label>Ledger Key Ring key<input id="setupRing" value="mandate-session"></label></div><p class="subtle setup-note">Gemini 3.5 Flash uses HIGH thinking and up to 65,536 output tokens. Model usage is billed to your Google Cloud project; Ledger controls the x402 spending allowance.</p><button class="primary" data-save-setup>Save settings</button></div><details class="developer-disclosure">
+        <summary>Developer details</summary>
+        <pre id="agentAllowanceTechnical"></pre>
+        <button class="text-button" data-navigate="evidence" type="button">Open receipts &amp; technical details</button>
+      </details></section>
+
+    <section id="agentAllowancePanel" class="panel product-view budget-view" data-view="authority" hidden="" aria-labelledby="agentAllowanceTitle">
       <div class="page-header compact-page-header">
         <div>
           <p class="eyebrow">LEDGER BUDGET</p>
@@ -171,20 +138,21 @@
         <span id="agentAllowanceStatus" class="badge neutral">Not configured</span>
       </div>
 
-      <div class="budget-summary-card">
+      <details id="setupBudgetDetails" class="setup-section" open><summary>Set up your mainnet budget</summary><div class="form-grid"><label class="span-two">Ledger address<input id="setupPayer" placeholder="0x…" autocomplete="off" spellcheck="false"></label><div class="span-two"><button id="setupReadLedger" class="secondary">Read address from Ledger</button></div><label>Total budget · USDC<input id="setupBudget" inputmode="decimal" value="0.25"></label><label>Per payment · USDC<input id="setupPerCall" inputmode="decimal" value="0.02"></label><label>Rolling budget · USDC<input id="setupWindow" inputmode="decimal" value="0.10"></label><label>Rolling window · minutes<input id="setupMinutes" type="number" min="1" value="60"></label><label>Expires after · hours<input id="setupHours" type="number" min="1" max="168" value="24"></label></div><p id="setupDeviceStatus" class="readiness-line" role="status"></p><div class="actions"><button class="secondary" data-save-setup>Save budget draft</button><button id="setupPrepare" class="primary">Prepare spending wallet</button></div><p class="subtle setup-note">Preparation creates an encrypted wallet. Funding happens only after a separate review on your Ledger.</p></details>
+      <div class="budget-summary-card" data-needs-allowance>
         <div class="budget-summary-copy">
           <span class="summary-label">Current budget</span>
           <p id="agentAllowanceSummary" class="lead"></p>
         </div>
         <div class="budget-primary-actions">
           <button id="agentReviewFunding" class="primary">Set up with Ledger</button>
-          <button id="agentIncreaseAllowance" class="primary" hidden>Increase allowance</button>
-          <button id="agentReconcileFunding" class="secondary" hidden>Check funding</button>
-          <button id="agentReconcileIncrease" class="secondary" hidden>Check increase</button>
+          <button id="agentIncreaseAllowance" class="primary" hidden="">Increase allowance</button>
+          <button id="agentReconcileFunding" class="secondary" hidden="">Check funding</button>
+          <button id="agentReconcileIncrease" class="secondary" hidden="">Check increase</button>
         </div>
       </div>
 
-      <div class="section-heading"><div><h2>Guardrails</h2><p>These stay in force while the agent works.</p></div></div>
+      <div class="section-heading" data-needs-allowance><div><h2>Guardrails</h2><p>These stay in force while the agent works.</p></div></div>
       <dl id="agentAllowanceFacts" class="facts guardrail-facts"></dl>
 
       <div class="ledger-principle">
@@ -198,116 +166,60 @@
         <p id="agentReturnProgress" class="status-line subtle" role="status"></p><p id="agentReturnError" class="error" role="alert"></p>
       </div>
 
-      <details class="budget-more">
+      <details class="budget-more" data-needs-allowance>
         <summary>Allowance controls</summary>
         <div class="budget-secondary-actions">
-          <button id="agentReviewReturn" class="secondary" hidden>Return unused funds</button>
-          <button id="agentReconcileReturn" class="secondary" hidden>Check return</button>
-          <button id="agentStopAllowance" class="danger" hidden>Stop allowance</button>
+          <button id="agentReviewReturn" class="secondary" hidden="">Return unused funds</button>
+          <button id="agentReconcileReturn" class="secondary" hidden="">Check return</button>
+          <button id="agentStopAllowance" class="danger" hidden="">Stop allowance</button>
         </div>
       </details>
-      <details class="developer-disclosure">
-        <summary>Developer details</summary>
-        <pre id="agentAllowanceTechnical"></pre>
-        <button class="text-button" data-navigate="evidence" type="button">Open receipts & technical details</button>
-      </details>
+
     </section>
 
-    <section class="panel product-view history-view" data-view="history" hidden aria-labelledby="agentHistoryTitle">
+    <section class="panel product-view history-view" data-view="history" hidden="" aria-labelledby="agentHistoryTitle">
       <div class="page-header compact-page-header">
         <div><p class="eyebrow">RUNS</p><h1 id="agentHistoryTitle">Run history</h1><p class="page-subtitle">Reopen a result with its sources, decisions and spend.</p></div>
       </div>
       <div id="agentHistory" class="history-list"><p class="empty-inline">Your runs will appear here.</p></div>
     </section>
 
-    <section class="panel agent-only product-view developer-view" data-view="evidence" hidden aria-labelledby="agentReceiptsTitle">
+    <section class="panel product-view developer-view" data-view="evidence" hidden="" aria-labelledby="agentReceiptsTitle">
       <div class="page-header compact-page-header">
-        <div><p class="eyebrow">DEVELOPER DETAILS</p><h1 id="agentReceiptsTitle">Receipts & technical evidence</h1><p class="page-subtitle">Use this when you need to inspect settlement or debug a run. It is not part of the normal task flow.</p></div>
+        <div><p class="eyebrow">RECEIPTS</p><h1 id="agentReceiptsTitle">Payment receipts</h1><p class="page-subtitle">Verify payments, inspect settlement and reconcile pending outcomes.</p></div>
         <button class="secondary" data-navigate="authority" type="button">Back to Ledger budget</button>
       </div>
-      <div class="developer-section"><div class="section-heading"><div><h2>Payment receipts</h2><p>Confirmed payments are grouped here for chain inspection.</p></div><span class="badge neutral">Testnet</span></div><div id="agentAllReceipts"></div></div>
+      <div class="developer-section"><div class="section-heading"><div><h2>Payment receipts</h2><p>Confirmed payments are grouped here for chain inspection.</p></div><span class="badge neutral">Mainnet</span></div><div id="agentAllReceipts"></div></div>
     </section>
 
     <footer class="workspace-footer"><span>Mandate</span><span id="observedAt">State not loaded</span></footer>
 
-    <div class="compat-only legacy-controls" aria-hidden="true">
-      <span id="taskHint" class="sr-only" role="status">Review a Mandate before running paid work.</span>
-      <details class="task-diagnostics compat-panel" data-view="task">
-        <summary>Single-query payment diagnostics</summary>
-        <section class="task-panel" aria-labelledby="taskTitle">
-          <div class="panel-header"><div><p class="eyebrow">RECOVERY TOOL</p><h2 id="taskTitle">Agent0 due-diligence brief</h2></div><span id="taskStatus" class="badge neutral">No task yet</span></div>
-          <p class="subtle">Source-bound diagnostics remain here for recovery and verification. The product agent flow above is the normal path.</p>
-          <form id="taskForm">
-            <div id="taskDefinition" class="task-definition"></div>
-            <label for="maxResults">Candidates to compare<select id="maxResults"><option value="2">2 candidates</option><option value="3">3 candidates</option><option value="5" selected>5 candidates</option><option value="8">8 candidates</option><option value="10">10 candidates</option></select></label>
-            <label class="checkline" id="fundingConsent"><input id="authorizeFunding" type="checkbox"><span>Authorize initial escrow funding for this task on my Ledger. The device signature—not this checkbox—approves funding.</span></label>
-            <div id="pendingIntent" class="notice compact" hidden><div><strong>Previous paid intent needs observation</strong><p id="pendingIntentText"></p></div><button id="checkPendingTask" class="secondary" type="button">Check existing task</button></div>
-            <div class="actions"><button id="runTask" class="primary" type="submit">Run paid task</button></div>
-          </form>
-          <div class="result-region" aria-live="polite"><div class="section-heading"><div><h3>Result</h3><p id="resultSource" class="subtle">No paid result yet</p></div></div><div id="result"></div></div>
-        </section>
-      </details>
 
-      <section class="authority-panel compat-panel" data-view="authority">
-        <div class="panel-header"><div><p class="eyebrow">SOURCE-BOUND RECOVERY</p><h2>Reviewed authority</h2></div><span id="mandateStatus" class="badge neutral">Not configured</span></div>
-        <p id="legacyWarning" class="subtle"></p>
-        <dl id="authorityFields" class="facts"></dl>
-        <div class="actions legacy-actions">
-          <button id="configure" class="secondary" type="button">Review authority</button>
-          <button id="preflight" class="secondary" type="button">Run preflight</button>
-          <button id="delegate" class="primary" type="button">Delegate authority</button>
-          <button id="stop" class="secondary" type="button">Stop new work</button>
-          <button id="reconcile" class="secondary" type="button">Reconcile</button>
-          <button id="settle" class="secondary" type="button">Settle</button>
-          <button id="closeMandate" class="secondary" type="button">Close Mandate</button>
-          <button id="refund" class="secondary" type="button">Recover remaining funds</button>
-        </div>
-        <p id="authorityHint" class="subtle"></p>
-        <details id="preflightDetails"><summary>Preflight evidence</summary><pre id="preflightResult"></pre></details>
-      </section>
-
-      <section class="compat-panel" data-view="history">
-        <div class="panel-header"><div><p class="eyebrow">RECOVERY HISTORY</p><h2 id="activityTitle">Task history</h2></div></div>
-        <div id="history"></div>
-      </section>
-      <section class="compat-panel" data-view="evidence">
-        <div class="panel-header"><div><p class="eyebrow">TECHNICAL EVIDENCE</p><h2 id="evidenceTitle">Activity & receipts</h2></div><span id="chainIntegrity" class="badge neutral"></span></div>
-        <div class="actions"><button id="publishEvidence" class="secondary" type="button">Publish evidence</button><span id="anchorHint" class="subtle"></span></div>
-        <div id="evidence"></div>
-      </section>
-    </div>
   </div>
 </main>
 
-<dialog id="configDialog" aria-labelledby="configTitle"><form id="configForm"><div class="dialog-header"><div><p class="eyebrow">DEVELOPER SETUP</p><h2 id="configTitle">Define explicit authority</h2></div><button type="button" class="icon-button" data-close="configDialog" aria-label="Close">×</button></div><div class="form-grid">
-<label>Ledger payer address<input name="operatorAddress" id="operatorAddress" required pattern="0x[0-9a-fA-F]{40}" placeholder="0x…" spellcheck="false"></label><div class="field-button"><button id="readDevice" type="button" class="secondary">Read connected Ledger address</button></div>
-<label>Base Sepolia RPC<input name="rpcUrl" id="rpcUrl" type="url" value="https://sepolia.base.org" required></label><label>Paid resource URL<input name="serviceUrl" id="serviceUrl" type="url" value="http://127.0.0.1:8405/analytics" required></label>
-<label>USDC contract<input name="asset" id="asset" value="0x036CbD53842c5426634e7929541eC2318f3dCF7e" required spellcheck="false"></label><label>Merchant receiver<input name="receiver" id="receiver" required pattern="0x[0-9a-fA-F]{40}" spellcheck="false"></label>
-<label>Receiver authorizer<input name="receiverAuthorizer" id="receiverAuthorizer" required pattern="0x[0-9a-fA-F]{40}" spellcheck="false"></label><label>Withdrawal delay<input name="withdrawDelay" id="withdrawDelay" type="number" min="60" max="2678400" value="86400" required></label>
-<label class="span-two">Agent0 research source<select id="researchSource" required><option value="">Verify live sources</option></select><small id="researchSourceDetail"></small></label><div class="field-button"><button id="loadSources" type="button" class="secondary">Verify sources</button></div>
-<label>Lifetime ceiling<input id="ceilingInput" inputmode="decimal" value="5" required></label><label>Per-call limit<input id="perCallInput" inputmode="decimal" value="0.01" required></label><label>Rolling budget<input id="windowInput" inputmode="decimal" value="0.10" required></label><label>Rolling window<input id="windowMinutes" type="number" min="1" max="44640" value="60" required></label><label>Expiry<input id="expiresInput" type="datetime-local" required></label><label>Sealed session key<input id="sessionKey" value="mandate-session" required pattern="[A-Za-z0-9_-]{1,64}"></label>
-</div><p id="configError" class="error" role="alert"></p><div class="actions"><button id="probeDraft" class="secondary" type="button">Inspect live offer</button><button class="primary" type="submit">Save reviewed scope</button></div><pre id="draftProbe" hidden></pre></form></dialog>
 
-<dialog id="refundDialog" aria-labelledby="refundTitle"><div class="dialog-header"><h2 id="refundTitle">Recover remaining funds</h2><button class="icon-button" data-close="refundDialog" aria-label="Close">×</button></div><p>Stop new work and recover eligible testnet funds.</p><div class="dialog-actions"><button class="secondary" data-close="refundDialog">Cancel</button><button id="confirmRefund" class="primary">Request refund</button></div></dialog>
+
+
 
 <dialog id="agentFundingDialog" class="ledger-dialog" aria-labelledby="agentFundingTitle">
   <div class="dialog-header"><div><p class="eyebrow">LEDGER APPROVAL</p><h2 id="agentFundingTitle">Set up agent budget</h2></div><button id="closeAgentFunding" class="icon-button" aria-label="Close">×</button></div>
   <p id="agentFundingReviewText" class="lead"></p>
   <dl id="agentFundingReviewFacts" class="facts review-facts"></dl>
   <div class="device-callout"><span class="device-symbol" aria-hidden="true">L</span><div><strong>Review on your Ledger</strong><p>Unlock your device, open Ethereum, then verify the amount and destination on the secure screen.</p></div></div>
-  <form id="agentFundingForm"><label class="checkline"><input id="agentFundingConsent" type="checkbox" required><span>I reviewed this budget and want to continue to the Ledger device.</span></label><p id="agentFundingDialogError" class="error" role="alert"></p><div class="dialog-footer"><button class="secondary" type="button" data-product-close="agentFundingDialog">Cancel</button><button id="agentConfirmFunding" class="primary" type="submit" aria-label="Approve funding on Ledger">Review on Ledger</button></div></form>
+  <form id="agentFundingForm"><label class="checkline"><input id="agentFundingConsent" type="checkbox" required=""><span>I reviewed this budget and want to continue to the Ledger device.</span></label><p id="agentFundingDialogError" class="error" role="alert"></p><div class="dialog-footer"><button class="secondary" type="button" data-product-close="agentFundingDialog">Cancel</button><button id="agentConfirmFunding" class="primary" type="submit" aria-label="Approve funding on Ledger">Review on Ledger</button></div></form>
 </dialog>
 
 <dialog id="agentIncreaseDialog" class="ledger-dialog" aria-labelledby="agentIncreaseTitle">
   <div class="dialog-header"><div><p class="eyebrow">LEDGER APPROVAL</p><h2 id="agentIncreaseTitle">Increase allowance</h2></div><button id="closeAgentIncrease" class="icon-button" aria-label="Close">×</button></div>
   <p class="lead">Add budget without changing the agent's services, per-purchase limit, hourly limit or expiry.</p>
   <form id="agentIncreaseForm">
-    <label>Increase by (test USDC)<input id="agentIncreaseAmount" inputmode="decimal" value="0.10" required></label>
+    <label>Increase by (USDC)<input id="agentIncreaseAmount" inputmode="decimal" value="0.10" required=""></label>
     <button id="agentPreviewIncrease" class="secondary" type="button">Review amount</button>
-    <div id="agentIncreaseReview" hidden class="increase-review">
+    <div id="agentIncreaseReview" hidden="" class="increase-review">
       <p id="agentIncreaseReviewText" class="lead"></p><dl id="agentIncreaseReviewFacts" class="facts review-facts"></dl>
       <div class="device-callout"><span class="device-symbol" aria-hidden="true">L</span><div><strong>Fresh Ledger approval required</strong><p>The new transfer is not usable until the device signature and chain confirmation both succeed.</p></div></div>
-      <label class="checkline"><input id="agentIncreaseConsent" type="checkbox" required><span>I approve exactly this additional funding amount.</span></label>
+      <label class="checkline"><input id="agentIncreaseConsent" type="checkbox" required=""><span>I approve exactly this additional funding amount.</span></label>
       <div class="dialog-footer"><button class="secondary" type="button" data-product-close="agentIncreaseDialog">Cancel</button><button id="agentConfirmIncrease" class="primary" type="submit" aria-label="Approve increase on Ledger">Review increase on Ledger</button></div>
     </div>
     <p id="agentIncreaseDialogError" class="error" role="alert"></p>
@@ -318,16 +230,17 @@
   <div class="dialog-header"><div><p class="eyebrow">CLOSE ALLOWANCE</p><h2 id="agentReturnTitle">Return unused funds</h2></div><button id="closeAgentReturn" class="icon-button" aria-label="Close">×</button></div>
   <p id="agentReturnReviewText" class="lead"></p><dl id="agentReturnReviewFacts" class="facts review-facts"></dl>
   <div class="device-callout"><span class="device-symbol" aria-hidden="true">L</span><div><strong>Returns only to the original payer</strong><p>Mandate never asks you to enter a different destination for this return.</p></div></div>
-  <form id="agentReturnForm"><label class="checkline"><input id="agentReturnConsent" type="checkbox" required><span>Stop this allowance and return exactly the displayed amount.</span></label><p id="agentReturnDialogError" class="error" role="alert"></p><div class="dialog-footer"><button class="secondary" type="button" data-product-close="agentReturnDialog">Cancel</button><button id="agentConfirmReturn" class="primary" type="submit">Continue</button></div></form>
+  <form id="agentReturnForm"><label class="checkline"><input id="agentReturnConsent" type="checkbox" required=""><span>Stop this allowance and return exactly the displayed amount.</span></label><p id="agentReturnDialogError" class="error" role="alert"></p><div class="dialog-footer"><button class="secondary" type="button" data-product-close="agentReturnDialog">Cancel</button><button id="agentConfirmReturn" class="primary" type="submit">Continue</button></div></form>
 </dialog>
 
 <dialog id="agentEditor" aria-labelledby="agentEditorTitle"><div class="dialog-header"><div><p class="eyebrow">AGENT</p><h2 id="agentEditorTitle">Create agent</h2></div><button class="icon-button" id="closeAgentEditor" aria-label="Close">×</button></div>
-<form id="agentEditorForm"><label>Name<input id="agentName" maxlength="80" required placeholder="Research analyst"></label><label>Short description<input id="agentDescription" maxlength="400" placeholder="What this agent helps you accomplish"></label><label>Default goal<textarea id="agentGoal" maxlength="8000" rows="3" placeholder="Optional starting goal"></textarea></label><label>Instructions<textarea id="agentInstructions" maxlength="8000" rows="4" required placeholder="How should it investigate and handle uncertainty?"></textarea></label><label>Expected result<textarea id="agentOutput" maxlength="2000" rows="2" required placeholder="A sourced result with recommendations and limitations"></textarea></label><fieldset><legend>Permitted paid tools</legend><div id="agentToolChoices" class="agent-tool-choices"></div></fieldset><details class="advanced-form"><summary>Advanced limits</summary><div class="form-grid"><label>Run budget<input id="agentBudget" inputmode="decimal" value="0.10" required></label><label>Max per purchase<input id="agentPerCall" inputmode="decimal" value="0.02" required></label><label>Max decisions<input id="agentSteps" type="number" min="2" max="30" value="12" required></label><label>Max runtime<input id="agentDuration" type="number" min="30" max="1800" value="300" required></label></div></details><p id="agentEditorError" class="error" role="alert"></p><button class="primary wide" type="submit">Save agent</button></form></dialog>
+<form id="agentEditorForm"><label>Name<input id="agentName" maxlength="80" required="" placeholder="Research analyst"></label><label>Short description<input id="agentDescription" maxlength="400" placeholder="What this agent helps you accomplish"></label><label>Default goal<textarea id="agentGoal" maxlength="8000" rows="3" placeholder="Optional starting goal"></textarea></label><label>Instructions<textarea id="agentInstructions" maxlength="8000" rows="4" required="" placeholder="How should it investigate and handle uncertainty?"></textarea></label><label>Expected result<textarea id="agentOutput" maxlength="2000" rows="2" required="" placeholder="A sourced result with recommendations and limitations"></textarea></label><fieldset><legend>Permitted paid tools</legend><div id="agentToolChoices" class="agent-tool-choices"></div></fieldset><details class="advanced-form"><summary>Advanced limits</summary><div class="form-grid"><label>Run budget<input id="agentBudget" inputmode="decimal" value="0.10" required=""></label><label>Max per purchase<input id="agentPerCall" inputmode="decimal" value="0.02" required=""></label><label>Max decisions<input id="agentSteps" type="number" min="2" max="30" value="12" required=""></label><label>Max runtime<input id="agentDuration" type="number" min="30" max="1800" value="300" required=""></label></div></details><p id="agentEditorError" class="error" role="alert"></p><button class="primary wide" type="submit">Save agent</button></form></dialog>
 
 <dialog id="agentLaunch" class="task-dialog" aria-labelledby="agentLaunchTitle">
   <div class="dialog-header"><div><p class="eyebrow">NEW TASK</p><h2 id="agentLaunchTitle">Start a task</h2></div><button class="icon-button" id="closeAgentLaunch" aria-label="Close">×</button></div>
-  <form id="agentLaunchForm"><p id="agentLaunchDescription" class="subtle"></p><label>What should this agent accomplish?<textarea id="agentLaunchGoal" rows="5" maxlength="8000" required placeholder="Describe the outcome you want…"></textarea></label><div id="agentLaunchLimits" class="run-boundary"></div><p id="agentLaunchError" class="error" role="alert"></p><div class="dialog-footer"><button class="secondary" type="button" data-product-close="agentLaunch">Cancel</button><button id="launchAgent" class="primary" type="submit">Start task</button></div></form>
+  <form id="agentLaunchForm"><p id="agentLaunchDescription" class="subtle"></p><label>What should this agent accomplish?<textarea id="agentLaunchGoal" rows="5" maxlength="8000" required="" placeholder="Describe the outcome you want…"></textarea></label><div id="agentLaunchLimits" class="run-boundary"></div><button type="button" id="agentPreview" class="secondary">Preview plan &amp; price</button><div id="agentPlan" class="plan-review" hidden></div><p id="agentLaunchError" class="error" role="alert"></p><div class="dialog-footer"><button class="secondary" type="button" data-product-close="agentLaunch">Cancel</button><button id="launchAgent" class="primary" type="submit">Start task</button></div></form>
 </dialog>
 
-</body>
-</html>
+
+
+</body></html>

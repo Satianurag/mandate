@@ -4,11 +4,11 @@ import {Journal} from './journal.ts';import {AgentReturnController} from './agen
 const payer=privateKeyToAccount(`0x${'11'.repeat(32)}`),spending=privateKeyToAccount(`0x${'22'.repeat(32)}`),hash=`0x${'bc'.repeat(32)}`;
 function fixture(t:{after:(fn:()=>void)=>void},options:{ambiguous?:boolean;balance?:string}={}){
  const journal=new Journal(':memory:');t.after(()=>journal.close());
- const a:ExactAgentAuthority={id:'test-return',network:'eip155:84532',asset:EXACT_USDC['eip155:84532'],payerAddress:payer.address,spendingAddress:spending.address,expiresAt:Date.now()+60000,ceilingBaseUnits:'250000',perCallBaseUnits:'250000',windowBaseUnits:'250000',windowMs:60000,tools:[{id:'graph-protocol',origin:'http://127.0.0.1:8425',pathname:'/tools/graph-protocol',payTo:payer.address}]};
+ const a:ExactAgentAuthority={id:'test-return',network:'eip155:8453',asset:EXACT_USDC['eip155:8453'],payerAddress:payer.address,spendingAddress:spending.address,expiresAt:Date.now()+60000,ceilingBaseUnits:'250000',perCallBaseUnits:'250000',windowBaseUnits:'250000',windowMs:60000,tools:[{id:'graph-protocol',origin:'http://127.0.0.1:8425',pathname:'/tools/graph-protocol',payTo:payer.address}]};
  journal.register(a.id,a);journal.bindIdentity(a.id,a.payerAddress,a.spendingAddress);journal.depositOnce(a.id);journal.funded(a.id,{hermeticFixture:true});
- const calls={sign:0,settle:0,verify:0};const controller=new AgentReturnController({authority:a,journal,rpcUrl:'https://sepolia.base.org',facilitatorUrl:'http://127.0.0.1:8426',
+ const calls={sign:0,settle:0,verify:0};const controller=new AgentReturnController({authority:a,journal,rpcUrl:'https://mainnet.base.org',facilitatorUrl:'http://127.0.0.1:8426',
  signer:{address:spending.address,signTypedData:async p=>{calls.sign++;return spending.signTypedData(p);}},
- chain:{chainId:async()=>84532,balance:async()=>({amount:options.balance??'248000',block:'100'}),findTransaction:async()=>hash},
+ chain:{chainId:async()=>8453,balance:async()=>({amount:options.balance??'248000',block:'100'}),findTransaction:async()=>hash},
  facilitator:{verify:async()=>({isValid:true,payer:spending.address}),settle:async()=>{calls.settle++;if(options.ambiguous)throw new Error('Controlled lost return response');return{success:true,network:a.network,transaction:hash};}},
  verify:async({offer,payer:from})=>{calls.verify++;assert.equal(offer.payTo,payer.address);assert.equal(from,spending.address);}});
  return{controller,journal,a,calls};

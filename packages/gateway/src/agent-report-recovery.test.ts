@@ -3,8 +3,8 @@ import {recoverAgentReport} from './agent-report-recovery.ts';import type {Agent
 function fixture(t:{after:(fn:()=>void)=>void}){
  const journal=new Journal(':memory:');t.after(()=>journal.close());const store=new AgentStore(journal.db),limits={ceilingBaseUnits:'10000',perCallBaseUnits:'1000',windowBaseUnits:'10000',windowMs:60000};
  journal.register('authority',limits);const run=store.createRun({id:'recoverable-report',agentId:'protocol-investigator',goal:'Investigate the controlled source',authorityId:'authority'});
- journal.reserve({id:'confirmed-evidence',mandateId:'authority',digest:'fixture',network:'eip155:84532',asset:'USDC',amount:'1000',limits});journal.signed('confirmed-evidence',{fixture:true});journal.accept('confirmed-evidence','1000',{transaction:`0x${'ab'.repeat(32)}`,chainVerified:true});
- store.event(run.id,'tool_observation',{requestId:'confirmed-evidence',toolId:'graph-protocol',data:{fixture:true},sources:[],receipt:{network:'eip155:84532',asset:'USDC',amountBaseUnits:'1000',transaction:`0x${'ab'.repeat(32)}`}});
+ journal.reserve({id:'confirmed-evidence',mandateId:'authority',digest:'fixture',network:'eip155:8453',asset:'USDC',amount:'1000',limits});journal.signed('confirmed-evidence',{fixture:true});journal.accept('confirmed-evidence','1000',{transaction:`0x${'ab'.repeat(32)}`,chainVerified:true});
+ store.event(run.id,'tool_observation',{requestId:'confirmed-evidence',toolId:'graph-protocol',data:{fixture:true},sources:[],receipt:{network:'eip155:8453',asset:'USDC',amountBaseUnits:'1000',transaction:`0x${'ab'.repeat(32)}`}});
  store.finish(run.id,'partial','Original incomplete report','Vertex MAX_TOKENS');return{journal,store,run};
 }
 test('report recovery has no callable tools, preserves execution failure, and is idempotent without new payments',async t=>{

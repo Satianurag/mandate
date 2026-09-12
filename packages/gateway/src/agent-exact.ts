@@ -3,8 +3,7 @@ import { x402Client } from "@x402/core/client";
 import { decodePaymentRequiredHeader, decodePaymentResponseHeader, encodePaymentSignatureHeader } from "@x402/core/http";
 import type { PaymentRequirements, PaymentPayload } from "@x402/core/types";
 import { ExactEvmScheme } from "@x402/evm/exact/client";
-import { ExactHederaScheme } from "@x402/hedera/exact/client";
-import { validateHederaScope, assertHederaOffer, assertHederaPayload, transactionIdForMirror, type AgentHederaScope, type AgentHederaPaymentServices } from "./agent-hedera.ts";
+import type { AgentHederaScope, AgentHederaPaymentServices } from "./agent-hedera.ts";
 import type { ClientEvmSigner } from "@x402/evm";
 import { createPublicClient, decodeEventLog, getAddress, http, parseAbi, type Hex } from "viem";
 import { randomUUID } from "node:crypto";
@@ -16,7 +15,6 @@ import { toolById, type AgentToolDefinition, type AgentToolRequest } from "./age
 
 export const EXACT_USDC = {
   "eip155:8453": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
-  "eip155:84532": "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
 } as const;
 export interface ExactAgentAuthority extends BudgetLimits {
   id: string; network: keyof typeof EXACT_USDC; asset: string;
@@ -29,12 +27,12 @@ export function validateExactAuthority(a: ExactAgentAuthority): ExactAgentAuthor
   if (!a.id || !Object.hasOwn(EXACT_USDC, a.network) || getAddress(a.asset) !== getAddress(EXACT_USDC[a.network])) throw new Error("Unsupported exact x402 network or USDC asset");
   if (!Number.isSafeInteger(a.expiresAt) || a.expiresAt <= 0) throw new Error("Authority must have a valid expiry timestamp");
   if (units(a.ceilingBaseUnits, true) > 5000000n || units(a.perCallBaseUnits, true) > units(a.ceilingBaseUnits) || units(a.windowBaseUnits, true) > units(a.ceilingBaseUnits) || !Number.isSafeInteger(a.windowMs) || a.windowMs < 1000) throw new Error("Invalid spending limits; this version caps each authority at 5 USDC");
-  if (a.hedera) { if (a.network !== "eip155:84532") throw new Error("Combined Hedera agents are testnet-only"); validateHederaScope(a.hedera); }
+  if (a.hedera) throw new Error("Native Hedera payment authorities are disabled; use Base mainnet USDC");
   if (!a.tools.length) throw new Error("Select reviewed x402 endpoints");
   for (const tool of a.tools) {
     const url = new URL(tool.origin);
-    const transportAllowed = url.protocol === "https:" || a.network === "eip155:84532" && url.protocol === "http:" && url.hostname === "127.0.0.1";
-    if (!transportAllowed || url.origin !== tool.origin || url.username || url.password || !tool.pathname.startsWith("/") || /[?#]/.test(tool.pathname)) throw new Error("Tools must pin HTTPS, or loopback HTTP on testnet, and an exact path");
+    const transportAllowed = url.protocol === "https:";
+    if (!transportAllowed || url.origin !== tool.origin || url.username || url.password || !tool.pathname.startsWith("/") || /[?#]/.test(tool.pathname)) throw new Error("Tools must pin an HTTPS origin and exact path");
     getAddress(tool.payTo);
   }
   return structuredClone({ ...a, payerAddress: getAddress(a.payerAddress), spendingAddress: getAddress(a.spendingAddress), asset: getAddress(a.asset) });
@@ -48,7 +46,7 @@ export function chainSettlementVerifier(rpcUrl: string, network: keyof typeof EX
   return async ({ transaction, payload, offer, payer }) => {
     if (!/^0x[0-9a-fA-F]{64}$/.test(transaction)) throw new Error("Settlement transaction hash is invalid");
     if (await rpc.getChainId() !== Number(network.split(":")[1])) throw new Error("Settlement RPC is on another network");
-    const receipt = await rpc.getTransactionReceipt({ hash: transaction as Hex });
+    const receipt = await rpc.waitForTransactionReceipt({ hash: transaction as Hex, confirmations: 2, timeout: 60000 });
     if (receipt.status !== "success") throw new Error("Settlement transaction did not succeed");
     const authorization = (payload.payload as { authorization?: { nonce?: string } }).authorization;
     if (!authorization?.nonce) throw new Error("Payment authorization nonce is missing");
@@ -92,37 +90,30 @@ export class ExactAgentExecutor implements AgentToolExecutor {
   private readonly signer: ClientEvmSigner;
   private readonly verify: VerifyExactSettlement;
   private readonly transport: typeof fetch;
-  private readonly hedera?: AgentHederaPaymentServices;
   private readonly receiptLookupUrls: Set<string>;
   private readonly receiptLocator?: AgentReceiptLocator;
   private readonly quotes = new Map<string, ReviewedQuote>();
   constructor(input: { authority: ExactAgentAuthority; journal: Journal; tools: AgentToolDefinition[]; signer: ClientEvmSigner; verify: VerifyExactSettlement; hedera?: AgentHederaPaymentServices; receiptLookupUrls?: string[]; receiptLocator?: AgentReceiptLocator; fetch?: typeof fetch }) {
     this.receiptLookupUrls = new Set(input.receiptLookupUrls ?? []); this.receiptLocator = input.receiptLocator;
     this.authority = validateExactAuthority(input.authority); this.journal = input.journal;
-    this.tools = input.tools; this.signer = input.signer; this.verify = input.verify; this.transport = input.fetch ?? fetch; this.hedera = input.hedera;
-    if (this.authority.hedera && (!input.hedera || input.hedera.signer.accountId !== this.authority.hedera.accountId)) throw new Error("Hedera signer differs from reviewed authority");
+    this.tools = input.tools; this.signer = input.signer; this.verify = input.verify; this.transport = input.fetch ?? fetch;
     if (getAddress(this.signer.address) !== this.authority.spendingAddress) throw new Error("Spending signer does not match reviewed authority");
     this.journal.register(this.authority.id, this.authority);
     this.journal.bindIdentity(this.authority.id, this.authority.payerAddress, this.authority.spendingAddress);
   }
-  catalog() { return this.tools.filter(t => (t.id === "hedera-analysis" ? Boolean(this.authority.hedera && this.hedera) : this.authority.tools.some(a => a.id === t.id))).map(({ id, description, inputSchema }) => ({ id, description, inputSchema })); }
+  catalog() { return this.tools.filter(t => this.authority.tools.some(a => a.id === t.id)).map(({ id, description, inputSchema }) => ({ id, description, inputSchema })); }
   private assertOffer(toolId: AgentToolId, request: AgentToolRequest, offer: PaymentRequirements): void {
     const url = new URL(request.url), a = this.authority;
     if (Date.now() >= a.expiresAt) throw new AgentAuthorityError("Spending authority expired");
-    if (toolId === "hedera-analysis") {
-      if (!a.hedera || request.url !== a.hedera.endpoint) throw new AgentAuthorityError("Hedera endpoint is outside reviewed authority");
-      try { assertHederaOffer(a.hedera, offer); } catch (e) { throw new AgentAuthorityError(e instanceof Error ? e.message : "Hedera terms changed"); }
-    } else {
     if (url.username || url.password || url.hash || !a.tools.some(t => t.id === toolId && t.origin === url.origin && t.pathname === url.pathname && getAddress(t.payTo) === getAddress(offer.payTo))) throw new AgentAuthorityError("Endpoint or recipient is outside reviewed authority");
-    if (offer.scheme !== "exact" || offer.network !== a.network || getAddress(offer.asset) !== a.asset || (offer.extra?.assetTransferMethod && offer.extra.assetTransferMethod !== "eip3009") || offer.extra?.name !== (a.network === "eip155:8453" ? "USD Coin" : "USDC") || offer.extra?.version !== "2") throw new AgentAuthorityError("Unsupported x402 scheme, asset, network or signing domain");
-    }
+    if (offer.scheme !== "exact" || offer.network !== a.network || getAddress(offer.asset) !== a.asset || (offer.extra?.assetTransferMethod && offer.extra.assetTransferMethod !== "eip3009") || offer.extra?.name !== "USD Coin" || offer.extra?.version !== "2") throw new AgentAuthorityError("Unsupported x402 scheme, asset, network or signing domain");
     if (!Number.isSafeInteger(offer.maxTimeoutSeconds) || offer.maxTimeoutSeconds < 1 || offer.maxTimeoutSeconds > 3600 || Date.now() + offer.maxTimeoutSeconds * 1000 > a.expiresAt) throw new AgentAuthorityError("Payment authorization outlives the spending authority");
     units(offer.amount, true);
   }
   async quote(toolId: AgentToolId, input: Record<string, unknown>, signal: AbortSignal): Promise<X402Quote> {
     const tool = toolById(this.tools, toolId), request = tool.request(input);
     const url = new URL(request.url);
-    if (!(toolId === "hedera-analysis" ? request.url === this.authority.hedera?.endpoint : this.authority.tools.some(t => t.id === toolId && t.origin === url.origin && t.pathname === url.pathname))) throw new AgentAuthorityError("Tool endpoint is not approved");
+    if (!(this.authority.tools.some(t => t.id === toolId && t.origin === url.origin && t.pathname === url.pathname))) throw new AgentAuthorityError("Tool endpoint is not approved");
     const response = await this.transport(request.url, { method: request.method, ...(request.body ? { body: request.body, headers: { "content-type": "application/json" } } : {}), redirect: "error", signal: AbortSignal.any([signal, AbortSignal.timeout(15000)]) });
     const header = response.headers.get("payment-required");
     await response.body?.cancel();
@@ -144,29 +135,20 @@ export class ExactAgentExecutor implements AgentToolExecutor {
     const intent = events.find(e => e.kind === "agent.payment_intent");
     if (!intent) throw new Error("This older payment has no retained first-party request intent");
     const saved = JSON.parse(intent.data) as { toolId: AgentToolId; request: AgentToolRequest; offer: PaymentRequirements; runId: string; fromBlock?: string };
-    if (!this.receiptLookupUrls.has(saved.request.url) || saved.request.method !== "POST" || a.network !== "eip155:84532") throw new Error("Automatic receipt lookup is restricted to explicitly configured first-party testnet services");
+    const canRecoverMerchantResponse = this.receiptLookupUrls.has(saved.request.url) && saved.request.method === "POST";
     const signed = events.filter(e => e.kind === "request.signed").map(e => (JSON.parse(e.data) as {payload: PaymentPayload}).payload).find(p => p?.x402Version === 2 && digest(p) === row.payload_hash);
     if (!signed) throw new Error("No complete exported payment payload was retained; manual review is required");
     if (saved.offer.network !== row.network || saved.offer.asset !== row.asset || saved.offer.amount !== row.maximum) throw new Error("Retained payment intent does not match its reservation");
     let response: Response | null = null;
-    try { response = await this.transport(saved.request.url, { method: "POST", body: saved.request.body, headers: { "content-type": "application/json", "payment-signature": encodePaymentSignatureHeader(signed), "x-mandate-reconcile": "1" }, redirect: "error", signal: AbortSignal.timeout(15000) }); }
+    try { if (canRecoverMerchantResponse) response = await this.transport(saved.request.url, { method: "POST", body: saved.request.body, headers: { "content-type": "application/json", "payment-signature": encodePaymentSignatureHeader(signed), "x-mandate-reconcile": "1" }, redirect: "error", signal: AbortSignal.timeout(15000) }); }
     catch { /* A lost merchant cache does not erase the retained signed transaction. */ }
     const header = response?.headers.get("payment-response");
     if (!header || !response) {
       await response?.body?.cancel();
       let transaction = transactionHint ?? (row.receipt ? (JSON.parse(row.receipt) as {transaction?:string}).transaction : undefined);
-      if (row.network === "hedera:testnet") {
-        const serialized = (signed.payload as {transaction?:string}).transaction;
-        if (!serialized || !a.hedera || !this.hedera) throw new Error("No retained native payment can be checked");
-        const expected = assertHederaPayload(a.hedera, saved.offer, serialized);
-        if (transaction && transactionIdForMirror(transaction) !== expected) throw new Error("Transaction hint differs from the retained native payment");
-        transaction = expected;
-        await this.hedera.verify({transaction,payload:signed,offer:saved.offer,scope:a.hedera});
-      } else {
         transaction ??= saved.fromBlock && this.receiptLocator ? await this.receiptLocator.find(signed,saved.offer,a.spendingAddress,saved.fromBlock) ?? undefined : undefined;
         if (!transaction) throw new Error("No completed merchant receipt or matching chain transfer was found. The reservation remains held; no new signature or payment was requested.");
         await this.verify({transaction,payload:signed,offer:saved.offer,payer:a.spendingAddress});
-      }
       if (row.state !== "accepted") this.journal.accept(requestId,row.maximum,{transaction,network:row.network,chainVerified:true,recovery:"chain-only",serviceResponseRecovered:false});
       else if (JSON.parse(row.receipt!).transaction !== transaction) throw new Error("Chain recovery conflicts with the accepted payment receipt");
       const error = "Payment was independently confirmed on chain, but the service response is unavailable. No successful data delivery is claimed.";
@@ -176,8 +158,7 @@ export class ExactAgentExecutor implements AgentToolExecutor {
     }
     const settled = decodePaymentResponseHeader(header);
     if (!settled.success || !settled.transaction || settled.network !== row.network) throw new Error("The recovered receipt does not confirm the reserved payment");
-    if (row.network === "hedera:testnet") await this.hedera!.verify({transaction:settled.transaction,payload:signed,offer:saved.offer,scope:a.hedera!});
-    else await this.verify({transaction:settled.transaction,payload:signed,offer:saved.offer,payer:a.spendingAddress});
+    await this.verify({transaction:settled.transaction,payload:signed,offer:saved.offer,payer:a.spendingAddress});
     if (row.state !== "accepted") this.journal.accept(requestId,row.maximum,{...settled,chainVerified:true});
     else if (JSON.parse(row.receipt!).transaction !== settled.transaction) throw new Error("Recovered receipt conflicts with the accepted transaction");
     const reader=response.body?.getReader(),chunks:Uint8Array[]=[];let size=0;
@@ -201,7 +182,7 @@ export class ExactAgentExecutor implements AgentToolExecutor {
     this.assertOffer(quote.toolId, reviewed.request, reviewed.offer); signal.throwIfAborted();
     let fromBlock: string | undefined;
     try {
-      if (quote.network !== "hedera:testnet" && this.receiptLocator) fromBlock = await this.receiptLocator.checkpoint();
+      if (this.receiptLocator) fromBlock = await this.receiptLocator.checkpoint();
       signal.throwIfAborted(); this.journal.assertActive(a.id);
       const effectiveLimits = { ...a, ceilingBaseUnits: this.journal.effectiveAgentCeiling(a.id, a.ceilingBaseUnits) };
       this.journal.reserve({ id: requestId, mandateId: a.id, digest: digest({ run: run.intentHash, request: reviewed.request, offer: reviewed.offer }), network: quote.network, asset: quote.asset, amount: quote.amountBaseUnits, limits: effectiveLimits,
@@ -220,20 +201,7 @@ export class ExactAgentExecutor implements AgentToolExecutor {
         return this.signer.signTypedData(params);
       } };
       const client = new x402Client();
-      if (quote.network === "hedera:testnet") {
-        if (!a.hedera || !this.hedera) throw new AgentAuthorityError("Hedera signer is not configured");
-        const scope = a.hedera, hedera = this.hedera;
-        client.register("hedera:testnet", new ExactHederaScheme({ accountId: scope.accountId,
-          createPartiallySignedTransferTransaction: async terms => {
-            signal.throwIfAborted(); this.journal.assertActive(a.id); this.assertOffer(quote.toolId, reviewed.request, terms);
-            if (signingAttempted) throw new AgentAuthorityError("One reservation cannot authorize multiple signatures");
-            if (digest(terms) !== digest(reviewed.offer)) throw new AgentAuthorityError("Hedera SDK changed the reviewed terms");
-            this.journal.signed(requestId, { signingAttempt: terms }); signingAttempted = true;
-            const transaction = await hedera.signer.createPartiallySignedTransferTransaction(terms);
-            assertHederaPayload(scope, terms, transaction); return transaction;
-          },
-        }));
-      } else client.register(a.network, new ExactEvmScheme(signer));
+      client.register(a.network, new ExactEvmScheme(signer));
       const payload = await client.createPaymentPayload({ x402Version: 2, resource: { url: reviewed.request.url }, accepts: [reviewed.offer] });
       this.journal.signed(requestId, payload);
       signal.throwIfAborted(); this.journal.assertActive(a.id);
@@ -243,15 +211,14 @@ export class ExactAgentExecutor implements AgentToolExecutor {
       if (!settlementHeader) throw new UncertainAgentPayment(`Paid endpoint omitted a settlement receipt (HTTP ${response.status})`);
       const settlement = decodePaymentResponseHeader(settlementHeader);
       if (!settlement.success || settlement.network !== quote.network || !settlement.transaction) throw new UncertainAgentPayment("Payment settlement is not confirmed");
-      if (quote.network === "hedera:testnet") await this.hedera!.verify({ transaction: settlement.transaction, payload, offer: reviewed.offer, scope: a.hedera! });
-      else await this.verify({ transaction: settlement.transaction, payload, offer: reviewed.offer, payer: a.spendingAddress });
+      await this.verify({ transaction: settlement.transaction, payload, offer: reviewed.offer, payer: a.spendingAddress });
       this.journal.accept(requestId, quote.amountBaseUnits, { ...settlement, chainVerified: true });
       const reader = response.body?.getReader(); const chunks: Uint8Array[] = []; let size = 0;
       if (reader) for (;;) { const chunk = await reader.read(); if (chunk.done) break; size += chunk.value.byteLength; if (size > 512000) { await reader.cancel(); throw new Error("Paid response exceeded the 512 KB evidence limit"); } chunks.push(chunk.value); }
       const text = Buffer.concat(chunks).toString("utf8");
       this.journal.saveResponse(requestId, { status: response.status, headers: { "payment-response": settlementHeader }, body: text });
       if (!response.ok) throw new Error(`Payment confirmed but service returned HTTP ${response.status}`);
-      const data = JSON.parse(text) as unknown;
+      const data = text.trim() ? JSON.parse(text) as unknown : null;
       if (data && typeof data === "object" && ("errors" in data || "error" in data && Boolean(data.error))) throw new Error("Payment confirmed but service returned an error payload");
       const tool = toolById(this.tools, quote.toolId), sources = tool.sources(data);
       if (!sources.some(s => s.url === reviewed.request.url)) sources.push({ url: reviewed.request.url, title: `${quote.toolId} · paid source` });

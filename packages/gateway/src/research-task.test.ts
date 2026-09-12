@@ -34,7 +34,7 @@ test("brief recommends only the best-supported record and keeps evidence limitat
   const brief = buildDueDiligenceBrief(task, {
     observedAt: "2026-09-11T09:59:00.000Z",
     sourceMetadata: { block: { number: 12345 } },
-    paid: { amountBaseUnits: "10000", network: "eip155:84532" },
+    paid: { amountBaseUnits: "10000", network: "eip155:8453" },
     rows: [
       { id: "two", agentId: "2", agentWallet: "0x0000000000000000000000000000000000000002", totalFeedback: "7", measurements: [{ value: "A", isRevoked: false }] },
       { id: "one", agentId: "1", agentWallet: "0x0000000000000000000000000000000000000001", totalFeedback: "12", measurements: [{ value: "90", isRevoked: false }, { value: "10", isRevoked: true }] },

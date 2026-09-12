@@ -25,8 +25,8 @@ import {
 
 const cfg: MandateFile = {
   version: 2,
-  network: "eip155:84532",
-  rpcUrl: "https://sepolia.base.org",
+  network: "eip155:8453",
+  rpcUrl: "https://mainnet.base.org",
   serviceUrl: "http://127.0.0.1:8405/analytics",
   ceilingBaseUnits: "100000",
   perCallBaseUnits: "10000",
@@ -44,9 +44,9 @@ const cfg: MandateFile = {
   storageRoot: "state/test",
 };
 const config = channelConfigFromMandate(cfg, "0x0000000000000000000000000000000000000002");
-const channelId = computeChannelId(config, 84532);
+const channelId = computeChannelId(config, 8453);
 const snapshot = (overrides: Partial<ChannelSnapshot> = {}): ChannelSnapshot => ({
-  network: "eip155:84532",
+  network: "eip155:8453",
   blockNumber: "123",
   observedAt: "2026-09-11T00:00:00.000Z",
   channelId,
@@ -67,13 +67,13 @@ test("exact installed x402 tuple ABI round-trips initiation and finalization", (
   const decodedInitiate = decodeFunctionData({ abi: ESCROW_WITHDRAWAL_ABI, data: initiate });
   assert.equal(decodedInitiate.functionName, "initiateWithdraw");
   assert.equal(decodedInitiate.args[1], 70000n);
-  assert.equal(computeChannelId(decodedInitiate.args[0], 84532), channelId);
+  assert.equal(computeChannelId(decodedInitiate.args[0], 8453), channelId);
   assert.equal(initiate.slice(0, 10), "0xcf5cf3dc");
 
   const finalize = encodeWithdrawalCall("finalize", config);
   const decodedFinalize = decodeFunctionData({ abi: ESCROW_WITHDRAWAL_ABI, data: finalize });
   assert.equal(decodedFinalize.functionName, "finalizeWithdraw");
-  assert.equal(computeChannelId(decodedFinalize.args[0], 84532), channelId);
+  assert.equal(computeChannelId(decodedFinalize.args[0], 8453), channelId);
   assert.equal(finalize.slice(0, 10), "0xe88377b1");
 });
 
@@ -104,7 +104,7 @@ test("unsigned EIP-1559 transaction is zero-value, exact-escrow, bounded, and Le
   const account = privateKeyToAccount(`0x${"77".repeat(32)}`);
   const localCfg: MandateFile = { ...cfg, operatorAddress: account.address };
   const localConfig = channelConfigFromMandate(localCfg, "0x0000000000000000000000000000000000000002");
-  const localChannelId = computeChannelId(localConfig, 84532);
+  const localChannelId = computeChannelId(localConfig, 8453);
   const encoded = serializeUnsignedWithdrawal({
     kind: "initiate",
     config: localConfig,
@@ -116,11 +116,11 @@ test("unsigned EIP-1559 transaction is zero-value, exact-escrow, bounded, and Le
     maxPriorityFeePerGas: 100000n,
   });
   const parsed = parseTransaction(encoded.unsignedSerialized);
-  assert.equal(parsed.chainId, 84532);
+  assert.equal(parsed.chainId, 8453);
   assert.equal(getAddress(parsed.to!), getAddress(BATCH_SETTLEMENT_ADDRESS));
   assert.equal(parsed.value ?? 0n, 0n);
   assert.equal(parsed.data, encoded.callData);
-  assert.equal(unsignedWithdrawalBytes({ ...encoded, version: 1, kind: "initiate", network: "eip155:84532", chainId: 84532,
+  assert.equal(unsignedWithdrawalBytes({ ...encoded, version: 1, kind: "initiate", network: "eip155:8453", chainId: 8453,
     channelId: localChannelId, contract: getAddress(BATCH_SETTLEMENT_ADDRESS), payer: account.address, token: localConfig.token,
     receiver: localConfig.receiver, withdrawDelay: 900, amountBaseUnits: "70000", nonce: 9, gas: "120000", maxFeePerGas: "1000000",
     maxPriorityFeePerGas: "100000", maxGasCostWei: "120000000000", payerNativeBalanceWei: "120000000001",
@@ -158,8 +158,8 @@ test("reviewed withdrawal plans invalidate on any channel, amount, nonce, or gas
   const base: Omit<PreparedWithdrawalTransaction, "planHash"> = {
     version: 1,
     kind: "initiate",
-    network: "eip155:84532",
-    chainId: 84532,
+    network: "eip155:8453",
+    chainId: 8453,
     channelId,
     contract: getAddress(BATCH_SETTLEMENT_ADDRESS),
     payer: config.payer,
@@ -217,7 +217,7 @@ test("reviewed withdrawal plans invalidate on any channel, amount, nonce, or gas
     liabilityBaseUnits: "30000",
     currentNonce: 4,
     currentNativeBalanceWei: 99999999n,
-  }), /enough Base Sepolia ETH/);
+  }), /enough Base mainnet ETH/);
   assert.throws(() => assertPreparedWithdrawalCurrent({
     plan: { ...plan, amountBaseUnits: "69999" },
     cfg,
@@ -245,7 +245,7 @@ test("transaction-envelope verification rejects every change after review", () =
   const encoded = serializeUnsignedWithdrawal({ kind: "initiate", config, channelId, amountBaseUnits: "70000", nonce: 4,
     gas: 100000n, maxFeePerGas: 1000n, maxPriorityFeePerGas: 100n });
   const base: Omit<PreparedWithdrawalTransaction, "planHash"> = {
-    version: 1, kind: "initiate", network: "eip155:84532", chainId: 84532, channelId,
+    version: 1, kind: "initiate", network: "eip155:8453", chainId: 8453, channelId,
     contract: getAddress(BATCH_SETTLEMENT_ADDRESS), payer: config.payer, token: config.token, receiver: config.receiver,
     withdrawDelay: config.withdrawDelay, amountBaseUnits: "70000", callData: encoded.callData, selector: encoded.selector,
     nonce: 4, gas: "100000", maxFeePerGas: "1000", maxPriorityFeePerGas: "100", maxGasCostWei: "100000000",
@@ -253,7 +253,7 @@ test("transaction-envelope verification rejects every change after review", () =
     preparedAt: "2026-09-11T00:00:00.000Z", sourceBlock: "123", stateFingerprint: withdrawalStateFingerprint(snapshot(), "30000"),
   };
   const plan: PreparedWithdrawalTransaction = { ...base, planHash: digest(base) };
-  const transaction = { from: config.payer, to: getAddress(BATCH_SETTLEMENT_ADDRESS), value: 0n, input: plan.callData, nonce: 4, chainId: 84532 };
+  const transaction = { from: config.payer, to: getAddress(BATCH_SETTLEMENT_ADDRESS), value: 0n, input: plan.callData, nonce: 4, chainId: 8453 };
   assert.doesNotThrow(() => assertWithdrawalTransactionEnvelope(plan, transaction as never));
   assert.throws(() => assertWithdrawalTransactionEnvelope(plan, { ...transaction, from: "0x0000000000000000000000000000000000000009" } as never), /another payer/);
   assert.throws(() => assertWithdrawalTransactionEnvelope(plan, { ...transaction, to: "0x0000000000000000000000000000000000000009" } as never), /another contract/);

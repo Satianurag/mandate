@@ -1,6 +1,6 @@
-import { assertTestnetChain } from "./testnet.ts";
+import { assertMainnetChain } from "./mainnet.ts";
 /**
- * Ledger DMK adapter for testnet EIP-712 signing. Every signing call uses the
+ * Ledger DMK adapter for Base mainnet EIP-712 signing. Every signing call uses the
  * physical device and verifies its network before requesting a signature.
  * The report distinguishes CAL/ERC-7730, clear-basic, legacy and unknown paths.
  * Funding binds stock channel authority cryptographically; URL, rolling budget,
@@ -90,15 +90,8 @@ export async function buildEthSigner(sessionId: string) {
     loggerFactory: (tag) => getDmk().getLoggerFactory()(["ContextModule", tag]),
   }).setChain(ContextModuleChainID.Ethereum);
 
-  // Official Ledger development path: test-signed ERC-7730 context through a
-  // loopback CAL bridge. Never allow this test mode to target a remote host.
-  const testCal = process.env.MANDATE_LEDGER_TEST_CAL_URL?.trim();
-  if (testCal) {
-    const url = new URL(testCal);
-    if (url.protocol !== "http:" || !["127.0.0.1", "localhost"].includes(url.hostname)) {
-      throw new Error("MANDATE_LEDGER_TEST_CAL_URL must be loopback HTTP");
-    }
-    contextBuilder.setCalConfig({ url: url.origin, mode: "test", branch: "main" });
+  if (process.env.MANDATE_LEDGER_TEST_CAL_URL) {
+    throw new Error("Mainnet Ledger signing requires production clear-signing context; test CAL is disabled");
   }
 
   const inner = contextBuilder.build();
@@ -197,7 +190,7 @@ export class DmkEvmSigner implements ClientEvmSigner {
    * do not infer on-device human-readable scope labels from application text.
    */
   async signTypedData(message: DmkSigningMessage): Promise<`0x${string}`> {
-    assertTestnetChain(message.domain.chainId);
+    assertMainnetChain(message.domain.chainId);
     this.signCalls++;
     const trace: DeviceActionTrace[] = [];
     try {
@@ -205,12 +198,13 @@ export class DmkEvmSigner implements ClientEvmSigner {
         const { signer, originTokenPresent, cal } = await buildEthSigner(sessionId);
         try {
           const ledgerMessage = withExplicitEip712DomainType(message);
-          const { observable } = signer.signTypedData(
+          const { observable, cancel } = signer.signTypedData(
             this.path,
             ledgerMessage as unknown as DmkTypedData,
             { skipOpenApp: this.skipOpenApp }
           );
-          return await awaitDeviceAction<DmkSignature>(observable, this.timeoutMs, trace);
+          try { return await awaitDeviceAction<DmkSignature>(observable, this.timeoutMs, trace); }
+          catch(error) { cancel(); throw error; }
         } finally {
           const steps = uniqueTraceSteps(trace);
           const calFilters = cal.typedDataFilters;
@@ -248,7 +242,7 @@ export async function signWithdrawalWithEthSigner(
   expectedAddress: Address,
   options: { path?: string; timeoutMs?: number; skipOpenApp?: boolean } = {},
 ): Promise<LedgerWithdrawalSigningResult> {
-  if (plan.network !== "eip155:84532" || plan.chainId !== 84532) throw new Error("Ledger transaction signing is restricted to Base Sepolia");
+  if (plan.network !== "eip155:8453" || plan.chainId !== 8453) throw new Error("Ledger transaction signing is restricted to Base mainnet");
   if (getAddress(plan.payer) !== getAddress(expectedAddress)) throw new Error("Reviewed withdrawal payer differs from the expected Ledger address");
   const trace: DeviceActionTrace[] = [];
   const { observable } = signer.signTransaction(
@@ -271,7 +265,7 @@ export async function signLedgerWithdrawalTransaction(
   expectedAddress: Address,
   options: DmkSignerOptions = {},
 ): Promise<LedgerWithdrawalSigningResult> {
-  assertTestnetChain(plan.chainId);
+  assertMainnetChain(plan.chainId);
   const full = {
     path: options.path ?? DEFAULT_DERIVATION_PATH,
     timeoutMs: options.timeoutMs ?? 120_000,

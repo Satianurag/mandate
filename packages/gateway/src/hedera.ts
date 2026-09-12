@@ -1,4 +1,4 @@
-import { assertTestnetNetwork } from "./testnet.ts";
+import { assertHederaDisabled } from "./mainnet.ts";
 /**
  * Hedera specifics: amount normalisation and the sealed signer.
  *
@@ -24,7 +24,7 @@ export const DEFAULT_HTS_DECIMALS: Record<string, number> = {
   [CIRCLE_HEDERA_TESTNET_USDC_HTS]: 6,
 };
 
-/** Circle Base Sepolia USDC (6 decimals). Graph testnet x402 + upto@84532. */
+/** Circle Base mainnet USDC (6 decimals). Graph testnet x402 + upto@8453. */
 export const DEFAULT_EVM_DECIMALS: Record<string, number> = {
   [BASE_SEPOLIA.usdc.toLowerCase()]: 6,
 };
@@ -45,7 +45,7 @@ export function normaliseAmount(
   requirements: PaymentRequirements,
   htsDecimals?: Record<string, number>
 ): { amount: number; symbol: string } {
-  assertTestnetNetwork(requirements.network);
+
   if (requirements.asset === HBAR_ASSET_ID) {
     return { amount: Number(requirements.amount) / TINYBARS_PER_HBAR, symbol: "HBAR" };
   }
@@ -88,7 +88,7 @@ export function createSealedHederaSigner(
   return {
     accountId,
     createPartiallySignedTransferTransaction: (requirements: PaymentRequirements) => {
-      assertTestnetNetwork(requirements.network);
+      assertHederaDisabled(requirements.network);
       if (requirements.network !== "hedera:testnet") throw new Error("Hedera signer only signs hedera:testnet");
       return withSecret("hedera-payment", ciphertext, async (keyBytes) => {
         const hex = keyBytes.toString("utf8").trim().replace(/^0x/, "");

@@ -1,5 +1,5 @@
 /** Read-only reconciliation of the deployed stock x402 escrow. */
-import { assertTestnetChain } from './testnet.ts';
+import { assertMainnetChain } from './mainnet.ts';
 import { computeChannelId } from '@x402/evm/batch-settlement/client';
 import { BATCH_SETTLEMENT_ADDRESS } from '@x402/evm';
 import { createPublicClient, http, parseAbi, erc20Abi, getAddress, parseEventLogs, decodeFunctionData, type TransactionReceipt, type Hex } from 'viem';
@@ -20,7 +20,7 @@ export async function snapshotChannel(opts: {
   rpcUrl: string; chainId: number; channelId: Hex; asset: Hex; payer: Hex; receiver: Hex;
   blockNumber?: bigint;
 }): Promise<ChannelSnapshot> {
-  assertTestnetChain(opts.chainId);
+  assertMainnetChain(opts.chainId);
   const rpc = createPublicClient({transport:http(opts.rpcUrl,{timeout:15000,retryCount:1})});
   if (await rpc.getChainId() !== opts.chainId) throw new Error('Reconciliation RPC is on a different chain');
   const blockNumber = opts.blockNumber ?? await rpc.getBlockNumber({cacheTime:0});
@@ -72,7 +72,7 @@ export const REFUND_CALL_ABI = parseAbi([
   'function refundWithSignature((address payer,address payerAuthorizer,address receiver,address receiverAuthorizer,address token,uint40 withdrawDelay,bytes32 salt) config,uint128 amount,uint256 nonce,bytes receiverAuthorizerSignature)',
 ]);
 export function assertRefundCall(data:Hex, expected:{chainId:number;channelId:Hex;asset:Hex;payer:Hex;receiver:Hex;amount:string}):void {
-  assertTestnetChain(expected.chainId);
+  assertMainnetChain(expected.chainId);
   let matches=0, visited=0;
   const visit=(input:Hex,depth:number)=>{
     if(depth>4 || ++visited>100)throw new Error('Refund call bundle exceeds the verification limit');
@@ -89,7 +89,7 @@ export function assertRefundCall(data:Hex, expected:{chainId:number;channelId:He
   if(matches!==1)throw new Error('Refund transaction must contain exactly one matching channel and amount');
 }
 export async function confirmRefundTransaction(opts:{rpcUrl:string;chainId:number;channelId:Hex;asset:Hex;payer:Hex;receiver:Hex;transaction:Hex;expectedBaseUnits:string;liabilityBaseUnits:string}) {
-  assertTestnetChain(opts.chainId);
+  assertMainnetChain(opts.chainId);
   const rpc=createPublicClient({transport:http(opts.rpcUrl,{timeout:15000,retryCount:1})});
   if(await rpc.getChainId()!==opts.chainId)throw new Error('Refund RPC network mismatch');
   const [transaction,receipt]=await Promise.all([rpc.getTransaction({hash:opts.transaction}),rpc.getTransactionReceipt({hash:opts.transaction})]);

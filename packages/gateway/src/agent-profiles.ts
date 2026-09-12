@@ -20,6 +20,14 @@ export interface AgentProfile {
 
 export const AGENT_TEMPLATES: readonly AgentProfile[] = [
   {
+    id: "research-assistant", version: 1, template: true, name: "Research Assistant",
+    description: "Research a question, compare sources and deliver a clear, cited answer.",
+    instructions: "Find primary evidence for the user's goal. Use only relevant available tools, compare observations, identify source dates and limitations, and avoid repetitive paid requests. Do not force market tools into unrelated research. Finish with an honest cited answer and label any gaps.",
+    goal: "", output: "A concise report with findings, supporting sources, spending and limitations.",
+    toolIds: ["web-search", "crypto-news", "crypto-prices"],
+    budgetBaseUnits: "100000", perCallBaseUnits: "20000", maxSteps: 20, maxDurationSeconds: 900,
+  },
+  {
     id: "protocol-investigator", version: 1, template: true,
     name: "Protocol Investigator",
     description: "Investigate protocol activity, data quality and market context using paid evidence.",
@@ -27,7 +35,7 @@ export const AGENT_TEMPLATES: readonly AgentProfile[] = [
     goal: "", output: "A sourced investigation with key findings, explanations, unanswered questions and a spending summary.",
     toolIds: ["graph-protocol", "web-search", "crypto-news", "crypto-prices", "hedera-analysis"],
     requiredToolIds: ["graph-protocol"],
-    budgetBaseUnits: "100000", perCallBaseUnits: "20000", maxSteps: 12, maxDurationSeconds: 300,
+    budgetBaseUnits: "100000", perCallBaseUnits: "20000", maxSteps: 20, maxDurationSeconds: 900,
   },
   {
     id: "agent-selection-analyst", version: 1, template: true,
@@ -37,7 +45,7 @@ export const AGENT_TEMPLATES: readonly AgentProfile[] = [
     goal: "", output: "A ranked shortlist with capability comparisons, linked evidence, observed costs and limitations.",
     toolIds: ["graph-agent0", "web-search", "hedera-analysis"],
     requiredToolIds: ["graph-agent0"],
-    budgetBaseUnits: "100000", perCallBaseUnits: "20000", maxSteps: 12, maxDurationSeconds: 300,
+    budgetBaseUnits: "100000", perCallBaseUnits: "20000", maxSteps: 20, maxDurationSeconds: 900,
   },
 ];
 

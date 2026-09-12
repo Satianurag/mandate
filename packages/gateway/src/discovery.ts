@@ -11,7 +11,7 @@ const SUBGRAPH_ID_RE = /\b[A-Za-z0-9]{40,50}\b/g;
 const CHAIN_ALIASES: Array<[RegExp, string]> = [
   [/base[_\s-]*sepolia|basesepolia/i, "base-sepolia"],
   // MCP sometimes truncates "base-sepolia" to "base-8"; must beat the generic `base` rule.
-  [/base[_\s-]*8\b|chainid[:\s]*84532|\b84532\b/i, "base-sepolia"],
+  [/base[_\s-]*8\b|chainid[:\s]*8453|\b8453\b/i, "base-sepolia"],
   [/ethereum[_\s-]*sepolia|eth[_\s-]*sepolia/i, "ethereum-sepolia"],
   [/bsc[_\s-]*chapel|bnb[_\s-]*chapel|chapel|bsc[_\s-]*test/i, "bsc-chapel"],
   [/monad[_\s-]*test/i, "monad-testnet"],

@@ -52,11 +52,11 @@ test("unknown HTS asset is a loud throw, never a guessed decimal", () => {
   );
 });
 
-test("Base Sepolia USDC is 6 decimals on eip155:84532", () => {
+test("Base mainnet USDC is 6 decimals on eip155:8453", () => {
   const { amount, symbol } = normaliseAmount({
     scheme: "exact",
-    network: "eip155:84532",
-    asset: "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
+    network: "eip155:8453",
+    asset: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
     amount: "42",
     payTo: "0x301672eEf23F0e5f165cfba26762702F20A74430",
     extra: {},

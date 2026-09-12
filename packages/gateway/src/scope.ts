@@ -17,7 +17,7 @@ export interface MandateScope extends BudgetLimits {
 }
 export function validateScope(scope: MandateScope): MandateScope {
   if (!scope || typeof scope !== "object") throw new Error("An explicit mandate scope is required");
-  if (!["eip155:84532", "eip155:296"].includes(scope.network)) throw new Error("Mandate supports explicitly configured testnets only");
+  if (!["eip155:8453", "eip155:296"].includes(scope.network)) throw new Error("Mandate supports explicitly configured testnets only");
   for (const field of ["asset", "receiver", "receiverAuthorizer"] as const) {
     if (getAddress(scope[field]) === "0x0000000000000000000000000000000000000000") throw new Error(`${field} cannot be zero`);
   }

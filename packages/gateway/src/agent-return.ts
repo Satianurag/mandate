@@ -1,4 +1,4 @@
-/** Operator-only return of unused Base Sepolia funds to the ORIGINAL Ledger payer. */
+/** Operator-only return of unused Base mainnet funds to the ORIGINAL Ledger payer. */
 import {createPublicClient,http,erc20Abi,parseAbiItem,verifyTypedData,type Hex} from 'viem';
 import {x402Client} from '@x402/core/client';import {HTTPFacilitatorClient} from '@x402/core/http';import {ExactEvmScheme} from '@x402/evm/exact/client';
 import type {ClientEvmSigner} from '@x402/evm';import type {PaymentPayload,PaymentRequirements} from '@x402/core/types';
@@ -14,7 +14,7 @@ export class AgentReturnController {
  private busy=false;private phase='idle';private lastError:string|null=null;
  constructor(options:AgentReturnOptions){
   this.options=options;const a=options.authority;
-  if(a.network!=='eip155:84532'||options.signer.address.toLowerCase()!==a.spendingAddress.toLowerCase()||a.payerAddress.toLowerCase()===a.spendingAddress.toLowerCase())throw new Error('Only the reviewed Base Sepolia spending wallet can return funds');
+  if(a.network!=='eip155:8453'||options.signer.address.toLowerCase()!==a.spendingAddress.toLowerCase()||a.payerAddress.toLowerCase()===a.spendingAddress.toLowerCase())throw new Error('Only the reviewed Base mainnet spending wallet can return funds');
   options.journal.db.exec("CREATE TABLE IF NOT EXISTS agent_returns(authority_id TEXT PRIMARY KEY REFERENCES mandates(id),state TEXT NOT NULL,amount TEXT NOT NULL,from_block TEXT NOT NULL,payload TEXT,offer TEXT,transaction_hash TEXT,error TEXT)");
   const rpc=createPublicClient({transport:http(options.rpcUrl,{timeout:15000,retryCount:0})});
   this.chain=options.chain??{
@@ -28,10 +28,10 @@ export class AgentReturnController {
  private eligible(){const{journal,authority:a}=this.options;const mandate=journal.mandate(a.id);if(!mandate||mandate.deposit!=='funded'||mandate.channel_id||!['active','stopped'].includes(mandate.state))throw new Error('Only a funded, open exact-agent allowance can return unused funds');if(journal.requests(a.id).some(r=>['reserved','signed','uncertain'].includes(r.state)))throw new Error('Reconcile every pending payment before returning funds');}
  async preview(){
   this.eligible();if(this.busy)throw new Error('A return operation is already in progress');const saved=this.row();if(saved&&['signed','uncertain','confirmed'].includes(saved.state))throw new Error('Observe or reconcile the existing return; do not sign another one');
-  if(await this.chain.chainId()!==84532)throw new Error('Return RPC is not Base Sepolia');const balance=await this.chain.balance();units(balance.amount);
+  if(await this.chain.chainId()!==8453)throw new Error('Return RPC is not Base mainnet');const balance=await this.chain.balance();units(balance.amount);
   const a=this.options.authority,approvedFundingBaseUnits=this.options.journal.effectiveAgentCeiling(a.id,a.ceilingBaseUnits);if(BigInt(balance.amount)>BigInt(approvedFundingBaseUnits))throw new Error('The spending wallet contains more than the approved Ledger funding. Resolve the additional funds explicitly rather than silently sweeping them.');
-  return{network:a.network,asset:a.asset,from:a.spendingAddress,to:a.payerAddress,amountBaseUnits:balance.amount,approvedFundingBaseUnits,block:balance.block,observedAt:new Date().toISOString(),consentHash:digest({action:'return-unused-testnet-usdc',authority:a,approvedFundingBaseUnits,amountBaseUnits:balance.amount}),
-   effect:'Stop the allowance and return only the current Base Sepolia test-USDC balance to the original Ledger payer. Previously paid service charges are not refunded. The existing Hedera account remains separate and unchanged.'};
+  return{network:a.network,asset:a.asset,from:a.spendingAddress,to:a.payerAddress,amountBaseUnits:balance.amount,approvedFundingBaseUnits,block:balance.block,observedAt:new Date().toISOString(),consentHash:digest({action:'return-unused-mainnet-usdc',authority:a,approvedFundingBaseUnits,amountBaseUnits:balance.amount}),
+   effect:'Stop the allowance and return only the current Base mainnet USDC balance to the original Ledger payer. Previously paid service charges are not refunded.'};
  }
  async returnUnused(consentHash:string):Promise<Record<string,unknown>>{
   const review=await this.preview();if(review.consentHash!==consentHash)throw new Error('The return amount or authority changed. Review the current balance again.');
@@ -47,13 +47,13 @@ export class AgentReturnController {
    let signed=false;
    const signer:ClientEvmSigner={address:a.spendingAddress as Hex,signTypedData:async parameters=>{
     const domain=parameters.domain,message=parameters.message as Record<string,unknown>;
-    if(signed||parameters.primaryType!=='TransferWithAuthorization'||Number(domain.chainId)!==84532||String(domain.verifyingContract).toLowerCase()!==a.asset.toLowerCase()||String(message.from).toLowerCase()!==a.spendingAddress.toLowerCase()||String(message.to).toLowerCase()!==a.payerAddress.toLowerCase()||String(message.value)!==current.amount||!Number.isSafeInteger(Number(message.validBefore))||Number(message.validBefore)*1000>Date.now()+180000||Number(message.validBefore)*1000<=Date.now())throw new Error('Return signature differs from the reviewed token, owner, amount or lifetime');
+    if(signed||parameters.primaryType!=='TransferWithAuthorization'||Number(domain.chainId)!==8453||String(domain.verifyingContract).toLowerCase()!==a.asset.toLowerCase()||String(message.from).toLowerCase()!==a.spendingAddress.toLowerCase()||String(message.to).toLowerCase()!==a.payerAddress.toLowerCase()||String(message.value)!==current.amount||!Number.isSafeInteger(Number(message.validBefore))||Number(message.validBefore)*1000>Date.now()+180000||Number(message.validBefore)*1000<=Date.now())throw new Error('Return signature differs from the reviewed token, owner, amount or lifetime');
     signed=true;this.phase='signing_return';const signature=await this.options.signer.signTypedData(parameters);
     if(!await verifyTypedData({...parameters,address:a.spendingAddress as Hex,signature} as never))throw new Error('Return signature does not match the reviewed spending wallet');return signature;
    }};
-   const offer:PaymentRequirements={scheme:'exact',network:a.network,asset:a.asset,amount:current.amount,payTo:a.payerAddress,maxTimeoutSeconds:120,extra:{name:'USDC',version:'2',assetTransferMethod:'eip3009'}};
+   const offer:PaymentRequirements={scheme:'exact',network:a.network,asset:a.asset,amount:current.amount,payTo:a.payerAddress,maxTimeoutSeconds:120,extra:{name:'USD Coin',version:'2',assetTransferMethod:'eip3009'}};
    const client=new x402Client();client.register(a.network,new ExactEvmScheme(signer));
-   const payload=await client.createPaymentPayload({x402Version:2,resource:{url:this.options.facilitatorUrl,description:'Return reviewed unused testnet funds to their original payer'},accepts:[offer]});
+   const payload=await client.createPaymentPayload({x402Version:2,resource:{url:this.options.facilitatorUrl,description:'Return reviewed unused mainnet funds to their original payer'},accepts:[offer]});
    journal.db.prepare("UPDATE agent_returns SET state='signed',payload=?,offer=? WHERE authority_id=?").run(JSON.stringify(payload),JSON.stringify(offer),a.id);exported=true;
    journal.event(a.id,null,'agent.return_signed',{amountBaseUnits:current.amount,from:a.spendingAddress,to:a.payerAddress,network:a.network,authorizationDigest:digest(payload)});
    this.phase='submitting_return';const verification=await this.facilitator.verify(payload,offer);if(!verification.isValid)throw new Error('Return authorization was not verified; reconcile before attempting anything else');
@@ -74,7 +74,7 @@ export class AgentReturnController {
   if(!row?.payload||!row.offer||!['signed','uncertain'].includes(row.state))throw new Error('No exported return authorization needs reconciliation');
   if(transactionHash&&!/^0x[0-9a-fA-F]{64}$/.test(transactionHash))throw new Error('Invalid return transaction hash');this.busy=true;this.phase='reconciling_return';
   try{
-   if(await this.chain.chainId()!==84532)throw new Error('Return RPC is not Base Sepolia');const payload=JSON.parse(row.payload) as PaymentPayload,offer=JSON.parse(row.offer) as PaymentRequirements;
+   if(await this.chain.chainId()!==8453)throw new Error('Return RPC is not Base mainnet');const payload=JSON.parse(row.payload) as PaymentPayload,offer=JSON.parse(row.offer) as PaymentRequirements;
    const transaction=transactionHash??row.transaction_hash??await this.chain.findTransaction(payload,row.from_block);
    if(!transaction)throw new Error('No confirmed matching return transfer found. No new signature or transfer was attempted.');
    await this.confirm(payload,offer,transaction);return{closed:true,transaction,returnedBaseUnits:offer.amount};

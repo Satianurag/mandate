@@ -26,7 +26,7 @@ test('refund proof requires an exact token transfer from escrow to the expected 
   assert.throws(()=>assertRefundTransfers({...receipt(),status:'reverted'},{asset,payer,expectedBaseUnits:'4940000'}),/reverted/);
 });
 test('a successful merchant response alone cannot establish funded channel authority', () => {
-  const snapshot: ChannelSnapshot = {network:'eip155:84532',blockNumber:'1',observedAt:new Date().toISOString(),channelId:txHash,
+  const snapshot: ChannelSnapshot = {network:'eip155:8453',blockNumber:'1',observedAt:new Date().toISOString(),channelId:txHash,
     balanceBaseUnits:'5000000',claimedBaseUnits:'60000',payerBalanceBaseUnits:'0',receiverBalanceBaseUnits:'0',
     receiverAggregateClaimedBaseUnits:'60000',receiverAggregateSettledBaseUnits:'0',withdrawalAmountBaseUnits:'0',withdrawalInitiatedAt:0,refundNonce:'0'};
   assertFundingSnapshot(snapshot,'5000000');
@@ -45,9 +45,9 @@ test('refund calldata is verified inside the stock multicall and cannot substitu
  const {computeChannelId}=await import('@x402/evm/batch-settlement/client');
  const {assertRefundCall,REFUND_CALL_ABI}=await import('./reconciliation.ts');
  const config={payer,payerAuthorizer:other,receiver:other,receiverAuthorizer:payer,token:asset,withdrawDelay:86400,salt:txHash} as const;
- const channelId=computeChannelId(config,84532);
+ const channelId=computeChannelId(config,8453);
  const data=encodeFunctionData({abi:REFUND_CALL_ABI,functionName:'refundWithSignature',args:[config,70000n,0n,'0xab']});
- const expected={chainId:84532,channelId,asset,payer,receiver:other,amount:'70000'} as const;
+ const expected={chainId:8453,channelId,asset,payer,receiver:other,amount:'70000'} as const;
  assertRefundCall(data,expected);
  assertRefundCall(encodeFunctionData({abi:REFUND_CALL_ABI,functionName:'multicall',args:[[data]]}),expected);
  assert.throws(()=>assertRefundCall(data,{...expected,amount:'1'}),/exactly one/);

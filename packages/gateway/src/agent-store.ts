@@ -73,6 +73,18 @@ export class AgentStore {
   events(runId: string): AgentEvent[] {
     return (this.db.prepare("SELECT * FROM agent_events WHERE run_id=? ORDER BY sequence").all(runId) as Array<{ sequence: number; run_id: string; kind: string; data: string; created_at: number }>).map(r => ({ sequence: r.sequence, runId: r.run_id, kind: r.kind, data: JSON.parse(r.data), createdAt: r.created_at }));
   }
+  resume(id: string): AgentRun {
+    const run = this.run(id);
+    if (!run || !["partial", "interrupted", "failed"].includes(run.state)) throw new Error("Only incomplete runs can resume");
+    const events = this.events(id);
+    const observations = new Set(events.filter(e => e.kind === "tool_observation" || e.kind === "payment_reconciled").map(e => e.kind === "payment_reconciled" ? (e.data as {observation:{requestId:string}}).observation.requestId : (e.data as {requestId:string}).requestId));
+    if (events.some(e => e.kind === "payment_requested" && !observations.has((e.data as {requestId:string}).requestId))) throw new Error("Reconcile the previous payment before resuming");
+    if (events.filter(e => e.kind === "action_selected").length >= run.agent.maxSteps) throw new Error("This run exhausted its decision limit");
+    const changed = this.db.prepare("UPDATE agent_runs SET state='queued',error=NULL,updated_at=?,deadline=? WHERE id=? AND state=?").run(Date.now(), Date.now()+run.agent.maxDurationSeconds*1000, id, run.state);
+    if (changed.changes !== 1) throw new Error("Run changed; reload before resuming");
+    this.event(id, "resume_requested", { restoredObservations: observations.size, preservesBudget: true });
+    return this.run(id)!;
+  }
   claim(id: string): boolean {
     return this.db.prepare("UPDATE agent_runs SET state='running',updated_at=? WHERE id=? AND state='queued'").run(Date.now(), id).changes === 1;
   }

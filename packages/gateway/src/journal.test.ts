@@ -11,7 +11,7 @@ function setup(t: { after: (fn: () => void) => void }) {
   t.after(() => rmSync(dir, { recursive: true, force: true }));
   return join(dir, "journal.sqlite");
 }
-const request = (id: string) => ({ id, mandateId: "m", digest: digest({ id }), network: "eip155:84532", asset: "USDC", amount: "50", limits });
+const request = (id: string) => ({ id, mandateId: "m", digest: digest({ id }), network: "eip155:8453", asset: "USDC", amount: "50", limits });
 test("audit regression: 12 simultaneous reservations cannot exceed a budget of 500", (t) => {
   const path = setup(t), a = new Journal(path), b = new Journal(path);
   a.register("m", limits); let accepted = 0;
@@ -116,7 +116,7 @@ test('fully consumed mandates close without inventing a zero-value refund', () =
   const j = new Journal(':memory:');
   const channelId = `0x${'12'.repeat(32)}`;
   const proof = {
-    network: 'eip155:84532', channelId, balanceBaseUnits: '500', claimedBaseUnits: '500',
+    network: 'eip155:8453', channelId, balanceBaseUnits: '500', claimedBaseUnits: '500',
     receiverAggregateClaimedBaseUnits: '500', receiverAggregateSettledBaseUnits: '500',
     withdrawalAmountBaseUnits: '0', blockNumber: '100', observedAt: '2026-09-11T00:00:00.000Z',
   };
@@ -137,7 +137,7 @@ test('fully consumed mandates close without inventing a zero-value refund', () =
 
 test('fully-spent closure fails closed for unresolved, under-spent, unsettled, or withdrawing channels', () => {
   const baseProof = {
-    network: 'eip155:84532', channelId: `0x${'34'.repeat(32)}`, balanceBaseUnits: '500', claimedBaseUnits: '500',
+    network: 'eip155:8453', channelId: `0x${'34'.repeat(32)}`, balanceBaseUnits: '500', claimedBaseUnits: '500',
     receiverAggregateClaimedBaseUnits: '500', receiverAggregateSettledBaseUnits: '500', withdrawalAmountBaseUnits: '0',
   };
   const make = (id: string) => {
@@ -167,7 +167,7 @@ test('timed withdrawal lifecycle is durable, idempotent, and never conflates ini
   const j = new Journal(':memory:');
   const channelId = `0x${'78'.repeat(32)}`;
   const base = {
-    network: 'eip155:84532', channelId, balanceBaseUnits: '500', claimedBaseUnits: '50', payerBalanceBaseUnits: '1000',
+    network: 'eip155:8453', channelId, balanceBaseUnits: '500', claimedBaseUnits: '50', payerBalanceBaseUnits: '1000',
     receiverAggregateClaimedBaseUnits: '50', receiverAggregateSettledBaseUnits: '50', withdrawalAmountBaseUnits: '0',
     withdrawalInitiatedAt: 0, blockNumber: '10', observedAt: '2026-09-11T00:00:00.000Z',
   };
@@ -197,7 +197,7 @@ test('timed withdrawal lifecycle is durable, idempotent, and never conflates ini
 test('timed withdrawal journal rejects unsettled liability and unproven token return', () => {
   const j = new Journal(':memory:');
   const channelId = `0x${'90'.repeat(32)}`;
-  const base = { network: 'eip155:84532', channelId, balanceBaseUnits: '500', claimedBaseUnits: '50', payerBalanceBaseUnits: '1000',
+  const base = { network: 'eip155:8453', channelId, balanceBaseUnits: '500', claimedBaseUnits: '50', payerBalanceBaseUnits: '1000',
     receiverAggregateClaimedBaseUnits: '50', receiverAggregateSettledBaseUnits: '49', withdrawalAmountBaseUnits: '0', withdrawalInitiatedAt: 0 };
   try {
     j.register('blocked-timed', limits); j.bindChannel('blocked-timed', channelId); j.depositOnce('blocked-timed'); j.funded('blocked-timed', {});
