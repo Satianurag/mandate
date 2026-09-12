@@ -1,0 +1,137 @@
+/** Adaptive goal execution. Payment signing belongs exclusively to the broker executor. */
+import { randomUUID } from "node:crypto";
+import { AgentStore, TERMINAL_AGENT_STATES, type AgentRun } from "./agent-store.ts";
+import type { AgentToolId } from "./agent-profiles.ts";
+
+export interface AgentTool {
+  id: AgentToolId; description: string; inputSchema: Record<string, unknown>;
+}
+export interface ToolObservation {
+  toolId: AgentToolId; requestId: string; data: unknown;
+  sources: Array<{ url: string; title: string }>;
+  receipt: { network: string; asset: string; amountBaseUnits: string; transaction: string };
+  error?: string;
+}
+export type AgentDecision =
+  | { action: "tool"; toolId: AgentToolId; input: Record<string, unknown>; reason: string }
+  | { action: "finish"; result: string; complete: boolean; evidenceIds: string[] };
+export interface ReasoningContext {
+  run: AgentRun; tools: AgentTool[]; observations: ToolObservation[];
+  failures: Array<{ toolId: AgentToolId; reason: string }>;
+  remainingBaseUnits: string; remainingSteps: number;
+}
+export interface AgentModel {
+  next(context: ReasoningContext, signal: AbortSignal): Promise<{ decision: AgentDecision; usage: Record<string, unknown> }>;
+}
+export interface X402Quote {
+  toolId: AgentToolId; input: Record<string, unknown>; network: string; asset: string;
+  amountBaseUnits: string; offerId: string;
+}
+export interface AgentToolExecutor {
+  catalog(): AgentTool[];
+  /** Unpaid discovery/quote, with input validation and fixed endpoint mapping. */
+  quote(toolId: AgentToolId, input: Record<string, unknown>, signal: AbortSignal): Promise<X402Quote>;
+  /** Must atomically enforce shared authority AND run budget before signing.
+   * Return only a confirmed payment+response; never blindly retry an uncertain charge. */
+  execute(input: { run: AgentRun; quote: X402Quote; requestId: string; remainingBaseUnits: string; signal: AbortSignal }): Promise<ToolObservation>;
+}
+export class UncertainAgentPayment extends Error {}
+export class AgentAuthorityError extends Error {}
+export class ConfirmedPaidToolFailure extends Error {
+  readonly observation: ToolObservation;
+  constructor(observation: ToolObservation) { super(observation.error ?? "Paid service failed"); this.observation = observation; }
+}
+const errorText = (e: unknown) => e instanceof Error ? e.message : String(e);
+const positiveUnits = (s: unknown): s is string => typeof s === "string" && /^[1-9]\d{0,30}$/.test(s);
+
+export class AgentRuntime {
+  readonly store: AgentStore;
+  readonly model: AgentModel;
+  readonly executor: AgentToolExecutor;
+  private readonly active = new Map<string, AbortController>();
+  constructor(store: AgentStore, model: AgentModel, executor: AgentToolExecutor) {
+    this.store = store; this.model = model; this.executor = executor;
+  }
+  stop(id: string): void { this.store.stop(id); this.active.get(id)?.abort(new Error("Stopped by user")); }
+  async run(id: string): Promise<void> {
+    if (!this.store.claim(id)) return;
+    const run = this.store.run(id)!;
+    const controller = new AbortController(); this.active.set(id, controller);
+    const timer = setTimeout(() => controller.abort(new Error("Runtime limit reached")), Math.max(1, run.deadline - Date.now()));
+    const signal = controller.signal;
+    const observations: ToolObservation[] = [];
+    const failures: ReasoningContext["failures"] = [];
+    let spent = 0n;
+    const tools = this.executor.catalog().filter(t => run.agent.toolIds.includes(t.id));
+    const partial = (reason: string) => {
+      const evidence = observations.map(o => `- ${o.toolId}: receipt ${o.receipt.transaction} (${o.receipt.amountBaseUnits} base units on ${o.receipt.network})`).join("\n");
+      return `Investigation incomplete: ${reason}\n\n${observations.length ? `Collected evidence remains available in the run history.\n${evidence}` : "No paid evidence was collected."}`;
+    };
+    try {
+      if (!tools.length) throw new AgentAuthorityError("None of this agent's selected tools is configured");
+      if (run.agent.requiredToolIds?.some(id => !tools.some(t => t.id === id))) throw new AgentAuthorityError("A required evidence source for this specialist is not configured");
+      for (let step = 0; step < run.agent.maxSteps; step++) {
+        signal.throwIfAborted();
+        if (this.store.run(id)?.state !== "running") throw new Error("Run no longer permits new actions");
+        const remaining = BigInt(run.agent.budgetBaseUnits) - spent;
+        const response = await this.model.next({ run, tools, observations, failures, remainingBaseUnits: remaining.toString(), remainingSteps: run.agent.maxSteps - step }, signal);
+        this.store.event(id, "model_usage", response.usage);
+        signal.throwIfAborted();
+        const decision = response.decision;
+        if (decision.action === "finish") {
+          if (typeof decision.result !== "string" || !decision.result.trim() || decision.result.length > 50000 || typeof decision.complete !== "boolean" || !Array.isArray(decision.evidenceIds) || decision.evidenceIds.some(e => !observations.some(o => o.requestId === e))) throw new Error("Model returned an invalid or unsupported result");
+          // A success declaration requires evidence from multiple services for these investigators.
+          const minimumTools = run.agent.template ? 2 : 1;
+          const cited = observations.filter(o => !o.error && decision.evidenceIds.includes(o.requestId));
+          const complete = decision.complete && new Set(cited.map(o => o.toolId)).size >= minimumTools && (run.agent.requiredToolIds ?? []).every(id => cited.some(o => o.toolId === id));
+          this.store.event(id, "conclusion", { complete, evidenceIds: decision.evidenceIds });
+          this.store.finish(id, complete ? "completed" : "partial", decision.result,
+            complete ? null : "The investigation did not establish completion using multiple paid tools.");
+          return;
+        }
+        if (decision.action !== "tool" || !tools.some(t => t.id === decision.toolId) || !decision.input || typeof decision.input !== "object" || Array.isArray(decision.input) || typeof decision.reason !== "string" || !decision.reason.trim() || decision.reason.length > 2000) throw new AgentAuthorityError("Model requested an invalid or unpermitted action");
+        this.store.event(id, "action_selected", { step: step + 1, ...decision });
+        let quote: X402Quote;
+        try { quote = await this.executor.quote(decision.toolId, decision.input, signal); }
+        catch (e) {
+          if (signal.aborted) throw e;
+          failures.push({ toolId: decision.toolId, reason: errorText(e) });
+          this.store.event(id, "unpaid_tool_failure", failures.at(-1));
+          continue;
+        }
+        if (quote.toolId !== decision.toolId || !positiveUnits(quote.amountBaseUnits)) throw new AgentAuthorityError("Invalid x402 quote");
+        if (BigInt(quote.amountBaseUnits) > remaining || BigInt(quote.amountBaseUnits) > BigInt(run.agent.perCallBaseUnits)) {
+          failures.push({ toolId: decision.toolId, reason: "Quoted price exceeds the remaining or per-call allowance. Choose a cheaper permitted action or finish with available evidence." });
+          this.store.event(id, "price_blocked", { ...failures.at(-1), amountBaseUnits: quote.amountBaseUnits });
+          continue;
+        }
+        signal.throwIfAborted();
+        if (this.store.run(id)?.state !== "running") throw new AgentAuthorityError("Run was stopped before payment");
+        const requestId = randomUUID();
+        this.store.event(id, "payment_requested", { requestId, quote });
+        // Any execute failure may have signed a payment. Stop unless the executor
+        // explicitly proves it was an authority rejection before signing.
+        let observation: ToolObservation;
+        try { observation = await this.executor.execute({ run, quote, requestId, remainingBaseUnits: remaining.toString(), signal }); }
+        catch (e) {
+          if (e instanceof ConfirmedPaidToolFailure) observation = e.observation;
+          else {
+            if (e instanceof AgentAuthorityError) throw e;
+            throw new UncertainAgentPayment(`Payment needs review before further spending: ${errorText(e)}`);
+          }
+        }
+        if (observation.requestId !== requestId || observation.toolId !== quote.toolId || observation.receipt.network !== quote.network || observation.receipt.asset.toLowerCase() !== quote.asset.toLowerCase() || !positiveUnits(observation.receipt.amountBaseUnits) || BigInt(observation.receipt.amountBaseUnits) > BigInt(quote.amountBaseUnits) || !observation.receipt.transaction) throw new UncertainAgentPayment("Payment response did not match the reviewed quote");
+        spent += BigInt(observation.receipt.amountBaseUnits);
+        observations.push(observation);
+        this.store.event(id, "tool_observation", observation);
+      }
+      this.store.finish(id, "partial", partial("Step limit reached"));
+    } catch (e) {
+      const reason = errorText(e);
+      this.store.event(id, e instanceof UncertainAgentPayment ? "payment_uncertain" : "execution_stopped", { reason });
+      const state = this.store.run(id)?.state;
+      if (state && !TERMINAL_AGENT_STATES.has(state)) this.store.finish(id,
+        state === "stopping" ? "stopped" : observations.length ? "partial" : "failed", partial(reason), reason);
+    } finally { clearTimeout(timer); this.active.delete(id); }
+  }
+}

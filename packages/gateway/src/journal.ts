@@ -96,6 +96,11 @@ export class Journal {
         state TEXT NOT NULL, created_at INTEGER NOT NULL, finished_at INTEGER, payload_hash TEXT,
         receipt TEXT, response TEXT, error TEXT);
       CREATE INDEX IF NOT EXISTS request_mandate ON requests(mandate_id, network, asset);
+      CREATE TABLE IF NOT EXISTS request_budget_groups (
+        request_id TEXT PRIMARY KEY REFERENCES requests(id), group_id TEXT NOT NULL);
+      CREATE INDEX IF NOT EXISTS request_group ON request_budget_groups(group_id);
+      CREATE TABLE IF NOT EXISTS budget_group_limits (
+        id TEXT PRIMARY KEY, ceiling TEXT NOT NULL, per_call TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS events (
         seq INTEGER PRIMARY KEY AUTOINCREMENT, id TEXT NOT NULL UNIQUE, mandate_id TEXT NOT NULL,
         request_id TEXT, kind TEXT NOT NULL, data TEXT NOT NULL, previous_hash TEXT NOT NULL,
@@ -291,7 +296,7 @@ export class Journal {
     }
     return { spent: String(spent), reserved: String(reserved), window: String(window + reserved) };
   }
-  reserve(input: { id: string; mandateId: string; digest: string; network: string; asset: string; amount: string; limits: BudgetLimits; now?: number }): RequestRow {
+  reserve(input: { id: string; mandateId: string; digest: string; network: string; asset: string; amount: string; limits: BudgetLimits; now?: number; group?: { id: string; ceilingBaseUnits: string; perCallBaseUnits: string } }): RequestRow {
     return this.transaction(() => {
       this.assertActive(input.mandateId);
       const prior = this.request(input.id);
@@ -305,8 +310,19 @@ export class Journal {
       const totals = this.totals(input.mandateId, l.windowMs, input.now);
       if (units(totals.spent) + units(totals.reserved) + n > units(l.ceilingBaseUnits, true)) throw new Error("Lifetime budget exhausted");
       if (units(totals.window) + n > units(l.windowBaseUnits, true)) throw new Error("Rolling budget exhausted");
+      if (input.group) {
+        const group = input.group;
+        if (!group.id || n > units(group.perCallBaseUnits, true)) throw new Error("Run per-call budget exceeded");
+        const priorLimits = this.db.prepare("SELECT ceiling,per_call FROM budget_group_limits WHERE id=?").get(group.id) as { ceiling: string; per_call: string } | undefined;
+        if (priorLimits && (priorLimits.ceiling !== group.ceilingBaseUnits || priorLimits.per_call !== group.perCallBaseUnits)) throw new Error("Run budget is immutable");
+        if (!priorLimits) this.db.prepare("INSERT INTO budget_group_limits(id,ceiling,per_call) VALUES(?,?,?)").run(group.id, group.ceilingBaseUnits, group.perCallBaseUnits);
+        const rows = this.db.prepare("SELECT r.state,r.maximum,r.charged FROM requests r JOIN request_budget_groups g ON g.request_id=r.id WHERE g.group_id=?").all(group.id) as Array<{state:string;maximum:string;charged:string|null}>;
+        const used = rows.reduce((sum, r) => sum + (r.state === "accepted" ? units(r.charged!) : ["reserved", "signed", "uncertain"].includes(r.state) ? units(r.maximum) : 0n), 0n);
+        if (used + n > units(group.ceilingBaseUnits, true)) throw new Error("Run lifetime budget exhausted");
+      }
       this.db.prepare("INSERT INTO requests(id,mandate_id,digest,network,asset,maximum,state,created_at) VALUES(?,?,?,?,?,?,'reserved',?)")
         .run(input.id, input.mandateId, input.digest, input.network, input.asset, input.amount, input.now ?? Date.now());
+      if (input.group) this.db.prepare("INSERT INTO request_budget_groups(request_id,group_id) VALUES(?,?)").run(input.id, input.group.id);
       this.append(input.mandateId, input.id, "request.reserved", { maximum: input.amount, network: input.network, asset: input.asset, digest: input.digest });
       return this.request(input.id)!;
     });

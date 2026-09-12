@@ -9,6 +9,9 @@ import { parse, stringify } from "yaml";
 import { createPublicClient, getAddress, http, erc20Abi, type Address, type Hex } from "viem";
 import { decodePaymentRequiredHeader } from "@x402/core/http";
 import { Journal, digest, type OutboxRow } from "./journal.ts";
+import { AgentStore } from "./agent-store.ts";
+import { AgentRuntime, type AgentModel, type AgentToolExecutor } from "./agent-runtime.ts";
+import { loadAgentServices, type AgentServices } from "./agent-services.ts";
 import { parseMandateFile, scopeOf, type MandateFile } from "./mandate-config.ts";
 import { openMandate, resumeMandate, type Mandate } from "./mandate.ts";
 import { assertPaymentScope } from "./scope.ts";
@@ -57,6 +60,7 @@ export interface OperatorOptions {
   discoverResearchSources?: () => Promise<Record<string, string>>;
   /** Hermetic lifecycle injection. The production runtime remains explicit prepare -> Ledger sign -> broadcast -> confirm. */
   withdrawalRuntime?: OperatorWithdrawalRuntime;
+  agentServices?: AgentServices;
 }
 export interface OperatorApp { server: Server; journal: Journal; dataDir: string; close: () => Promise<void> }
 
@@ -154,6 +158,12 @@ export async function createOperatorApp(options: OperatorOptions): Promise<Opera
   const journal = new Journal(join(dataDir, "workspace.sqlite"));
   const releaseOwner = journal.own("operator-workspace");
   const auth = new OperatorAuth(journal, dataDir);
+  const agents = new AgentStore(journal.db);
+  agents.interruptActive();
+  const loadedAgentServices = options.agentServices ? { services: options.agentServices, reason: "Ready" } : await loadAgentServices(dataDir, journal);
+  const agentServices = loadedAgentServices.services;
+  const agentRuntime = agentServices ? new AgentRuntime(agents, agentServices.model, agentServices.executor) : null;
+  const activeAgentRuns = new Map<string, Promise<void>>();
   journal.db.exec(`CREATE TABLE IF NOT EXISTS workspace_tasks (
     id TEXT PRIMARY KEY,kind TEXT NOT NULL,mandate_id TEXT NOT NULL,capability_id TEXT,
     query TEXT NOT NULL,task_spec TEXT,intent_hash TEXT,state TEXT NOT NULL,result TEXT,error TEXT,created_at INTEGER NOT NULL,updated_at INTEGER NOT NULL);`);
@@ -696,11 +706,26 @@ export async function createOperatorApp(options: OperatorOptions): Promise<Opera
       if (req.headers.host !== `127.0.0.1:${port}`) throw new HttpError(403, "Use the exact loopback operator address; unexpected Host blocked");
       const url = new URL(req.url ?? "/", origin), path = url.pathname;
       if (req.method === "GET" && path === "/healthz") { respond(res, 200, { ok: true, service: "mandate-operator", signingAtStartup: false }); return; }
-      if (req.method === "GET" && ["/", "/workspace.js", "/workspace.css", "/favicon.svg"].includes(path)) {
-        const name = path === "/" ? "index.html" : path.slice(1);
-        const body = await readFile(join(root, "console", name));
-        res.writeHead(200, { "content-type": name.endsWith(".js") ? "text/javascript; charset=utf-8" : name.endsWith(".css") ? "text/css; charset=utf-8" : name.endsWith(".svg") ? "image/svg+xml" : "text/html; charset=utf-8", "cache-control": "no-store" });
-        res.end(body); return;
+      if (req.method === "GET") {
+        const staticRoutes: Record<string, { name: string; contentType: string }> = {
+          "/": { name: "index.html", contentType: "text/html; charset=utf-8" },
+          "/workspace": { name: "workspace.html", contentType: "text/html; charset=utf-8" },
+          "/workspace/": { name: "workspace.html", contentType: "text/html; charset=utf-8" },
+          "/style.css": { name: "style.css", contentType: "text/css; charset=utf-8" },
+          "/mandate-sculpture.png": { name: "mandate-sculpture.png", contentType: "image/png" },
+          "/workspace.js": { name: "workspace.js", contentType: "text/javascript; charset=utf-8" },
+          "/agents.js": { name: "agents.js", contentType: "text/javascript; charset=utf-8" },
+          "/workspace.css": { name: "workspace.css", contentType: "text/css; charset=utf-8" },
+          "/favicon.svg": { name: "favicon.svg", contentType: "image/svg+xml" },
+        };
+        const asset = staticRoutes[path];
+        if (asset) {
+          if (path === "/") auth.prepareWorkspaceTransition(res);
+          else if (path === "/workspace" || path === "/workspace/") auth.loginFromWorkspaceTransition(req, res);
+          const body = await readFile(join(root, "console", asset.name));
+          res.writeHead(200, { "content-type": asset.contentType, "cache-control": "no-store" });
+          res.end(body); return;
+        }
       }
       if (!path.startsWith("/api/")) { respond(res, 404, { error: "This static prototype route is not part of the live workspace" }); return; }
       if (path === "/api/session" && req.method === "POST") {
@@ -709,6 +734,61 @@ export async function createOperatorApp(options: OperatorOptions): Promise<Opera
       }
       const principal = auth.authenticate(req, origin);
       if (path === "/api/session" && req.method === "DELETE") { auth.logout(principal, res); respond(res, 200, { ok: true }); return; }
+      if (path === "/api/agents" && req.method === "GET") {
+        auth.operator(principal);
+        const readiness = agentServices?.readiness?.() ?? { ready: Boolean(agentRuntime), reason: loadedAgentServices.reason };
+        const availableTools = agentServices?.executor.catalog().map(t => t.id) ?? [];
+        const availability = Object.fromEntries(agents.profiles().map(p => {
+          const missing = (p.requiredToolIds ?? []).filter(id => !availableTools.includes(id));
+          return [p.id, { ready: readiness.ready && !missing.length && p.toolIds.some(id => availableTools.includes(id)),
+            reason: !readiness.ready ? readiness.reason : missing.length ? `This specialist needs ${missing.join(", ")} configured before it can investigate.` : !p.toolIds.some(id => availableTools.includes(id)) ? "None of this agent's selected tools is configured." : readiness.reason }];
+        }));
+        respond(res, 200, { agents: agents.profiles(), runs: agents.runs(), ready: readiness.ready,
+          availableTools, availability, readiness: readiness.reason }); return;
+      }
+      if (path === "/api/agents" && req.method === "POST") {
+        auth.operator(principal);
+        respond(res, 201, { agent: agents.save(await jsonBody(req)) }); return;
+      }
+      const agentEdit = path.match(/^\/api\/agents\/([A-Za-z0-9_-]+)$/);
+      if (agentEdit && req.method === "PUT") {
+        auth.operator(principal);
+        const { expectedVersion, ...body } = await jsonBody(req);
+        respond(res, 200, { agent: agents.save(body, agentEdit[1]!, Number(expectedVersion)) }); return;
+      }
+      if (path === "/api/agent-runs" && req.method === "POST") {
+        auth.operator(principal);
+        const body = await jsonBody(req);
+        if (Object.keys(body).some(k => !["requestId", "agentId", "goal"].includes(k))) throw new HttpError(400, "Run input cannot change payment authority");
+        const existingRun = agents.run(String(body.requestId ?? ""));
+        if (existingRun) {
+          const run = agents.createRun({ id: existingRun.id, agentId: String(body.agentId ?? ""), goal: String(body.goal ?? ""), authorityId: existingRun.authorityId });
+          respond(res, 200, { run }); return;
+        }
+        if (!agentRuntime || !agentServices) throw new HttpError(409, "Model and x402 spending authority are not ready");
+        const readiness = agentServices.readiness?.();
+        if (readiness && !readiness.ready) throw new HttpError(409, readiness.reason);
+        const profile = agents.profile(String(body.agentId ?? "")), available = agentServices.executor.catalog();
+        if (!profile.toolIds.some(id => available.some(t => t.id === id)) || profile.requiredToolIds?.some(id => !available.some(t => t.id === id))) throw new HttpError(409, "Required tools for this agent are not configured");
+        const run = agents.createRun({ id: String(body.requestId ?? ""), agentId: String(body.agentId ?? ""), goal: String(body.goal ?? ""), authorityId: agentServices.authorityId });
+        if (run.state === "queued" && !activeAgentRuns.has(run.id)) {
+          const execution = agentRuntime.run(run.id).finally(() => activeAgentRuns.delete(run.id));
+          activeAgentRuns.set(run.id, execution);
+        }
+        respond(res, 202, { run: agents.run(run.id) }); return;
+      }
+      const agentRun = path.match(/^\/api\/agent-runs\/([A-Za-z0-9_-]+)(\/stop)?$/);
+      if (agentRun) {
+        auth.operator(principal);
+        const run = agents.run(agentRun[1]!);
+        if (!run) throw new HttpError(404, "Agent run not found");
+        if (req.method === "POST" && agentRun[2]) {
+          await jsonBody(req);
+          if (agentRuntime) agentRuntime.stop(run.id); else agents.stop(run.id);
+          respond(res, 200, { run: agents.run(run.id) }); return;
+        }
+        if (req.method === "GET" && !agentRun[2]) { respond(res, 200, { run, events: agents.events(run.id) }); return; }
+      }
       if (path === "/api/state" && req.method === "GET") {
         auth.operator(principal);
         const cfg = await config().catch(() => null);
@@ -1147,7 +1227,9 @@ export async function createOperatorApp(options: OperatorOptions): Promise<Opera
   server.requestTimeout = 15000; server.headersTimeout = 10000;
   return { server, journal, dataDir, close: async () => {
     shuttingDown = true;
+    for (const id of activeAgentRuns.keys()) agentRuntime?.stop(id);
     await new Promise<void>(resolveClose => server.close(() => resolveClose()));
+    await Promise.allSettled(activeAgentRuns.values());
     await serial; signedWithdrawals.clear(); mandate?.close(); releaseOwner(); journal.close();
   } };
 }

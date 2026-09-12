@@ -83,9 +83,11 @@ npm run console
 npm run console:open
 ```
 
-The application binds only to `127.0.0.1:8410`. The launcher reads the local
-operator token and opens an authenticated session; the token is removed from the
-URL immediately. Do not copy that token, the private capability files, or the Key
+The application binds only to `127.0.0.1:8410`. The public product landing page
+is served at `/`; opening the workspace from that landing page creates the local
+operator session without showing or copying the token. `npm run console:open`
+remains available as an explicit launcher, and removes the token from the URL
+immediately. Do not copy that token, the private capability files, or the Key
 Ring profile into chat, public files, or a tunnel. Startup does not sign or spend.
 
 ## Configure the real testnet stack

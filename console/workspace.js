@@ -72,6 +72,8 @@ function showLogin(error = '') {
   current = null;
   csrf = '';
   $('workspace').hidden = true;
+  $('appSidebar').hidden = true;
+  document.body.classList.remove('is-connected');
   $('loginPanel').hidden = false;
   $('logout').hidden = true;
   $('connectionDot').className = 'dot';
@@ -129,6 +131,7 @@ function syncPendingIntent(state) {
     return null;
   }
   notice.hidden = false;
+  document.querySelector('.task-diagnostics').open = true;
   const ageMinutes = Math.max(0, Math.floor((Date.now() - pending.createdAt) / 60000));
   $('pendingIntentText').textContent = task
     ? `Request ${pending.requestId} is ${readable(task.state)}. Observe or reconcile this exact task before starting another paid run.`
@@ -301,6 +304,8 @@ function historyTable(tasks, archived = false) {
       try {
         const selected = archived ? (await api(`/api/tasks/${encodeURIComponent(task.id)}`)).task : task;
         selectedTask = selected.id;
+        showDashboardView('task');
+        document.querySelector('.task-diagnostics').open = true;
         renderResult(selected);
         $('result').scrollIntoView({ block: 'center', behavior: 'smooth' });
       } catch (error) { message(`Could not read preserved task: ${error.message}`, true); }
@@ -429,6 +434,7 @@ function updateActionAvailability(state = current) {
       : expired
         ? 'Permission has expired. New work is blocked; existing receipts, settlement and recovery remain available.'
         : 'Stop blocks future requests and revokes agent access. It does not reverse accepted payments. Closure and refund are separate verified terminal flows.';
+  if ($('homeView')) renderDashboard(state);
   $('mandateStatus').textContent = status;
   $('mandateStatus').className = `badge ${statusType(status.toLowerCase().replaceAll(' ', '_'))}`;
 }
@@ -438,6 +444,8 @@ function render(state) {
   const tasks = state.tasks;
   $('loginPanel').hidden = true;
   $('workspace').hidden = false;
+  $('appSidebar').hidden = false;
+  document.body.classList.add('is-connected');
   $('logout').hidden = false;
   $('legacyWarning').hidden = !state.legacy && Boolean(cfg?.researchSource);
   if (state.legacy) $('legacyWarning').textContent = state.legacy.message;
@@ -499,6 +507,7 @@ async function refresh(force = false) {
     const state = await api('/api/state');
     current = state;
     csrf = state.csrf;
+    window.dispatchEvent(new Event('mandate:state'));
     $('connectionDot').className = 'dot connected';
     $('connectionText').textContent = 'Connected to local broker';
     $('observedAt').textContent = `State checked ${when(state.observedAt)}`;
@@ -573,6 +582,100 @@ function fillConfig() {
   $('configDialog').showModal();
   void loadResearchSources();
 }
+
+
+let dashboardView = 'home';
+let dashboardFingerprint = '';
+const dashboardTitles = { home: 'Home', task: 'Run task', history: 'Task history', authority: 'Spending & limits', evidence: 'Activity & receipts' };
+function showDashboardView(view, focus = true) {
+  if (!Object.hasOwn(dashboardTitles, view)) return;
+  dashboardView = view;
+  for (const panel of document.querySelectorAll('[data-view]')) panel.hidden = panel.dataset.view !== view;
+  for (const button of document.querySelectorAll('nav [data-navigate]')) {
+    const active = button.dataset.navigate === view;
+    button.classList.toggle('active', active);
+    if (active) button.setAttribute('aria-current', 'page');
+    else button.removeAttribute('aria-current');
+  }
+  updateDashboardHeading();
+  if (focus) {
+    $('dashboardGreeting').tabIndex = -1;
+    $('dashboardGreeting').focus({ preventScroll: true });
+    window.scrollTo({ top: 0, behavior: 'instant' });
+  }
+}
+function updateDashboardHeading() {
+  const now = new Date();
+  const hour = now.getHours();
+  $('dashboardGreeting').textContent = dashboardView === 'home'
+    ? `Good ${hour < 12 ? 'morning' : hour < 17 ? 'afternoon' : 'evening'}!`
+    : dashboardTitles[dashboardView];
+  $('dashboardDate').textContent = now.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+  document.querySelector('.greeting-icon').textContent = dashboardView === 'home' ? '👋' : ({ task: '↗', history: '◷', authority: '◎', evidence: '≡' })[dashboardView];
+}
+function dashboardCard({ title, note, icon = 'A', meta, state, onClick, attention = false }) {
+  const card = el(onClick ? 'button' : 'div', undefined, `recent-card${attention ? ' attention-card' : ''}`);
+  if (onClick) { card.type = 'button'; card.addEventListener('click', onClick); }
+  const heading = el('div', undefined, 'recent-meta');
+  const avatar = el('span', icon, 'recent-avatar');
+  avatar.setAttribute('aria-hidden', 'true');
+  heading.append(avatar, el('span', meta || 'Current Mandate'));
+  if (state) heading.append(badge(readable(state), statusType(state)));
+  card.append(heading, el('strong', title));
+  if (note) card.append(el('p', note));
+  return card;
+}
+async function inspectDashboardTask(task) {
+  try {
+    const selected = task.result === undefined ? (await api(`/api/tasks/${encodeURIComponent(task.id)}`)).task : task;
+    selectedTask = selected.id;
+    showDashboardView('task');
+    renderResult(selected);
+  } catch (error) { message(`Could not read task: ${error.message}`, true); }
+}
+function renderDashboard(state) {
+  updateDashboardHeading();
+  const cfg = state.config;
+  const finance = state.financial;
+  const fingerprint = JSON.stringify([cfg, finance?.spent, finance?.reserved, finance?.state, finance?.deposit, state.tasks, state.historicalTasks, readPendingIntent()?.requestId, cfg ? Date.parse(cfg.expiresAt) <= Date.now() : false]);
+  if (dashboardFingerprint === fingerprint) return;
+  dashboardFingerprint = fingerprint;
+  const ceiling = BigInt(cfg?.ceilingBaseUnits || '0');
+  const spent = BigInt(finance?.spent || '0');
+  $('budgetPercent').textContent = ceiling > 0n ? `${spent * 100n / ceiling}%` : '—';
+  $('budgetNote').textContent = cfg ? `${units(spent)} USDC in accepted charges` : 'No budget set yet';
+  const tasks = state.tasks || [];
+  const completed = tasks.filter(task => task.kind === 'query' && task.state === 'succeeded').length;
+  $('completedCount').textContent = String(completed);
+  $('completedNote').textContent = completed === 1 ? '1 research task finished' : 'In this Mandate';
+  const recent = [...tasks, ...(state.historicalTasks || [])].filter(task => task.kind === 'query').sort((a, b) => b.updated_at - a.updated_at);
+  const root = $('recentWork');
+  root.replaceChildren();
+  $('recentCount').textContent = recent.length ? `· ${recent.length} research task${recent.length === 1 ? '' : 's'}` : '';
+  for (const task of recent.slice(0, 2)) root.append(dashboardCard({
+    title: 'Agent0 due-diligence brief', meta: when(task.updated_at), state: task.state,
+    note: task.task?.source ? `${sourceLabel(task.task.source.chain)} · ${task.task.maxResults} candidates` : (tasks.some(item => item.id === task.id) ? 'Current Mandate' : 'From a previous Mandate'),
+    onClick: () => { void inspectDashboardTask(task); },
+  }));
+  if (!recent.length) root.append(dashboardCard({ title: 'Your next task starts here', note: 'Compare agent registrations using the source and spending limits you approve.', meta: 'Agent0 research', onClick: () => showDashboardView('task') }));
+  const attention = $('attentionList');
+  attention.replaceChildren();
+  const pending = readPendingIntent();
+  const unresolved = tasks.find(task => ['uncertain', 'interrupted', 'awaiting_device', 'awaiting_signature', 'funding_pending'].includes(task.state));
+  let item;
+  if (pending || unresolved) item = { title: 'Check your existing task', note: 'A task is waiting for approval or a confirmed result. Open it to see the next step.', onClick: () => showDashboardView('task') };
+  else if (!cfg) item = { title: 'Set up your first Mandate', note: 'Choose your research source and spending limits before your agent starts.', onClick: fillConfig };
+  else if (TERMINAL_MANDATE_STATES.has(finance?.state)) item = { title: 'Ready for a fresh start', note: 'Your previous Mandate is complete. Review a new one whenever you’re ready.', onClick: fillConfig };
+  else if (finance?.state === 'stopped') item = { title: 'New work is stopped', note: 'Your existing receipts and recovery options are available in Spending & limits.', onClick: () => showDashboardView('authority') };
+  else if (Date.parse(cfg.expiresAt) <= Date.now()) item = { title: 'Your Mandate has expired', note: 'Review your spending authority before starting another task.', onClick: () => showDashboardView('authority') };
+  else if (finance?.deposit !== 'funded') item = { title: 'Your Mandate is ready to fund', note: 'Your first paid task will ask you to approve the budget on your Ledger.', onClick: () => showDashboardView('task') };
+  else if (spent + BigInt(finance?.reserved || '0') >= ceiling) item = { title: 'Your budget is fully allocated', note: 'Review existing payments and any pending work before continuing.', onClick: () => showDashboardView('authority') };
+  $('attentionCount').textContent = item ? '· 1 update' : '';
+  attention.append(dashboardCard(item ? { ...item, meta: 'Your Mandate', icon: '!', attention: true } : { title: 'You’re all caught up', note: 'There’s nothing that needs your attention right now.', meta: 'Current Mandate', icon: '✓', attention: true }));
+}
+for (const button of document.querySelectorAll('[data-navigate]')) button.addEventListener('click', () => showDashboardView(button.dataset.navigate));
+$('newMandate').addEventListener('click', fillConfig);
+updateDashboardHeading();
 
 $('loginForm').addEventListener('submit', async event => {
   event.preventDefault();

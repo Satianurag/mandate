@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="light"><title>Mandate | Dashboard</title>
+  <link rel="icon" href="/favicon.svg"><link rel="stylesheet" href="/workspace.css">
+  <script src="/workspace.js" defer></script>
+  <script src="/agents.js" defer></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to task workspace</a>
+<header class="topbar">
+  <a class="brand" href="/" aria-label="Mandate testnet workspace"><span class="brand-symbol" aria-hidden="true">M</span>Mandate<span class="brand-tag">TESTNET</span></a>
+  <div class="connection"><span id="connectionDot" class="dot"></span><span id="connectionText" role="status">Connecting to local broker</span><button id="logout" class="quiet" hidden>Disconnect</button></div>
+</header>
+<aside id="appSidebar" class="app-sidebar" aria-label="Workspace sidebar" hidden>
+<button id="newMandate" class="new-mandate"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span>New Mandate</span></button>
+<nav aria-label="Dashboard navigation"><button class="nav-item active" aria-label="Home" data-navigate="home" aria-current="page"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-8H9v8H4a1 1 0 0 1-1-1z"/></svg><span class="nav-label">Home</span><span class="nav-label-short" aria-hidden="true">Home</span></button><button class="nav-item" aria-label="Run task" data-navigate="task"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 5 11 7-11 7z"/><path d="M4 5v14"/></svg><span class="nav-label">Run task</span><span class="nav-label-short" aria-hidden="true">Task</span></button><button class="nav-item" aria-label="Task history" data-navigate="history"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11a9 9 0 1 1 2 7M3 5v6h6m3-4v5l3 2"/></svg><span class="nav-label">Task history</span><span class="nav-label-short" aria-hidden="true">History</span></button><button class="nav-item" aria-label="Spending & limits" data-navigate="authority"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 3 8 3v6c0 5-8 9-8 9s-8-4-8-9V6z"/><path d="m8 12 3 3 5-6"/></svg><span class="nav-label">Spending & limits</span><span class="nav-label-short" aria-hidden="true">Limits</span></button><button class="nav-item" aria-label="Activity & receipts" data-navigate="evidence"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 3h12l4 4v14H4zM8 11h8M8 15h8M8 7h4"/></svg><span class="nav-label">Activity & receipts</span><span class="nav-label-short" aria-hidden="true">Activity</span></button></nav>
+<div class="sidebar-group"><p class="sidebar-label">Workspace</p><button class="nav-item" data-navigate="authority"><span class="service-avatar ledger"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="15" rx="2"/><path d="M3 9h18m-6 5h6"/></svg></span><span>Ledger wallet</span></button><button class="nav-item" data-navigate="task"><span class="service-avatar agent">A</span><span>Agent0 research</span></button></div>
+<div class="sidebar-group"><p class="sidebar-label">Networks</p><button class="nav-item" data-navigate="authority"><span class="service-avatar base">—</span><span>Base Sepolia</span></button><button class="nav-item" data-navigate="evidence"><span class="service-avatar hedera">ℏ</span><span>Hedera testnet</span></button></div>
+<div class="sidebar-bottom"><span class="workspace-avatar">M</span><div><strong>My workspace</strong><span>Local · Testnet</span></div></div>
+</aside>
+<main id="main">
+  <section id="loginPanel" class="login panel" aria-labelledby="loginTitle">
+    <p class="eyebrow">LOCAL AUTHORITY · REAL TESTNET RECEIPTS</p><h1 id="loginTitle">Let the agent work.<br>Keep spending controlled.</h1>
+    <p class="lead">Connect to the trusted broker on this Mac. Payment keys stay out of the agent; every paid action must remain inside one reviewed Mandate.</p>
+    <div class="command">npm run console:open</div><p class="subtle">Run this command in the Mandate repository to connect without printing the access token.</p>
+    <details><summary>Enter a local operator token manually</summary><form id="loginForm"><label for="token">Operator access token</label><input id="token" type="password" autocomplete="off" spellcheck="false" required><button class="primary" type="submit">Connect workspace</button></form></details>
+    <p id="loginError" class="error" role="alert"></p>
+    <p class="boundary">Opening this page does not sign, fund, or pay for anything.</p>
+  </section>
+  <div id="workspace" hidden>
+    <section class="heading dashboard-heading"><div class="greeting"><span class="greeting-icon" aria-hidden="true">👋</span><div><h1 id="dashboardGreeting">Good to see you!</h1><p id="dashboardDate" class="subtle"></p></div></div></section>
+    <div id="globalMessage" class="message" role="status" aria-live="polite" hidden></div>
+    <section id="homeView" data-view="home">
+      <div class="overview-strip">
+        <div class="overview-item"><span class="overview-ring violet" aria-hidden="true">⌁</span><div><h2>Spending limit</h2><p id="cap">Not configured</p><span id="capLabel" class="sr-only">Configured ceiling</span></div></div>
+        <div class="overview-item"><span id="budgetPercent" class="overview-ring green">—</span><div><h2>Budget used</h2><p id="budgetNote">Review your spending limit</p></div></div>
+        <div class="overview-item"><span id="completedCount" class="overview-ring yellow">0</span><div><h2>Tasks completed</h2><p id="completedNote">In this Mandate</p></div></div>
+      </div>
+      <div class="section-label"><h2>Spending overview</h2><span>· Current Mandate</span></div>
+    <section class="metrics" aria-label="Mandate accounting">
+
+      <div><span>Accepted charges</span><strong id="spent">—</strong><small>Accepted liability, not settled revenue</small></div>
+      <div><span>Reserved / uncertain</span><strong id="reserved">—</strong><small>Held until outcome is known</small></div>
+      <div><span>Remaining authority</span><strong id="remaining">—</strong><small>Not a wallet balance</small></div>
+    </section>
+
+      <div class="home-columns">
+        <section><div class="section-label"><h2>Recent work</h2><span id="recentCount"></span><button class="text-button section-link" data-navigate="history">View all</button></div><div id="recentWork" class="recent-list"></div></section>
+        <section><div class="section-label"><h2>Needs your attention</h2><span id="attentionCount"></span></div><div id="attentionList" class="recent-list"></div></section>
+      </div>
+      <section class="quick-section"><div class="section-label"><h2>Your workspace</h2></div><div class="quick-grid">
+        <button class="quick-card" data-navigate="task"><span class="quick-icon" aria-hidden="true">✳</span><strong>Give your agent a task</strong><p>Compare Agent0 registrations with your approved research source.</p></button>
+        <button class="quick-card" data-navigate="authority"><span class="quick-icon" aria-hidden="true">◎</span><strong>Your budget. Your boundaries.</strong><p>See what your agent can spend and when its permission expires.</p></button>
+        <button class="quick-card" data-navigate="history"><span class="quick-icon" aria-hidden="true">↗</span><strong>Pick up where you left off</strong><p>Revisit completed work and results from your previous Mandates.</p></button>
+        <button class="quick-card" data-navigate="evidence"><span class="quick-icon" aria-hidden="true">≡</span><strong>Every action, accounted for</strong><p>Follow your payment receipts and the record of what happened.</p></button>
+      </div></section>
+    </section>
+    <div class="workspace-grid">
+      <section class="panel agents-panel" data-view="task" hidden aria-labelledby="agentsTitle">
+        <div class="panel-header"><div><p class="eyebrow">DELEGATE A GOAL</p><h2 id="agentsTitle">Your agents</h2></div><span class="badge neutral">x402 tools</span></div>
+        <p class="subtle">Choose a specialist or create your own. Give it a goal, set its allowance, and follow the evidence as it works.</p>
+        <div id="agentCards" class="agent-cards" aria-live="polite"><p class="subtle">Loading your agents…</p></div>
+        <p id="agentReadiness" class="subtle" role="status"></p>
+        <div id="agentRunDetail" class="agent-run-detail" hidden aria-live="polite"></div>
+      </section>
+      <details class="panel task-diagnostics" data-view="task" hidden><summary>Single-query payment diagnostics</summary>
+      <section class="task-panel" aria-labelledby="taskTitle">
+        <div class="panel-header"><div><p class="eyebrow">01 / USEFUL WORK</p><h2 id="taskTitle">Agent0 due-diligence brief</h2></div><span id="taskStatus" class="badge neutral">No task yet</span></div>
+        <p class="subtle">Compare service registrations from the exact reviewed Agent0 deployment. The result ranks evidence coverage—not quality—and states what the source cannot prove.</p>
+        <form id="taskForm">
+          <div id="taskDefinition" class="task-definition"><div><span>Task</span><strong>Compare Agent0 service registrations</strong></div><div><span>Research source</span><strong>Review a Mandate first</strong></div></div>
+          <label for="maxResults">Candidates to compare<select id="maxResults"><option value="2">2 candidates</option><option value="3">3 candidates</option><option value="5" selected>5 candidates</option><option value="8">8 candidates</option><option value="10">10 candidates</option></select></label>
+          <label class="checkline" id="fundingConsent"><input id="authorizeFunding" type="checkbox"><span>Authorize initial escrow funding for this task on my Ledger. The device signature—not this checkbox—approves funding.</span></label>
+          <div id="pendingIntent" class="notice compact" hidden><div><strong>Previous paid intent needs observation</strong><p id="pendingIntentText"></p></div><button id="checkPendingTask" class="secondary" type="button">Check existing task</button></div>
+          <div class="actions"><button id="runTask" class="primary" type="submit">Run paid task</button><span id="taskHint" class="subtle">Review a Mandate before running paid work.</span></div>
+        </form>
+        <div class="result-region" aria-live="polite"><div class="section-title"><h3>Result</h3><span id="resultSource" class="subtle">No paid result yet</span></div><div id="result"><div class="empty"><span class="empty-symbol" aria-hidden="true">↗</span><h3>Proof starts with useful work.</h3><p>The evidence-based result will appear here after an accepted paid response. No sample agents are shown.</p></div></div></div>
+      </section>
+      </details>
+      <section class="panel authority-panel" data-view="authority" hidden aria-labelledby="authorityTitle">
+        <div id="legacyWarning" class="notice" hidden></div>
+        <div class="panel-header"><div><p class="eyebrow">02 / AUTHORITY</p><h2 id="authorityTitle">What is permitted</h2></div><span id="mandateStatus" class="badge neutral">Not configured</span></div>
+        <dl id="authorityFields" class="facts"><div><dt>Spending authority</dt><dd>No reviewed Mandate</dd></div></dl>
+        <div class="boundary"><strong>Two distinct boundaries</strong><p>Ledger approves channel funding. The trusted broker separately enforces the exact service, research source, expiry, per-call limit and rolling budget. Do not assume every broker rule appears on-device.</p></div>
+        <button id="configure" class="secondary">Review authority</button><div class="control-stack"><button id="preflight" class="secondary" aria-describedby="authorityHint">Check live dependencies</button><button id="delegate" class="secondary" aria-describedby="authorityHint" disabled>Create scoped agent access</button><button id="stop" class="danger" aria-describedby="authorityHint" disabled>Stop new work</button><button id="reconcile" class="secondary" aria-describedby="authorityHint" disabled>Reconcile existing receipts</button><button id="settle" class="secondary" aria-describedby="authorityHint" disabled>Claim and settle merchant revenue</button><button id="closeMandate" class="secondary" aria-describedby="authorityHint" disabled>Close fully spent Mandate</button><button id="refund" class="secondary" aria-describedby="authorityHint" disabled>Request remaining-funds refund</button></div>
+        <p id="authorityHint" class="subtle recovery-note">Stop blocks future requests and revokes agent access. It does not reverse accepted payments. Closure and refund are separate verified terminal flows.</p>
+        <details id="preflightDetails"><summary>Live dependency results</summary><pre id="preflightResult">No dependency check has run.</pre></details>
+      </section>
+    </div>
+    <section class="panel" data-view="history" hidden aria-labelledby="agentHistoryTitle"><div class="panel-header"><h2 id="agentHistoryTitle">Agent investigations</h2><span class="subtle">Instructions and limits saved with every run</span></div><div id="agentHistory"><p class="empty-inline">Your completed investigations will appear here.</p></div></section>
+    <section class="panel" data-view="history" hidden aria-labelledby="activityTitle"><div class="panel-header"><div><p class="eyebrow">03 / EXECUTION</p><h2 id="activityTitle">Task history</h2></div><span class="subtle">Retained across broker restarts</span></div><div id="history"><p class="empty-inline">No task has been submitted.</p></div></section>
+    <section class="panel" data-view="evidence" hidden aria-labelledby="evidenceTitle"><div class="panel-header"><div><p class="eyebrow">04 / ACCOUNTABILITY</p><h2 id="evidenceTitle">Activity & receipts</h2></div><span id="chainIntegrity" class="badge neutral">Not checked</span></div><p class="subtle">Local records retain full events. HCS anchors are separately signed and marked confirmed only after a consensus receipt. Voucher acceptance, claiming and receiver settlement remain distinct events.</p><div class="actions evidence-actions"><button id="publishEvidence" class="secondary">Publish pending HCS evidence</button><span id="anchorHint" class="subtle"></span></div><div id="evidence"></div></section>
+    <footer class="workspace-footer"><span>Mandate workspace</span><span id="observedAt">State not loaded</span></footer>
+  </div>
+</main>
+<dialog id="configDialog" aria-labelledby="configTitle"><form id="configForm"><div class="dialog-header"><div><p class="eyebrow">REVIEW BEFORE FUNDING</p><h2 id="configTitle">Define explicit authority</h2></div><button type="button" class="icon-button" data-close="configDialog" aria-label="Close authority review">×</button></div><p class="subtle">Saving records a fresh, unfunded Mandate. It never changes or claims an existing channel's funds.</p><div class="form-grid">
+<label>Ledger payer address<input name="operatorAddress" id="operatorAddress" required pattern="0x[0-9a-fA-F]{40}" placeholder="0x…" spellcheck="false"></label><div class="field-button"><button id="readDevice" type="button" class="secondary">Read connected Ledger address</button><small>Read-only. Not payment approval.</small></div>
+<label>Base Sepolia RPC<input name="rpcUrl" id="rpcUrl" type="url" value="https://sepolia.base.org" required></label><label>Paid resource URL<input name="serviceUrl" id="serviceUrl" type="url" value="http://127.0.0.1:8405/analytics" required></label>
+<label>USDC contract<input name="asset" id="asset" value="0x036CbD53842c5426634e7929541eC2318f3dCF7e" required spellcheck="false"></label><label>Merchant receiver<input name="receiver" id="receiver" required pattern="0x[0-9a-fA-F]{40}" spellcheck="false"></label>
+<label>Receiver authorizer<input name="receiverAuthorizer" id="receiverAuthorizer" required pattern="0x[0-9a-fA-F]{40}" spellcheck="false"></label><label>Withdrawal delay (seconds)<input name="withdrawDelay" id="withdrawDelay" type="number" min="60" max="2678400" value="86400" required></label>
+<label class="span-two">Agent0 research source<select id="researchSource" required><option value="">Verify live sources to choose a deployment</option></select><small id="researchSourceDetail">Payment stays on Base Sepolia. This independently binds the data chain and exact subgraph deployment.</small></label><div class="field-button"><button id="loadSources" type="button" class="secondary">Verify live research sources</button><small>Read-only discovery. No payment or signature.</small></div>
+<label>Lifetime ceiling (USDC)<input id="ceilingInput" inputmode="decimal" value="5" required></label><label>Per-call limit (USDC)<input id="perCallInput" inputmode="decimal" value="0.01" required></label>
+<label>Rolling budget (USDC)<input id="windowInput" inputmode="decimal" value="0.10" required></label><label>Rolling window (minutes)<input id="windowMinutes" type="number" min="1" max="44640" value="60" required></label>
+<label>Expiry (browser's local time)<input id="expiresInput" type="datetime-local" required></label><label>Sealed session key name<input id="sessionKey" value="mandate-session" required pattern="[A-Za-z0-9_-]{1,64}"></label>
+</div><p id="configError" class="error" role="alert"></p><div class="actions"><button id="probeDraft" class="secondary" type="button">Inspect live payment offer</button><button class="primary" type="submit">Save reviewed scope</button></div><pre id="draftProbe" class="probe-output" hidden></pre><p class="boundary">Only Base Sepolia testnet payments are available. Independently review the payer, merchant, research deployment and limits. A saved scope is not funded until Ledger signs and the deposit is confirmed.</p></form></dialog>
+<dialog id="refundDialog" aria-labelledby="refundTitle"><div class="dialog-header"><h2 id="refundTitle">Recover remaining funds</h2><button class="icon-button" data-close="refundDialog" aria-label="Close refund review">×</button></div><p>New work and agent access will stop. Existing voucher liabilities must be reconciled first. The session key signs a cooperative refund for the same pinned channel.</p><p class="boundary">A request or transaction hash is not a completed refund. The workspace waits for chain confirmation and reconciliation.</p><div class="actions"><button class="secondary" data-close="refundDialog">Cancel</button><button id="confirmRefund" class="primary">Request refund</button></div></dialog>
+<dialog id="agentEditor" aria-labelledby="agentEditorTitle"><div class="dialog-header"><h2 id="agentEditorTitle">Create an agent</h2><button class="icon-button" id="closeAgentEditor" aria-label="Close agent editor">×</button></div>
+<form id="agentEditorForm"><label>Name<input id="agentName" maxlength="80" required placeholder="My research analyst"></label><label>Short description<input id="agentDescription" maxlength="400" placeholder="What this agent helps you accomplish"></label><label>Goal<textarea id="agentGoal" maxlength="8000" rows="3" placeholder="Describe the work you want to delegate"></textarea></label><label>Instructions<textarea id="agentInstructions" maxlength="8000" rows="4" required placeholder="How should it investigate, handle uncertainty and decide when it is finished?"></textarea></label><label>Expected result<textarea id="agentOutput" maxlength="2000" rows="2" required placeholder="A sourced comparison with recommendations and limitations"></textarea></label>
+<fieldset><legend>Permitted x402 tools</legend><div id="agentToolChoices" class="agent-tool-choices"></div></fieldset>
+<div class="form-grid"><label>Total allowance (USDC)<input id="agentBudget" inputmode="decimal" value="0.10" required></label><label>Maximum per call (USDC)<input id="agentPerCall" inputmode="decimal" value="0.02" required></label><label>Maximum tool decisions<input id="agentSteps" type="number" min="2" max="30" value="12" required></label><label>Maximum runtime (seconds)<input id="agentDuration" type="number" min="30" max="1800" value="300" required></label></div>
+<p class="subtle">Saving an agent does not fund it or grant payment permission. Vertex inference usage is separate from the x402 allowance.</p><p id="agentEditorError" class="error" role="alert"></p><button class="primary" type="submit">Save agent</button></form></dialog>
+<dialog id="agentLaunch" aria-labelledby="agentLaunchTitle"><div class="dialog-header"><h2 id="agentLaunchTitle">Run agent</h2><button class="icon-button" id="closeAgentLaunch" aria-label="Close run review">×</button></div><form id="agentLaunchForm"><p id="agentLaunchDescription" class="subtle"></p><label>Your goal<textarea id="agentLaunchGoal" rows="4" maxlength="8000" required></textarea></label><p id="agentLaunchLimits" class="boundary"></p><p id="agentLaunchError" class="error" role="alert"></p><button id="launchAgent" class="primary" type="submit">Start investigation</button></form></dialog>
+</body>
+</html>

@@ -13,7 +13,7 @@ const response = await fetch(`${origin}/healthz`, { signal: AbortSignal.timeout(
 if (!response.ok || (await response.json()).service !== 'mandate-operator') throw new Error('Start npm run console first');
 const command = process.platform === 'darwin' ? 'open' : process.platform === 'linux' ? 'xdg-open' : null;
 if (!command) throw new Error('Use the manual token input on the local workspace on this platform');
-const child = spawn(command, [`${origin}/#token=${token}`], { stdio: 'ignore' });
+const child = spawn(command, [`${origin}/workspace#token=${token}`], { stdio: 'ignore' });
 child.on('error', e => { console.error(`Browser launch failed: ${e.message}`); process.exitCode = 1; });
 child.on('exit', code => { if (code) process.exitCode = 1; });
-console.log(`Opening ${origin} with a local operator session. No key material is exposed.`);
+console.log(`Opening ${origin}/workspace with a local operator session. No key material is exposed.`);

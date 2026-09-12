@@ -14,7 +14,7 @@ const page=await context.newPage();
 const errors=[];page.on('pageerror',e=>errors.push(e.message));
 await mkdir(`${root}/.live-results/repair/live-ui`,{recursive:true});
 try{
- await page.goto(`${origin}/#token=${token}`);
+ await page.goto(`${origin}/workspace#token=${token}`);
  await page.locator('#workspace').waitFor({state:'visible'});
  async function state(){return page.evaluate(async()=>{const r=await fetch('/api/state');if(!r.ok)throw new Error('No operator session');return r.json();});}
  let before=await state();

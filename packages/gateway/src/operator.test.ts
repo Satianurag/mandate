@@ -53,6 +53,21 @@ test('operator state requires authentication and rejects cross-origin, bad-CSRF 
   assert.equal(rebound,403);
   assert.equal((await fetch(`${origin}/onboard/done.html`)).status,404);
 });
+test('custom agents persist through the authenticated API without silently granting execution authority', async t => {
+  const { request, origin } = await setup(t);
+  assert.equal((await fetch(`${origin}/api/agents`)).status, 401);
+  const before = await (await request('/api/agents')).json() as any;
+  assert.equal(before.agents.length, 2); assert.equal(before.ready, false);
+  const { id, version, template, requiredToolIds, ...fields } = before.agents[0];
+  assert.equal((await request('/api/agents', { ...fields, name: 'My investigator' }, { 'x-mandate-csrf': 'invalid' })).status, 403);
+  const savedResponse = await request('/api/agents', { ...fields, name: 'My investigator' });
+  assert.equal(savedResponse.status, 201);
+  const saved = (await savedResponse.json() as any).agent;
+  const after = await (await request('/api/agents')).json() as any;
+  assert.equal(after.agents.length, 3); assert.equal(after.agents[2].id, saved.id);
+  assert.equal((await request('/api/agent-runs', { requestId: 'agent-test-request', agentId: saved.id, goal: 'Investigate' })).status, 409);
+  assert.equal((await request('/api/agent-runs', { requestId: 'agent-test-request', agentId: saved.id, goal: 'Investigate', receiver: 'override' })).status, 400);
+});
 test('saving authority is a real durable operation but never signs or invents funding', async t => {
   const { request, directory } = await setup(t);
   const response = await request('/api/config',cfg); assert.equal(response.status,201);

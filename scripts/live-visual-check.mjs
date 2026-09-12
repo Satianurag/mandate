@@ -11,7 +11,7 @@ const context=await browser.newContext({viewport:{width:1440,height:1000}}),page
 const errors=[];page.on('pageerror',error=>errors.push(error.message));
 const report={checkedAt:new Date().toISOString(),financialOperations:0,networkInterceptions:0,checks:[],screenshots:[]};
 try{
- await page.goto(`${origin}/#token=${token}`);await page.locator('#workspace').waitFor({state:'visible'});
+ await page.goto(`${origin}/workspace#token=${token}`);await page.locator('#workspace').waitFor({state:'visible'});
  assert.equal(new URL(page.url()).hash,'');
  assert.equal(await page.locator('#mandateStatus').innerText(),'Refunded');
  assert.equal(await page.locator('#spent').innerText(),'0.03 USDC');

@@ -43,6 +43,7 @@ import {
   x402UptoPermit2ProxyAddress,
 } from "@x402/evm";
 import { BatchSettlementEvmScheme } from "@x402/evm/batch-settlement/facilitator";
+import { ExactEvmScheme } from "@x402/evm/exact/facilitator";
 import { UptoEvmScheme } from "@x402/evm/upto/facilitator";
 import { createPublicClient, createWalletClient, http } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
@@ -270,7 +271,7 @@ export async function buildCore(
         message: params.message,
       } as never) as Promise<`0x${string}`>,
   });
-  let facilitator = existing.register(network, scheme);
+  let facilitator = existing.register(network, scheme).register(network, new ExactEvmScheme(signer));
 
   const [permit2, uptoProxy] = await Promise.all([
     publicClient.getCode({ address: PERMIT2_ADDRESS }),

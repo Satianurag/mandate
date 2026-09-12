@@ -41,17 +41,79 @@ try {
   page.on('pageerror', error => pageErrors.push(error.message));
 
   await page.goto(origin);
-  await page.getByRole('heading', { name: /Let the agent work/ }).waitFor();
-  assert.equal(await page.locator('#workspace').isVisible(), false);
+  await page.getByRole('heading', { name: /Let it work/ }).waitFor();
+  assert.equal(await page.getByRole('link', { name: /Open workspace/ }).first().getAttribute('href'), '/workspace');
+  const landingImage = page.locator('img[alt="A silver loop surrounding a luminous yellow core"]');
+  await landingImage.waitFor();
+  for (const viewport of [{ name: 'landing-desktop', width: 1440, height: 1000 }, { name: 'landing-mobile', width: 390, height: 844 }]) {
+    await page.setViewportSize({ width: viewport.width, height: viewport.height });
+    await page.waitForTimeout(100);
+    assert.ok(await landingImage.evaluate(image => image.complete && image.naturalWidth > 0), `${viewport.name}: hero image did not load`);
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `${viewport.name}: horizontal page overflow`);
+    const audit = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa']).analyze();
+    const serious = audit.violations.filter(violation => ['critical', 'serious'].includes(violation.impact));
+    assert.deepEqual(serious, [], `${viewport.name} accessibility violations: ${serious.map(violation => violation.id).join(',')}`);
+    const screenshot = join(evidence, `${viewport.name}.png`);
+    await page.screenshot({ path: screenshot, fullPage: true });
+    report.screenshots.push(screenshot);
+  }
+  report.checks.push('the public landing page loads its supplied sculpture, routes into the workspace, stays responsive, and has no serious automated accessibility violations');
 
-  await page.goto(`${origin}/#token=${token}`);
-  await page.getByRole('heading', { name: /One Mandate\. Useful work/ }).waitFor();
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.goto(`${origin}/workspace`);
+  await page.locator('#homeView').waitFor({ state: 'visible' });
+  assert.equal(await page.locator('#loginPanel').isVisible(), false);
+  report.checks.push('landing-to-workspace transition opens the dashboard without showing the operator-session interstitial');
+
+  const directContext = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
+  const directPage = await directContext.newPage();
+  await directPage.goto(`${origin}/workspace`);
+  await directPage.getByRole('heading', { name: /Let the agent work/ }).waitFor();
+  assert.equal(await directPage.locator('#workspace').isVisible(), false);
+  await directContext.close();
+
+  await page.goto(`${origin}/workspace#token=${token}`);
+  await page.locator('#homeView').waitFor({ state: 'visible' });
   assert.equal(new URL(page.url()).hash, '');
-  assert.equal(await page.getByRole('button', { name: 'Run paid task', exact: true }).isEnabled(), false);
+  assert.equal(await page.locator('#runTask').isEnabled(), false);
   report.checks.push('operator login uses a real server session; URL token is removed; no unfunded success is shown');
+
+  await page.locator('nav [data-navigate=task]').click();
+  await page.getByRole('heading', { name: 'Protocol Investigator', exact: true }).waitFor();
+  await page.getByRole('heading', { name: 'Agent Selection Analyst', exact: true }).waitFor();
+  assert.equal(await page.locator('.agent-card').count(), 3);
+  await page.getByRole('button', { name: /Create an agent/ }).click();
+  await page.locator('#agentName').fill('Research desk');
+  await page.locator('#agentDescription').fill('Investigate a question and corroborate the evidence.');
+  await page.locator('#agentGoal').fill('Explain a protocol activity change with sources.');
+  await page.locator('#agentInstructions').fill('Use permitted sources, investigate contradictions, and disclose uncertainty.');
+  await page.locator('#agentOutput').fill('A sourced investigation with clear limitations.');
+  await page.getByRole('button', { name: 'Save agent', exact: true }).click();
+  await page.getByRole('heading', { name: 'Research desk', exact: true }).waitFor();
+  await page.reload();
+  await page.locator('nav [data-navigate=task]').click();
+  await page.getByRole('heading', { name: 'Research desk', exact: true }).waitFor();
+  await page.locator('.agent-card').filter({ hasText: 'Research desk' }).getByRole('button', { name: 'Edit', exact: true }).click();
+  assert.equal(await page.locator('#agentInstructions').inputValue(), 'Use permitted sources, investigate contradictions, and disclose uncertainty.');
+  await page.locator('#agentName').fill('Research desk revised');
+  await page.getByRole('button', { name: 'Save agent', exact: true }).click();
+  await page.getByRole('heading', { name: 'Research desk revised', exact: true }).waitFor();
+  await page.locator('.agent-card').filter({ hasText: 'Protocol Investigator' }).getByRole('button', { name: 'Give it a goal' }).click();
+  assert.equal(await page.locator('#launchAgent').isEnabled(), false);
+  await page.locator('#closeAgentLaunch').click();
+  for (const viewport of [{ name: 'agents-desktop', width: 1440, height: 1000 }, { name: 'agents-mobile', width: 390, height: 844 }]) {
+    await page.setViewportSize({ width: viewport.width, height: viewport.height });
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `${viewport.name}: horizontal overflow`);
+    const audit = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa']).analyze();
+    assert.deepEqual(audit.violations.filter(v => ['critical', 'serious'].includes(v.impact)), []);
+    const screenshot = join(evidence, `${viewport.name}.png`); await page.screenshot({ path: screenshot, fullPage: true }); report.screenshots.push(screenshot);
+  }
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  report.checks.push('two templates and custom agent creation/editing persist through reload; unavailable execution is disclosed; agent UI passes desktop/mobile accessibility and overflow checks');
 
   await page.keyboard.press('Tab');
   assert.notEqual(await page.evaluate(() => document.activeElement.tagName), 'BODY');
+  await page.locator('nav [data-navigate=authority]').click();
   await page.getByRole('button', { name: 'Review authority', exact: true }).click();
   await page.locator('#researchSource option[value="bsc-chapel"]').waitFor({ state: 'attached' });
   await page.locator('#researchSource').selectOption(source.chain);
@@ -65,18 +127,21 @@ try {
 
   assert.equal(await page.locator('#cap').innerText(), '1.234567 USDC');
   assert.equal(await page.locator('#mandateStatus').innerText(), 'Not funded');
-  assert.equal(await page.getByRole('button', { name: 'Create scoped agent access' }).isEnabled(), false);
+  assert.equal(await page.locator('#delegate').isEnabled(), false);
   assert.match(await page.locator('#authorityFields').innerText(), /Payment network[\s\S]*Base Sepolia testnet/);
   assert.match(await page.locator('#authorityFields').innerText(), /Research network[\s\S]*BNB Smart Chain Chapel/);
   assert.match(await page.locator('#authorityFields').innerText(), new RegExp(source.deployment));
 
-  await page.getByRole('button', { name: 'Run paid task', exact: true }).click();
+  await page.locator('nav [data-navigate=task]').click();
+  await page.locator('.task-diagnostics > summary').click();
+  await page.locator('#runTask').click();
   await page.getByText(/Review and explicitly authorize initial funding/).waitFor();
   const actualState = await page.evaluate(async () => (await fetch('/api/state')).json());
   assert.equal(actualState.config.ceilingBaseUnits, '1234567');
   assert.deepEqual(actualState.config.researchSource, source);
   assert.equal(actualState.tasks.length, 0);
-  assert.equal(await page.locator('textarea').count(), 0, 'default product flow must not expose raw GraphQL');
+  assert.equal(await page.locator('#taskForm textarea').count(), 0, 'payment diagnostic must not expose raw GraphQL');
+  assert.equal(await page.locator('#agentLaunchGoal').getAttribute('maxlength'), '8000', 'agent goal input is bounded natural language');
   report.checks.push('source-bound limits persist exactly; default flow has no raw GraphQL editor; checkbox is not simulated Ledger approval');
 
   // Prior-Mandate tasks are a separate read-only archive and never become current authority.
@@ -91,6 +156,7 @@ try {
     Date.now(),
   );
   await page.reload();
+  await page.locator('nav [data-navigate=history]').click();
   const archive = page.locator('.history-archive');
   await archive.getByText('Prior Mandates · 1 preserved task').waitFor();
   assert.equal(await archive.getByText('Mandate ', { exact: false }).count() > 0, true);
@@ -123,8 +189,9 @@ try {
     value: { version: 1, requestId: pendingId, mandateSalt: actualState.config.salt, payload: { task, requestId: pendingId, authorizeFunding: false }, createdAt: now },
   });
   await page.reload();
+  await page.locator('nav [data-navigate=task]').click();
   await page.getByText('Previous paid intent needs observation').waitFor();
-  assert.equal(await page.getByRole('button', { name: 'Run paid task', exact: true }).isEnabled(), false);
+  assert.equal(await page.locator('#runTask').isEnabled(), false);
   await page.getByRole('button', { name: 'Check existing task', exact: true }).click();
   await page.getByText(new RegExp(`Task ${pendingId} is uncertain`)).waitFor();
   assert.ok(await page.evaluate(key => localStorage.getItem(key), 'mandate.pending-task.v1'));
@@ -133,7 +200,7 @@ try {
   await page.getByRole('button', { name: 'Check existing task', exact: true }).click();
   await page.getByText(new RegExp(`Task ${pendingId} is failed`)).waitFor();
   assert.equal(await page.evaluate(key => localStorage.getItem(key), 'mandate.pending-task.v1'), null);
-  assert.equal(await page.getByRole('button', { name: 'Run paid task', exact: true }).isEnabled(), true);
+  assert.equal(await page.locator('#runTask').isEnabled(), true);
   const storageSnapshot = await page.evaluate(() => Object.fromEntries(Object.keys(localStorage).map(key => [key, localStorage.getItem(key)])));
   assert.equal(JSON.stringify(storageSnapshot).includes(token), false);
   assert.equal(JSON.stringify(storageSnapshot).includes(actualState.csrf), false);
@@ -166,12 +233,12 @@ try {
     );
   } finally { financial.close(); }
   await page.reload();
-  await page.getByRole('heading', { name: /One Mandate\. Useful work/ }).waitFor();
+  await page.locator('#homeView').waitFor({ state: 'visible' });
   assert.equal(await page.locator('#remaining').innerText(), '0 USDC');
-  assert.equal(await page.getByRole('button', { name: 'Run paid task', exact: true }).isEnabled(), false);
-  assert.match(await page.getByRole('button', { name: 'Run paid task', exact: true }).getAttribute('title'), /No lifetime authority remains/);
+  assert.equal(await page.locator('#runTask').isEnabled(), false);
+  assert.match(await page.locator('#runTask').getAttribute('title'), /No lifetime authority remains/);
   assert.match(await page.locator('#taskHint').innerText(), /Lifetime authority exhausted/);
-  assert.equal(await page.getByRole('button', { name: 'Close fully spent Mandate', exact: true }).isEnabled(), true);
+  assert.equal(await page.locator('#closeMandate').isEnabled(), true);
   report.checks.push('an exactly exhausted envelope disables Run before submission and points the operator to settlement and closure');
   await rm(financialRoot, { recursive: true, force: true });
 
@@ -181,17 +248,19 @@ try {
   expiring.expiresAt = new Date(Date.now() + 2200).toISOString();
   await writeFile(configPath, stringify(expiring), { mode: 0o600 });
   await page.reload();
+  await page.locator('nav [data-navigate=authority]').click();
   await page.locator('#mandateStatus').filter({ hasText: 'Not funded' }).waitFor();
   await page.evaluate(() => { clearInterval(refreshTimer); refreshTimer = null; });
   await page.locator('#mandateStatus').filter({ hasText: 'Expired' }).waitFor({ timeout: 5000 });
-  assert.equal(await page.getByRole('button', { name: 'Run paid task', exact: true }).isEnabled(), false);
+  assert.equal(await page.locator('#runTask').isEnabled(), false);
   report.checks.push('idle browser crosses permission expiry locally even when server polling and state fingerprint changes are absent');
 
   await page.getByRole('button', { name: 'Stop new work', exact: true }).click();
   await page.getByText('New work stopped and agent capabilities revoked. Existing accepted payments were not reversed.').waitFor();
   await page.reload();
+  await page.locator('nav [data-navigate=authority]').click();
   await page.locator('#mandateStatus').filter({ hasText: 'Stopped' }).waitFor();
-  assert.equal(await page.getByRole('button', { name: 'Run paid task', exact: true }).isEnabled(), false);
+  assert.equal(await page.locator('#runTask').isEnabled(), false);
   report.checks.push('stop is a persisted backend state, survives refresh, revokes future work, and does not claim to reverse accepted payments');
 
   for (const viewport of [{ name: 'desktop', width: 1440, height: 1000 }, { name: 'mobile', width: 390, height: 844 }]) {
@@ -217,6 +286,7 @@ try {
     assert.deepEqual(serious, [], `${viewport.name} accessibility violations: ${serious.map(violation => violation.id).join(',')}`);
   }
 
+  await page.locator('nav [data-navigate=authority]').click();
   await page.getByRole('button', { name: 'Review authority', exact: true }).click();
   await page.keyboard.press('Escape');
   assert.equal(await page.locator('#configDialog').isVisible(), false);

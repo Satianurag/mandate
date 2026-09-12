@@ -28,8 +28,38 @@ export class OperatorAuth {
     if (!/^[A-Za-z0-9_-]{43}$/.test(token)) throw new Error("Operator token file is malformed; refusing unauthenticated startup");
     this.masterHash = Buffer.from(hash(token), "hex");
     journal.db.exec(`CREATE TABLE IF NOT EXISTS operator_sessions(hash TEXT PRIMARY KEY, csrf TEXT NOT NULL, expires_at INTEGER NOT NULL);
+      CREATE TABLE IF NOT EXISTS operator_workspace_transitions(hash TEXT PRIMARY KEY, expires_at INTEGER NOT NULL);
       CREATE TABLE IF NOT EXISTS agent_capabilities(id TEXT PRIMARY KEY, hash TEXT UNIQUE NOT NULL,
       mandate_id TEXT NOT NULL, query_hash TEXT NOT NULL, expires_at INTEGER NOT NULL, revoked INTEGER NOT NULL DEFAULT 0);`);
+  }
+  private cookie(res: ServerResponse, value: string): void {
+    const current = res.getHeader("set-cookie");
+    if (Array.isArray(current)) res.setHeader("set-cookie", [...current, value]);
+    else if (typeof current === "string") res.setHeader("set-cookie", [current, value]);
+    else res.setHeader("set-cookie", value);
+  }
+  private createOperatorSession(res: ServerResponse, now = Date.now()): Principal {
+    const session = fresh(), csrf = fresh(), sessionHash = hash(session);
+    this.journal.db.prepare("DELETE FROM operator_sessions WHERE expires_at<?").run(now);
+    this.journal.db.prepare("INSERT INTO operator_sessions VALUES(?,?,?)").run(sessionHash, csrf, now + 8 * 3600000);
+    this.cookie(res, `mandate_session=${session}; HttpOnly; SameSite=Strict; Path=/; Max-Age=28800`);
+    return { role: "operator", csrf, sessionHash };
+  }
+  prepareWorkspaceTransition(res: ServerResponse): void {
+    const now = Date.now(), transition = fresh();
+    this.journal.db.prepare("DELETE FROM operator_workspace_transitions WHERE expires_at<?").run(now);
+    this.journal.db.prepare("INSERT INTO operator_workspace_transitions VALUES(?,?)").run(hash(transition), now + 10 * 60000);
+    this.cookie(res, `mandate_workspace=${transition}; HttpOnly; SameSite=Strict; Path=/workspace; Max-Age=600`);
+  }
+  loginFromWorkspaceTransition(req: IncomingMessage, res: ServerResponse): Principal | null {
+    const token = /(?:^|;\s*)mandate_workspace=([A-Za-z0-9_-]{43})(?:;|$)/.exec(req.headers.cookie ?? "")?.[1];
+    if (!token) return null;
+    const transitionHash = hash(token), now = Date.now();
+    const row = this.journal.db.prepare("SELECT expires_at FROM operator_workspace_transitions WHERE hash=? AND expires_at>?").get(transitionHash, now) as
+      { expires_at: number } | undefined;
+    this.journal.db.prepare("DELETE FROM operator_workspace_transitions WHERE hash=?").run(transitionHash);
+    this.cookie(res, "mandate_workspace=; HttpOnly; SameSite=Strict; Path=/workspace; Max-Age=0");
+    return row ? this.createOperatorSession(res, now) : null;
   }
   checkOrigin(req: IncomingMessage, origin: string): void {
     if (req.headers.origin !== origin) throw new HttpError(403, "Operator mutations require the exact local Origin");
@@ -45,11 +75,7 @@ export class OperatorAuth {
       throw new HttpError(401, "Invalid operator access token");
     }
     this.failures.delete(ip);
-    const session = fresh(), csrf = fresh(), sessionHash = hash(session);
-    this.journal.db.prepare("DELETE FROM operator_sessions WHERE expires_at<?").run(now);
-    this.journal.db.prepare("INSERT INTO operator_sessions VALUES(?,?,?)").run(sessionHash, csrf, now + 8 * 3600000);
-    res.setHeader("set-cookie", `mandate_session=${session}; HttpOnly; SameSite=Strict; Path=/; Max-Age=28800`);
-    return { role: "operator", csrf, sessionHash };
+    return this.createOperatorSession(res, now);
   }
   authenticate(req: IncomingMessage, origin: string): Principal {
     const authorization = req.headers.authorization;
@@ -89,6 +115,6 @@ export class OperatorAuth {
   logout(principal: Principal, res: ServerResponse): void {
     this.operator(principal);
     if (principal.role === "operator") this.journal.db.prepare("DELETE FROM operator_sessions WHERE hash=?").run(principal.sessionHash);
-    res.setHeader("set-cookie", "mandate_session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0");
+    this.cookie(res, "mandate_session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0");
   }
 }
