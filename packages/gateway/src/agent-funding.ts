@@ -8,9 +8,10 @@ import type {ClientEvmSigner} from '@x402/evm';
 import {ExactEvmScheme} from '@x402/evm/exact/client';
 import {Journal,digest,units,type AgentAllowanceIncreaseRow} from './journal.ts';
 import {chainSettlementVerifier,type ExactAgentAuthority,type VerifyExactSettlement} from './agent-exact.ts';
+import {assertProductionClearSigning,type ClearSigningVerdict} from './origin-token.ts';
 
 const MAX_EFFECTIVE_ALLOWANCE_BASE_UNITS=5000000n;
-export interface AgentFundingSigner extends ClientEvmSigner {lastClearSigning?:unknown}
+export interface AgentFundingSigner extends ClientEvmSigner {lastClearSigning?:{originTokenPresent:boolean;testCal?:boolean;verdict:ClearSigningVerdict}|null}
 export interface AgentFundingOptions {
   authority:ExactAgentAuthority;journal:Journal;rpcUrl:string;facilitatorUrl:string;
   signer:()=>Promise<AgentFundingSigner>;
@@ -88,6 +89,7 @@ export class AgentFundingController {
       const domain=parameters.domain,message=parameters.message as Record<string,unknown>;
       if(parameters.primaryType!=='TransferWithAuthorization'||Number(domain.chainId)!==8453||String(domain.verifyingContract).toLowerCase()!==a.asset.toLowerCase()||String(message.from).toLowerCase()!==a.payerAddress.toLowerCase()||String(message.to).toLowerCase()!==a.spendingAddress.toLowerCase()||BigInt(String(message.value))!==BigInt(amountBaseUnits)||!Number.isSafeInteger(Number(message.validBefore))||Number(message.validBefore)*1000<=Date.now()||Number(message.validBefore)*1000>Math.min(Date.now()+360000,a.expiresAt))throw new Error('Funding signature does not match the reviewed token, amount, recipient or lifetime');
       onPhase('awaiting_device');const signature=await ledger.signTypedData(parameters);
+      if(ledger.lastClearSigning)assertProductionClearSigning(ledger.lastClearSigning);
       if(!await verifyTypedData({...parameters,address:a.payerAddress as Hex,signature} as never))throw new Error('Ledger funding signature does not recover the reviewed payer');
       return signature;
     }};

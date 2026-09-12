@@ -9,6 +9,7 @@ import { AgentStore } from "./agent-store.ts";
 import { AgentRuntime, type ToolObservation } from "./agent-runtime.ts";
 import { buildAgentReport, agentReportToMarkdown, type AgentPaymentView } from "./agent-report.ts";
 import { loadAgentServices, type AgentServices } from "./agent-services.ts";
+import { startLocalAgentTools, LOCAL_TOOL_ORIGIN } from "./agent-local-tools.ts";
 import { readSetupDraft, saveSetupDraft, inspectSetup, prepareSetup } from "./workspace-setup.ts";
 import { HttpError, OperatorAuth } from "./operator-auth.ts";
 export interface OperatorOptions { root: string; dataDir?: string; port?: number; agentServices?: AgentServices }
@@ -45,6 +46,15 @@ export async function createOperatorApp(options: OperatorOptions): Promise<Opera
   let loadedAgentServices = options.agentServices ? { services: options.agentServices, reason: "Ready" } : await loadAgentServices(dataDir, journal);
   let agentServices = loadedAgentServices.services;
   let agentRuntime = agentServices ? new AgentRuntime(agents, agentServices.model, agentServices.executor) : null;
+  let localTools: { server: import("node:http").Server; origin: string } | null = null;
+  const startToolsIfConfigured = async () => {
+    if (localTools || !agentServices) return;
+    const cfg = JSON.parse(await readFile(join(dataDir, "agent-runtime.json"), "utf8").catch(() => "null")) as { tools?: import("./agent-tools.ts").AgentToolConfiguration; funding?: { facilitatorUrl: string }; authority?: { spendingAddress: string } } | null;
+    if (!cfg?.tools?.endpoints || !cfg.funding?.facilitatorUrl || !cfg.authority?.spendingAddress) return;
+    if (!Object.values(cfg.tools.endpoints).some(url => url.startsWith(LOCAL_TOOL_ORIGIN))) return;
+    localTools = await startLocalAgentTools({ payTo: cfg.authority.spendingAddress, facilitatorUrl: cfg.funding.facilitatorUrl, journal, tools: cfg.tools });
+  };
+  await startToolsIfConfigured().catch(error => { loadedAgentServices = { services: agentServices, reason: `First-party tools did not start: ${messageOf(error)}` }; });
   const activeAgentRuns = new Map<string, Promise<void>>();
   let setupError: string | null = null;
   let agentSetupTask: Promise<unknown> | null = null;
@@ -106,13 +116,22 @@ export async function createOperatorApp(options: OperatorOptions): Promise<Opera
       if (path === '/api/setup-inspect' && req.method === 'POST') { auth.operator(principal); await jsonBody(req); respond(res,200,await inspectSetup(await readSetupDraft(dataDir)));return; }
       if (path === '/api/setup-device' && req.method === 'POST') {
         auth.operator(principal);await jsonBody(req);if(agentSetupTask||activeAgentRuns.size)throw new HttpError(409,'Finish the current operation first');
-        const {DmkEvmSigner}=await import('./dmksigner.ts');const signer=await DmkEvmSigner.create({checkOnDevice:true,timeoutMs:90000});respond(res,200,{address:signer.address,signatureCreated:false});return;
+        const {DmkEvmSigner}=await import('./dmksigner.ts');const signer=await DmkEvmSigner.create({checkOnDevice:true,timeoutMs:90000});
+        const draft=await readSetupDraft(dataDir);await saveSetupDraft(dataDir,{...draft,payerAddress:signer.address});
+        respond(res,200,{address:signer.address,signatureCreated:false});return;
       }
       if (path === '/api/setup-prepare' && req.method === 'POST') {
         auth.operator(principal);const body=await jsonBody(req);if(body.confirm!=='prepare_mainnet_wallet')throw new HttpError(400,'Confirm preparation of the mainnet spending wallet');
         if(agentSetupTask||activeAgentRuns.size||agentServices&&journal.mandate(agentServices.authorityId)?.state!=='closed')throw new HttpError(409,'Close and return the existing allowance before replacing its configuration');
         let prepared:unknown;
-        runAgentSetupTask(async()=>{prepared=await prepareSetup(dataDir,await readSetupDraft(dataDir));loadedAgentServices=await loadAgentServices(dataDir,journal);agentServices=loadedAgentServices.services;agentRuntime=agentServices?new AgentRuntime(agents,agentServices.model,agentServices.executor):null;});
+        runAgentSetupTask(async()=>{
+          if(localTools){await new Promise<void>(resolve=>localTools!.server.close(()=>resolve()));localTools=null;}
+          prepared=await prepareSetup(dataDir,await readSetupDraft(dataDir));
+          loadedAgentServices=await loadAgentServices(dataDir,journal);
+          agentServices=loadedAgentServices.services;
+          agentRuntime=agentServices?new AgentRuntime(agents,agentServices.model,agentServices.executor):null;
+          await startToolsIfConfigured();
+        });
         await agentSetupTask;if(!prepared||!agentServices)throw new HttpError(400,setupError??loadedAgentServices.reason??'Preparation did not complete');respond(res,201,prepared);return;
       }
       if (path === "/api/agent-setup" && req.method === "GET") {
@@ -188,11 +207,13 @@ export async function createOperatorApp(options: OperatorOptions): Promise<Opera
         auth.operator(principal);
         const readiness = agentServices?.readiness?.() ?? { ready: Boolean(agentRuntime), reason: loadedAgentServices.reason };
         const availableTools = agentServices?.executor.catalog().map(t => t.id) ?? [];
-        const availability = Object.fromEntries(agents.profiles().map(p => {
-          const missing = (p.requiredToolIds ?? []).filter(id => !availableTools.includes(id));
-          return [p.id, { ready: readiness.ready && !missing.length && p.toolIds.some(id => availableTools.includes(id)),
-            reason: !readiness.ready ? readiness.reason : missing.length ? `This specialist needs ${missing.join(", ")} configured before it can investigate.` : !p.toolIds.some(id => availableTools.includes(id)) ? "None of this agent's selected tools is configured." : readiness.reason }];
-        }));
+        const availability = Object.fromEntries(agents.profiles().map(p => [
+          p.id,
+          {
+            ready: readiness.ready && p.toolIds.some(id => availableTools.includes(id)),
+            reason: !readiness.ready ? readiness.reason : !p.toolIds.some(id => availableTools.includes(id)) ? "None of this agent's selected tools is configured." : readiness.reason,
+          },
+        ]));
         respond(res, 200, { agents: agents.profiles(), runs: agents.runs(), ready: readiness.ready,
           availableTools, availability, readiness: readiness.reason, setup: agentServices?.inspect?.() ?? null, runningCount: activeAgentRuns.size, busy: Boolean(agentSetupTask) }); return;
       }
@@ -231,7 +252,7 @@ export async function createOperatorApp(options: OperatorOptions): Promise<Opera
         const readiness = agentServices.readiness?.();
         if (readiness && !readiness.ready) throw new HttpError(409, readiness.reason);
         const profile = agents.profile(String(body.agentId ?? "")), available = agentServices.executor.catalog();
-        if (!profile.toolIds.some(id => available.some(t => t.id === id)) || profile.requiredToolIds?.some(id => !available.some(t => t.id === id))) throw new HttpError(409, "Required tools for this agent are not configured");
+        if (!profile.toolIds.some(id => available.some(t => t.id === id))) throw new HttpError(409, "Required tools for this agent are not configured");
         let approved:ReviewedPlan|undefined;
         if(agentServices.model.plan||body.planId){
           const row=journal.db.prepare('SELECT body FROM agent_previews WHERE id=? AND expires_at>?').get(String(body.planId??''),Date.now()) as {body:string}|undefined;
@@ -305,6 +326,7 @@ export async function createOperatorApp(options: OperatorOptions): Promise<Opera
     await new Promise<void>(done => server.close(() => done()));
     await Promise.allSettled(activeAgentRuns.values());
     if (agentSetupTask) await agentSetupTask;
+    if (localTools) await new Promise<void>(done => localTools!.server.close(() => done()));
     releaseOwner(); journal.close();
   } };
 }

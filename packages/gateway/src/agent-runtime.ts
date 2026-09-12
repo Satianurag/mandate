@@ -1,11 +1,11 @@
 /** Adaptive goal execution. Payment signing belongs exclusively to the broker executor. */
-import type { AgentPlan } from "./agent-plan.ts";
 import { classifyProbeFailure } from "./orchestrator/vendor-errors.ts";
 import { digest } from "./journal.ts";
 import { randomUUID } from "node:crypto";
 import { specialistEvidenceReport } from "./agent-evidence-report.ts";
 import { AgentStore, TERMINAL_AGENT_STATES, type AgentRun } from "./agent-store.ts";
 import type { AgentToolId } from "./agent-profiles.ts";
+import { planHasBlockingProbeFailures, probePlanSteps, type AgentPlan } from "./agent-plan.ts";
 
 export interface AgentTool {
   id: AgentToolId; description: string; inputSchema: Record<string, unknown>;
@@ -86,30 +86,47 @@ export class AgentRuntime {
       if(retained.has(payment.requestId))completedInputs.add(digest({toolId:payment.quote.toolId,input:payment.quote.input}));
     }
     const tools = this.executor.catalog().filter(t => run.agent.toolIds.includes(t.id));
-    const partial = (reason: string) => {
+    const compose = (reason: string, complete = false) => {
+      const observed = specialistEvidenceReport(run, observations);
+      if (observed) return observed;
       const evidence = observations.map(o => `- ${o.toolId}: receipt ${o.receipt.transaction} (${o.receipt.amountBaseUnits} base units on ${o.receipt.network})`).join("\n");
+      if (complete) return reason;
       return `Investigation incomplete: ${reason}\n\n${observations.length ? `Collected evidence remains available in the run history.\n${evidence}` : "No paid evidence was collected."}`;
     };
     try {
       if (!tools.length) throw new AgentAuthorityError("None of this agent's selected tools is configured");
-      if (run.agent.requiredToolIds?.some(id => !tools.some(t => t.id === id))) throw new AgentAuthorityError("A required evidence source for this specialist is not configured");
+      let planIndex = 0;
+      if (approvedPlan) {
+        for (const step of approvedPlan.steps) {
+          if (completedInputs.has(digest({ toolId: step.toolId, input: step.input }))) planIndex++;
+          else break;
+        }
+        const remaining = approvedPlan.steps.slice(planIndex);
+        if (remaining.length) {
+          const failures = await probePlanSteps(this.executor, { steps: remaining, reasoning: approvedPlan.reasoning }, run.agent.perCallBaseUnits, signal);
+          if (planHasBlockingProbeFailures(failures)) {
+            this.store.event(id, "probe_gate_blocked", { failures });
+            this.store.finish(id, observations.length ? "partial" : "failed", compose(`Preflight failed. No payment was made.\n${failures.map(f => `- ${f.toolId}: ${f.message}`).join("\n")}`), "probe_gate");
+            return;
+          }
+        }
+      }
       for (let step = prior.filter(e => e.kind === "action_selected").length; step < run.agent.maxSteps; step++) {
         signal.throwIfAborted();
         if (this.store.run(id)?.state !== "running") throw new Error("Run no longer permits new actions");
         const remaining = BigInt(run.agent.budgetBaseUnits) - spent;
-        const planned = approvedPlan?.steps[step];
+        const planned = approvedPlan?.steps[planIndex];
         const response = planned ? { decision: { action: "tool" as const, ...planned }, usage: { provider: "approved-plan", billedThroughX402: false, totalTokenCount: 0 } } : await this.model.next({ run, tools, observations, failures, remainingBaseUnits: remaining.toString(), remainingSteps: run.agent.maxSteps - step }, signal);
         this.store.event(id, "model_usage", response.usage);
         signal.throwIfAborted();
         const decision = response.decision;
         if (decision.action === "finish") {
           if (typeof decision.result !== "string" || !decision.result.trim() || decision.result.length > 250000 || typeof decision.complete !== "boolean" || !Array.isArray(decision.evidenceIds) || decision.evidenceIds.some(e => !observations.some(o => o.requestId === e))) throw new Error("Model returned an invalid or unsupported result");
-          // Required evidence comes from the task, not an arbitrary minimum purchase count.
           const minimumTools = 1;
           const cited = observations.filter(o => !o.error && o.data !== null && decision.evidenceIds.includes(o.requestId));
-          const complete = decision.complete && new Set(cited.map(o => o.toolId)).size >= minimumTools && (run.agent.requiredToolIds ?? []).every(id => cited.some(o => o.toolId === id));
+          const complete = decision.complete && new Set(cited.map(o => o.toolId)).size >= minimumTools;
           const observedReport = specialistEvidenceReport(run, observations);
-          this.store.event(id, "conclusion", { complete, evidenceIds: decision.evidenceIds, reportStrategy: observedReport ? "observed-specialist-fields" : "model-interpretation" });
+          this.store.event(id, "conclusion", { complete, evidenceIds: decision.evidenceIds, reportStrategy: observedReport ? "observed-fields" : "model-interpretation" });
           this.store.finish(id, complete ? "completed" : "partial", observedReport ?? decision.result,
             complete ? null : "The task did not establish completion with the required evidence.");
           return;
@@ -120,6 +137,7 @@ export class AgentRuntime {
         if (completedInputs.has(inputHash)) {
           failures.push({ toolId: decision.toolId, reason: "This exact tool input already produced paid evidence. Use the retained observation; do not buy it again." });
           this.store.event(id, "duplicate_action_blocked", { toolId: decision.toolId, inputHash });
+          if (planned) planIndex++;
           continue;
         }
         let quote: X402Quote;
@@ -128,12 +146,20 @@ export class AgentRuntime {
           if (signal.aborted) throw e;
           failures.push({ toolId: decision.toolId, reason: classifyProbeFailure(e).userMessage });
           this.store.event(id, "unpaid_tool_failure", failures.at(-1));
+          if (planned) {
+            this.store.finish(id, observations.length ? "partial" : "failed", compose(failures.at(-1)!.reason), "probe_gate");
+            return;
+          }
           continue;
         }
         if (quote.toolId !== decision.toolId || !positiveUnits(quote.amountBaseUnits)) throw new AgentAuthorityError("Invalid x402 quote");
         if (BigInt(quote.amountBaseUnits) > remaining || BigInt(quote.amountBaseUnits) > BigInt(run.agent.perCallBaseUnits)) {
           failures.push({ toolId: decision.toolId, reason: "Quoted price exceeds the remaining or per-call allowance. Choose a cheaper permitted action or finish with available evidence." });
           this.store.event(id, "price_blocked", { ...failures.at(-1), amountBaseUnits: quote.amountBaseUnits });
+          if (planned) {
+            this.store.finish(id, observations.length ? "partial" : "failed", compose(failures.at(-1)!.reason), "price_blocked");
+            return;
+          }
           continue;
         }
         signal.throwIfAborted();
@@ -156,16 +182,17 @@ export class AgentRuntime {
         observations.push(observation);
         this.store.event(id, "tool_observation", observation);
         completedInputs.add(inputHash);
+        if (planned) planIndex++;
         this.store.event(id, "paid_step_checkpoint", { nextStepIndex: step + 1, spentBaseUnits: spent.toString(), inputHash, requestId });
       }
-      this.store.finish(id, "partial", partial("Step limit reached"));
+      this.store.finish(id, "partial", compose("Step limit reached"));
     } catch (e) {
       if (e instanceof AgentModelError && e.usage) this.store.event(id, "model_usage", { ...e.usage, failed: true });
       const reason = errorText(e);
       this.store.event(id, e instanceof UncertainAgentPayment ? "payment_uncertain" : "execution_stopped", { reason });
       const state = this.store.run(id)?.state;
       if (state && !TERMINAL_AGENT_STATES.has(state)) this.store.finish(id,
-        state === "stopping" ? "stopped" : observations.length ? "partial" : "failed", partial(reason), reason);
+        state === "stopping" ? "stopped" : observations.length ? "partial" : "failed", compose(reason), reason);
     } finally { clearTimeout(timer); this.active.delete(id); }
   }
 }

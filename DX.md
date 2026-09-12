@@ -1,123 +1,89 @@
 # Ledger integration and developer-experience report
 
-**Observed on 11 September 2026.** These are reproducible integration observations,
-not claims that every upstream behavior is a defect. The canonical execution
-evidence is
-[`docs/verification/live-proof-2026-09-11.json`](docs/verification/live-proof-2026-09-11.json),
-with the separate physical ERC-7730 development proof in
-[`docs/verification/ledger-erc7730-device-2026-09-11.json`](docs/verification/ledger-erc7730-device-2026-09-11.json).
+Mandate funds a software spending wallet from a physical Ledger using Device
+Management Kit and the Ethereum signer kit. The broker never shows a secret to
+the model. Clear-signing uses either a partner `LEDGER_ORIGIN_TOKEN` or the
+loopback CAL that matches the **ledger-dev Ethereum app** already loaded on
+this device (`CAL_TEST_KEY=1`, app version `1.23.0-dev`).
+
+That development app lives in `/Users/Apple/Documents/ledger-dev/app-ethereum`
+and is loaded with `load-ethereum-cal-test.sh`. Production CAL/ERC-7730 on the
+stock Ethereum app still needs a Ledger partner origin token.
 
 ## Integration actually used
 
 The operator host ran wallet-cli 2.1.0, Device Management Kit 1.9.0, Ethereum Signer
 Kit 1.18.0, Context Module 2.5.0, x402 2.25.0, viem 2.56.3 and Hiero SDK 2.88.0.
-The lockfile and dependency-security report record transitive updates separately.
-Tests ran on the Mac and in a clean Node 22 Linux container without host credentials.
 
-Key Ring seals the delegated session, facilitator, authorizer and service credentials.
-The trusted broker invokes `wallet-cli ring decrypt` over pipes, uses the material
-for an operation, and wipes the original Buffer afterwards. That cleanup is not a
-promise that JavaScript strings or account closures have been erased.
+Key Ring seals the delegated spending key. The trusted broker invokes
+`wallet-cli ring decrypt` over pipes, uses the material for one operation, and
+wipes the original Buffer afterwards.
 
-DMK resolves the configured Ledger address, requests the actual EIP-712 funding
-authorization, and verifies the returned signature against that principal. The live
-0.10-USDC funding then supported three 0.01-USDC calls without another payer signature.
-The consumer never received the Key Ring password, wallet key or Docker authority.
+DMK resolves the configured Ledger address, requests the EIP-712 funding
+authorization, and verifies the returned signature against that principal.
+Tool payments then use the sealed software wallet. Ledger is required again
+only for allowance increases.
+
+Workspace configuration is in `state/mainnet/operator/setup-draft.json`. The
+legacy `mandate.yaml` timed-withdrawal gateway was removed; the current product
+is the exact-agent workspace on port 8410.
+
+`npm start` also launches the self-hosted facilitator on `http://127.0.0.1:8406`
+when `secrets/mandate-facilitator.enc` and `secrets/mandate-authorizer.enc`
+exist. Settings default to that URL; use an external facilitator if secrets are
+absent.
 
 ## Findings that help an integrator
 
 ### 1. Device presence is not approval of an action
 
-**Expected:** approval binds the action, amount, receiver, network and freshness.
-**Pre-audit behavior:** address confirmation was presented as consent to a payment
-whose context appeared only in the host terminal.
-**Current behavior:** action approvals require a real expected-principal signature,
-action digest, nonce and expiry; the nonce is consumed transactionally. Presence is
-separate and its signature is cryptographically checked. The main batch workspace
-blocks an exhausted scope instead of pretending an address check widened it.
-
-Reproduce the rejection boundaries with `stepup.test.ts` and `presence.test.ts`.
-Those use real ephemeral cryptographic signatures as test inputs; they do not claim
-that a physical device was used in the deterministic suite.
+Address confirmation is separate from the funding signature. Funding binds
+amount, asset, chain, recipient and expiry in the EIP-3009 typed data.
 
 ### 2. Report the actual clear-signing path
 
-The live funding trace reported `originTokenPresent=false`, `calFilters=error`,
-and `verdict=clear-basic`. The signature was valid and the channel funded, but that
-is not evidence that production CAL/ERC-7730 field labels appeared on the device.
-The application persists that report next to the funding signature's digest.
+Without `LEDGER_ORIGIN_TOKEN`, production CAL returns 403 and the stock
+Ethereum app falls back to legacy or clear-basic. Mandate fail-closes
+unless a partner token is present **or** `MANDATE_LEDGER_TEST_CAL_URL` points
+at the loopback bridge used with the ledger-dev app:
 
-A separate physical development proof now follows Ledger's Device SDK clear-signing
-tester pattern for custom ERC-7730 descriptors before they are available in
-production CAL: a loopback-only CAL bridge serves Base Sepolia descriptor filters,
-EthereumTest 1.23.0-dev verifies CAL-test-key signatures embedded in the app, and
-the Ledger trace reports `calFilters=success` and `verdict=erc7730`. The signed
-USDC authorization uses `validAfter` roughly ten years in the future, is never
-broadcast, and moves zero funds. This is development hardware evidence, not
-registry acceptance or partner-origin production CAL access.
+```sh
+MANDATE_LEDGER_CAL_TEST_KEY_FILE=/Users/Apple/Documents/ledger-dev/app-ethereum/client/src/ledger_app_clients/ethereum/keychain/cal.pem \
+  npm run ledger:test-cal
+MANDATE_LEDGER_TEST_CAL_URL=http://127.0.0.1:8427 npm start
+```
 
-`npm run verify:descriptors` separately runs the official linter on the USDC and
-batch descriptors. Missing tooling exits nonzero; schema-only validation must be
-requested explicitly and is labeled schema-only. Full local lint passed during this
-run. Production registry acceptance is not inferred from linter output or the
-development bridge.
+Open the **ledger-dev Ethereum app** on the device before funding. The signing
+report records `originToken`, `testCal`, `calFilters` and `verdict`.
 
-Useful upstream improvement: make the distinction between generic clear signing,
-legacy paths, CAL filters, production context, and development test-CAL context
-conspicuous in integrator-facing results. This is integration feedback, not an
-assertion that the current SDK is unsafe merely because optional production context
-resolution failed.
+**DX gap:** There is no single “am I ready to fund?” screen that shows CAL health,
+device app name, and origin-token status together. Integrators must read console
+stderr and run `scripts/dev/probe-ledger-preflight.mjs` separately.
 
 ### 3. Be precise about headless behavior
 
-The Ledger documentation describes device-free Key Ring decryption after member
-provisioning. That does not automatically mean an application can restart without
-constructing a device signer. The original `openMandate` always did so.
+Key Ring decrypt after `ring init` does not need USB. Funding and allowance
+increases still need the device. Tool payments after funding do not.
 
-`resumeMandate` now has no payer signing capability and needs an existing pinned,
-funded channel. A fresh process with `node --no-addons` completed a real paid request
-with zero new Ledger signatures. This proves that broker restart path with native
-HID unavailable to that process. The Ledger remained connected to the Mac; a physically
-unplugged host or separately provisioned VPS was not part of the completed live proof.
-A proposed cross-host member-profile handoff was not executed. No credential export
-is hidden behind the headless claim.
+**DX gap:** The distinction between “address read succeeded” and “funding
+signature succeeded” is easy to misread in the UI status line. A clearer
+two-step checklist (address confirmed → allowance signed) would help demos.
 
-### 4. Preserve identity and signature encoding
+### 4. ERC-7730 descriptor alignment
 
-The adapter joins DMK signature fields into the format expected by the stock x402
-client, normalizes the recovery byte, rejects unsupported chains before signing,
-and verifies the returned address. Unit regressions cover short `r`/`s` fields and
-recovery-byte normalization. Do not bypass these checks with success-shaped strings.
+Mandate adds an explicit `EIP712Domain` type before DMK calls so descriptor
+lookup matches the device (`withExplicitEip712DomainType` in `dmksigner.ts`).
+Without this, CAL can succeed in tests but the digest path differs from naive
+x402 payloads.
 
-### 5. Authentication must extend beyond encrypted key storage
+**Tutorial idea:** “Wire DMK funding for x402 exact USDC on Base” with a
+minimal EIP-3009 `ReceiveWithAuthorization` example and the descriptor JSON
+under `docs/erc7730/`.
 
-Ledger documents that another process running as the same user can inspect the CLI
-password environment. Mandate's consumer therefore runs in a separate constrained
-Docker execution environment. The observed boundary checks covered network isolation,
-non-root/read-only execution, absence of host-data mounts/passwords, and rejection of
-operator, funding, mainnet-override and wider-query requests. Encryption alone is not
-the claimed isolation mechanism.
+### 5. Operator workspace vs old mandate.yaml model
 
-## Operational failures retained as evidence
+Judges cloning the repo should use `npm start` only. Retired HTTP routes
+(`/api/config`, `/api/settle`, etc.) return 410. This reduces confusion but
+is not obvious from Ledger docs alone.
 
-A claim succeeded before an immediate merchant sweep failed. Recovery now reads
-already-claimed revenue and sweeps it without requiring a new voucher. A refund
-succeeded before a public RPC returned `block not found`; the original transaction
-was later reconciled by parsing its multicall, transfers and consistent snapshots.
-Some HCS submissions returned `UNKNOWN`; the outbox retained them and readback-aware
-retries completed their anchors. These are payment/RPC integration observations,
-not Ledger device defects. The failed attempts remain in the recorded history.
-
-## Verification commands
-
-`npm run verify` checks deterministic security and lifecycle behavior.
-`npm run test:ui` checks the real local HTTP workspace in Chrome/Chromium.
-`npm run verify:linux` performs a clean install and offline execution check.
-`npm run verify:descriptors` checks the current descriptors with the official tool.
-Live signatures or funds are requested only through the reviewed operator workflow;
-none of these deterministic commands are a disguised payment operation.
-
-Primary sources:
-https://developers.ledger.com/docs/ai-tools/ledger-cli
-https://docs.x402.org/schemes/batch-settlement
-https://nodejs.org/api/cli.html
+See [README.md](README.md) for the operator workspace and track map.

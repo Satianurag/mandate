@@ -4,7 +4,7 @@ import type {ToolObservation} from './agent-runtime.ts';
 export interface AgentPaymentView {id:string;state:string;network:string;asset:string;amountBaseUnits:string;transaction:string|null;chainVerified:boolean;error:string|null;createdAt:number}
 export function receiptExplorer(network:string,transaction:string):string|null {
   if(network==='eip155:8453'&&/^0x[0-9a-fA-F]{64}$/.test(transaction))return `https://basescan.org/tx/${transaction}`;
-  if(network==='hedera:testnet'&&/^0\.0\.\d+[-@]\d+[-.]\d{1,9}$/.test(transaction))return `https://hashscan.io/testnet/transaction/${encodeURIComponent(transaction)}`;
+  if(network==='hedera:mainnet'&&/^0\.0\.\d+[-@]\d+[-.]\d{1,9}$/.test(transaction))return `https://hashscan.io/mainnet/transaction/${encodeURIComponent(transaction)}`;
   return null;
 }
 export function formatTestUsdc(units:string):string {const n=BigInt(units),fraction=(n%1000000n).toString().padStart(6,'0').replace(/0+$/,'');return `${n/1000000n}${fraction?'.'+fraction:''}`;}

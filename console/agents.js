@@ -10,7 +10,7 @@
   const phaseLabel = { idle: 'Review the allowance before funding.', checking: 'Checking mainnet balance and settlement support.', connecting_device: 'Connecting to the Ledger. Unlock it and open the Ethereum app.', awaiting_device: 'Review the actual amount and recipient on your Ledger.', submitting: 'Submitting the signed mainnet funding transfer.', confirming: 'Verifying the transfer on Base mainnet.', confirmed: 'Funding confirmed on Base mainnet.', needs_reconciliation: 'The funding outcome needs review. Do not create another signature.', reconciling: 'Looking up the existing funding receipt. No new payment is being made.', failed: 'Funding did not complete.' };
   const increasePhaseLabel = { idle: '', checking: 'Checking the additional amount and settlement support.', connecting_device: 'Connecting to Ledger for the allowance increase.', awaiting_device: 'Review the additional amount and recipient on your Ledger.', submitting: 'Submitting the signed allowance increase.', confirming: 'Verifying the additional transfer on Base mainnet.', confirmed: 'Allowance increase confirmed.', needs_reconciliation: 'The increase outcome is uncertain. Reconcile it; never sign another increase.', reconciling: 'Checking the existing increase receipt without a new signature.', failed: 'The allowance increase did not complete.' };
   let reviewedPlan = null;
-  let catalog = null, editing = null, launching = null, selectedRun = null, busy = false, last = '', runLast = '', reviewedHash = null, returnReview = null, increaseReview = null;
+  let catalog = null, launching = null, selectedRun = null, busy = false, last = '', runLast = '', reviewedHash = null, returnReview = null, increaseReview = null;
   try { selectedRun = sessionStorage.getItem(selectedKey); } catch { /* Storage is optional for viewing. */ }
   let restoreRunView = Boolean(selectedRun);
   const button = (text, style, action) => { const b = el('button', text, style); b.type = 'button'; b.onclick = action; return b; };
@@ -76,30 +76,79 @@
       else message(`The existing request could not be observed: ${error.message}`, true);
     }
   }
-  function openEditor(profile = null) {
-    editing = profile;
-    $('agentEditorTitle').textContent = profile ? 'Edit agent' : 'Create an agent';
-    for (const [element, key] of [['agentName', 'name'], ['agentDescription', 'description'], ['agentGoal', 'goal'], ['agentInstructions', 'instructions'], ['agentOutput', 'output']]) $(element).value = profile?.[key] || '';
-    $('agentBudget').value = units(profile?.budgetBaseUnits ?? '100000'); $('agentPerCall').value = units(profile?.perCallBaseUnits ?? '20000');
-    $('agentSteps').value = profile?.maxSteps ?? 12; $('agentDuration').value = profile?.maxDurationSeconds ?? 300;
-    $('agentToolChoices').replaceChildren();
-    for (const [id, label] of Object.entries(toolLabels)) {
-      const row = el('label', undefined, 'checkline'), input = el('input'); input.type = 'checkbox'; input.value = id;
-      const available = !catalog?.setup || catalog.availableTools.includes(id);
-      input.disabled = !available;
-      input.checked = profile ? profile.toolIds.includes(id) : catalog?.setup ? ['graph-protocol', 'hedera-analysis', 'crypto-prices'].includes(id) && available : id === 'web-search';
-      row.append(input, el('span', `${label}${!available ? ' · not configured' : ''}`)); $('agentToolChoices').append(row);
-    }
-    $('agentEditorError').textContent = ''; $('agentEditor').showModal();
+  function catalogToolIds() {
+    const available = (catalog?.availableTools || []).filter(id => Object.hasOwn(toolLabels, id));
+    return available.length ? available : ['web-search'];
   }
-  function openLaunch(profile) {
-    reviewedPlan=null; $('agentPlan').hidden=true; $('agentPreview').disabled=false;
-    launching = profile; $('agentLaunchTitle').textContent = profile.name; $('agentLaunchDescription').textContent = profile.description; $('agentLaunchGoal').value = profile.goal || (profile.id === 'protocol-investigator' ? `Investigate ${catalog?.setup?.researchSources?.[0]?.label || 'the configured protocol'}: compare the most recent complete UTC day with earlier days, investigate data-quality anomalies, and explain which conclusions the evidence supports and which remain unresolved.` : profile.id === 'agent-selection-analyst' ? 'Find an agent for monitoring onchain protocol activity. Compare available candidates, their declared capabilities and feedback coverage. Explain whether there is enough verified evidence to hire one.' : '');
-    const configured = profile.toolIds.filter(id => catalog.availableTools.includes(id)).map(id => toolLabels[id]).join(', ');
-    $('agentLaunchLimits').textContent = `${units(profile.budgetBaseUnits)} USDC maximum per run · ${units(profile.perCallBaseUnits)} per call · ${profile.maxSteps} decisions · ${profile.maxDurationSeconds} seconds. ${configured ? `Available tools: ${configured}. ` : ''}This does not increase the shared allowance. Vertex model usage is billed separately.`;
-    const readiness = catalog?.availability?.[profile.id], running = catalog?.runningCount > 0;
-    $('launchAgent').disabled = true; $('agentLaunchError').textContent = running ? 'Another investigation is using this allowance. Finish or stop it before starting this goal.' : readiness?.ready ? '' : readiness?.reason || catalog?.readiness || 'Checking readiness';
-    $('agentLaunch').showModal();
+  function defaultTaskBody(data) {
+    const authority = data.setup?.authority;
+    return {
+      name: 'Task',
+      description: '',
+      instructions: 'Investigate the goal using the funded tool catalog. Prefer live evidence, cite sources, and state limitations clearly.',
+      goal: '',
+      output: 'A concise report with evidence and recommendations.',
+      toolIds: catalogToolIds(),
+      budgetBaseUnits: authority?.windowBaseUnits ?? '100000',
+      perCallBaseUnits: authority?.perCallBaseUnits ?? '20000',
+      maxSteps: 12,
+      maxDurationSeconds: 600,
+    };
+  }
+  function taskFunded(data) {
+    const setup = data.setup;
+    return Boolean(setup && setup.funding?.status === 'funded' && setup.state === 'active');
+  }
+  function openAllowanceDialog(focusSetup = false) {
+    const dialog = $('agentAllowanceDialog');
+    if (!dialog) return;
+    dialog.showModal();
+    if (focusSetup) {
+      $('setupBudgetDetails').open = true;
+      $('setupPayer')?.focus();
+    }
+  }
+  function renderTaskBudgetStrip(data) {
+    const summary = $('taskBudgetSummary'), label = $('taskBudgetLabel'), button = $('openAllowanceDialog'), strip = $('taskBudgetStrip');
+    if (!summary || !button) return;
+    const setup = data.setup, funded = taskFunded(data);
+    strip?.classList.toggle('is-funded', funded);
+    strip?.classList.toggle('is-needed', !funded);
+    if (!setup) {
+      label.textContent = 'Before paid work';
+      summary.textContent = data.readiness || 'Set your Google Cloud project in Settings, then approve spending on Ledger.';
+      button.textContent = 'Set up with Ledger';
+      return;
+    }
+    const remaining = setup.totals?.remaining || '0';
+    const effective = setup.effectiveCeilingBaseUnits || setup.authority.ceilingBaseUnits;
+    if (funded) {
+      label.textContent = 'Spending allowance';
+      summary.textContent = `${units(remaining)} USDC available · ${units(setup.totals?.spent || '0')} spent of ${units(effective)}`;
+      button.textContent = 'Manage allowance';
+    } else {
+      label.textContent = 'Ledger approval needed';
+      summary.textContent = $('agentAllowanceSummary').textContent || data.readiness;
+      button.textContent = 'Set up with Ledger';
+    }
+  }
+  function requireFunding(data, message) {
+    if (taskFunded(data)) return true;
+    $('agentLaunchError').textContent = message || data.readiness || 'Approve a Ledger spending allowance before previewing or starting.';
+    openAllowanceDialog(true);
+    return false;
+  }
+  function renderTaskForm(data) {
+    if (!launching) return;
+    $('agentLaunchLimits').textContent = `${units(launching.budgetBaseUnits)} USDC maximum per run · ${units(launching.perCallBaseUnits)} per call · ${launching.maxSteps} decisions · ${launching.maxDurationSeconds} seconds. The planner picks paid tools from the funded catalog. This does not increase the shared allowance. Vertex model usage is billed separately.`;
+    const readiness = data.availability?.[launching.id], running = data.runningCount > 0;
+    const funded = taskFunded(data);
+    $('agentPreview').disabled = false;
+    $('launchAgent').disabled = !funded || !reviewedPlan || reviewedPlan.expiresAt <= Date.now() || !readiness?.ready || running;
+    if (running) $('agentLaunchError').textContent = 'Another investigation is using this allowance. Finish or stop it before starting this goal.';
+    else if (funded && !readiness?.ready) $('agentLaunchError').textContent = readiness?.reason || data.readiness || '';
+    else if (funded && reviewedPlan) $('agentLaunchError').textContent = '';
+    else if (!funded) $('agentLaunchError').textContent = '';
   }
   function allowanceFacts(root, setup, compact = false) {
     root.replaceChildren(); const a = setup.authority, effective = setup.effectiveCeilingBaseUnits || a.ceilingBaseUnits;
@@ -109,7 +158,7 @@
     fact(root, 'Rolling limit', `${units(a.windowBaseUnits)} USDC per ${a.windowMs / 60000} minutes · unchanged`);
     fact(root, 'Expires', when(a.expiresAt));
     fact(root, 'Ledger payer', a.payerAddress); fact(root, 'Funded software wallet', a.spendingAddress);
-    if (a.hedera) fact(root, 'Hedera payment account', `${a.hedera.accountId} → ${a.hedera.payTo} · native mainnet USDC`);
+    if (a.hedera) fact(root, 'Hedera second rail', `${a.hedera.accountId} → ${a.hedera.payTo} · for native hedera:mainnet vendor offers (Evidence Lab settles on Base)`);
     if (!compact) fact(root, 'Allowed services', (setup.configuredTools || []).map(t => toolLabels[t.id] || t.id).join(', '));
   }
   function renderSetup(data) {
@@ -122,28 +171,39 @@
     if (!setup) {
       const recent = $('agentRecentWork'); recent.replaceChildren();
       const empty = el('div', undefined, 'agent-empty');
-      empty.append(el('h3', 'Your first task starts here.'), el('p', 'Save your settings and prepare a Ledger budget to get started.', 'subtle'));
+      empty.append(el('h3', 'Your first task starts here.'), el('p', 'Set your Google Cloud project in Settings, approve a Ledger allowance on New task, then describe a goal.', 'subtle'));
       recent.append(empty);
       $('agentAllReceipts').replaceChildren(el('p', 'Confirmed payments will appear here after your first paid task.', 'empty-inline'));
     }
-    if (!setup) { $('agentHomeReadiness').textContent=data.readiness; $('agentAllowanceSummary').textContent=data.readiness; $('agentReviewFunding').disabled=false; $('agentReviewFunding').onclick=()=>{$('setupBudgetDetails').open=true;$('setupPayer').focus();}; $('agentHomePrimary').onclick=()=>showDashboardView('settings'); return; }
+    if (!setup) {
+      $('agentHomeReadiness').textContent = data.readiness;
+      $('agentAllowanceSummary').textContent = data.readiness;
+      $('agentReviewFunding').disabled = false;
+      $('agentReviewFunding').onclick = () => openAllowanceDialog(true);
+      $('agentHomePrimary').textContent = 'New task';
+      $('agentHomePrimary').onclick = () => showDashboardView('agents');
+      renderTaskBudgetStrip(data);
+      return;
+    }
     $('agentReviewFunding').onclick=openFunding;
     const { authority: a, totals = {}, funding = {} } = setup, effective = setup.effectiveCeilingBaseUnits || a.ceilingBaseUnits, increase = setup.increase || {};
     const spent = totals.spent || '0', reserved = totals.reserved || '0', remaining = totals.remaining || '0';
     $('agentHomeReadiness').textContent = data.readiness;
     $('agentAllowanceStatus').textContent = data.runningCount ? 'Investigation running' : funding.status === 'funded' && setup.state === 'active' ? 'Ledger-funded allowance' : setup.state !== 'active' ? readable(setup.state) : 'Ledger approval needed';
-    $('agentAllowanceStatus').className = `badge agent-only ${funding.status === 'funded' && setup.state === 'active' ? 'success' : 'neutral'}`;
+    $('agentAllowanceStatus').className = `badge ${funding.status === 'funded' && setup.state === 'active' ? 'success' : 'neutral'}`;
     $('agentHomeCeiling').textContent = `${units(effective)} USDC`;
     $('agentHomeSpent').textContent = units(spent); $('agentHomeReserved').textContent = units(reserved);
     $('agentHomeRemaining').textContent = setup.state !== 'active' ? readable(setup.state) : Date.now() >= a.expiresAt ? 'Expired' : funding.status === 'funded' ? units(remaining) : 'Not funded';
     $('agentBudgetProgress').value = BigInt(effective) > 0n ? Number((BigInt(spent) + BigInt(reserved)) * 100n / BigInt(effective)) : 0;
-    $('agentHomePrimary').textContent = funding.status === 'funded' ? 'Choose an agent' : 'Set up allowance';
-    $('agentHomePrimary').onclick = () => showDashboardView(funding.status === 'funded' ? 'agents' : 'authority');
+    $('agentHomePrimary').textContent = funding.status === 'funded' ? 'New task' : 'Set up allowance';
+    $('agentHomePrimary').onclick = () => {
+      showDashboardView('agents');
+      if (funding.status !== 'funded') window.dispatchEvent(new Event('mandate:allowance-open'));
+    };
     const state = setup.state !== 'active' ? setup.state : Date.now() >= a.expiresAt ? 'expired' : funding.status === 'funded' ? 'funded' : funding.status === 'pending' ? 'pending' : 'unfunded';
     $('agentAllowanceStatus').textContent = readable(state); $('agentAllowanceStatus').className = `badge ${tone(state)}`;
     $('agentAllowanceSummary').textContent = setup.state === 'closed' ? 'This allowance is closed. Its history and verified receipts remain available; it cannot make new payments.' : setup.state === 'stopped' ? 'New payments are stopped. Review pending receipts before returning unused funds.' : funding.status === 'funded' ? `${units(remaining)} USDC remains from a ${units(effective)} USDC shared allowance. You can increase it only with another explicit Ledger approval.` : `Approve ${units(a.ceilingBaseUnits)} USDC initially. Agents can never increase this allowance themselves.`;
     allowanceFacts($('agentAllowanceFacts'), setup);
-    $('agentAllowanceTechnical').textContent = JSON.stringify({ authority: a, effectiveCeilingBaseUnits: effective, confirmedIncreases: setup.increases || [], model: setup.vertex, custody: setup.custody, inferenceBilling: setup.inferenceBilling }, null, 2);
     $('agentFundingProgress').textContent = funding.transaction ? `Confirmed transfer: ${funding.transaction}` : phaseLabel[funding.phase] || phaseLabel.idle;
     $('agentFundingError').textContent = funding.error || '';
     $('agentReviewFunding').hidden = funding.status !== 'none'; $('agentReviewFunding').disabled = state !== 'unfunded';
@@ -165,10 +225,11 @@
 
     $('agentAllReceipts').replaceChildren(receiptList(setup.payments || [], data.runningCount > 0));
     const recent = $('agentRecentWork'); recent.replaceChildren();
-    if (!data.runs.length) { const empty = el('div', undefined, 'agent-empty'); empty.append(el('h3', 'Your first goal starts here.'), el('p', 'Investigate a protocol, review agent candidates, or describe your own job. Results and receipts stay together.', 'subtle')); recent.append(empty); }
+    if (!data.runs.length) { const empty = el('div', undefined, 'agent-empty'); empty.append(el('h3', 'Your first goal starts here.'), el('p', 'Describe the outcome you want. The planner picks paid tools inside the Ledger-approved catalog. Results and receipts stay together.', 'subtle')); recent.append(empty); }
     for (const run of data.runs.slice(0, 3)) recent.append(historyRow(run));
 
     const agentSidebar = document.querySelector('.sidebar-group .service-avatar.agent')?.nextElementSibling; if (agentSidebar) agentSidebar.textContent = 'Agent workspace';
+    renderTaskBudgetStrip(data);
   }
   function historyRow(run) {
     const row = button('', 'agent-history-row', () => selectRun(run.id)), body = el('div', undefined, 'agent-history-copy');
@@ -177,22 +238,10 @@
   }
   function renderAgents(data) {
     catalog = data; $('agentReadiness').textContent = data.readiness; renderSetup(data); renderPending();
-    const cards = $('agentCards'); cards.replaceChildren();
-    for (const profile of data.agents) {
-      const card = el('article', undefined, 'agent-card');
-      card.append(el('span', profile.template ? 'SPECIALIST' : 'YOUR AGENT', 'eyebrow'), el('h3', profile.name), el('p', profile.description || profile.output, 'subtle'));
-      const pills = el('div', undefined, 'agent-tool-pills');
-      for (const id of profile.toolIds.filter(id => data.availableTools.includes(id))) pills.append(el('span', toolLabels[id], 'agent-tool-pill'));
-      const allowance = el('p', `Up to ${units(profile.budgetBaseUnits)} USDC per run`, 'agent-allowance');
-      const actions = el('div', undefined, 'actions'); actions.append(button('Use agent', 'primary', () => openLaunch(profile)));
-      if (!profile.template) actions.append(button('Edit', 'secondary', () => openEditor(profile)));
-      card.append(pills, allowance, actions); cards.append(card);
-    }
-    const create = button('', 'agent-card agent-create', () => openEditor()); create.append(el('span', '+', 'agent-plus'), el('strong', 'Create an agent'), el('span', 'Describe the job. Define the result.', 'subtle')); cards.append(create);
+    if (launching) renderTaskForm(data);
     const history = $('agentHistory'); history.replaceChildren();
     if (!data.runs.length) history.append(el('p', 'Completed investigations, partial results and interrupted work will appear here.', 'empty-inline'));
     for (const run of data.runs) history.append(historyRow(run));
-    if ($('agentLaunch').open && launching) { const r = data.availability[launching.id]; $('launchAgent').disabled = !r?.ready || data.runningCount > 0 || !reviewedPlan || reviewedPlan.expiresAt <= Date.now(); }
   }
   function receiptList(payments, running = false) {
     const root = el('div', undefined, 'agent-receipt-list');
@@ -282,7 +331,18 @@
   }
   async function refreshAgents() {
     if (!current || busy) return; busy = true;
-    try { const data = await api('/api/agents'), fingerprint = JSON.stringify(data); if (fingerprint !== last) { last = fingerprint; renderAgents(data); } await refreshRun(); if (restoreRunView && selectedRun) { showDashboardView('task'); restoreRunView = false; } }
+    try {
+      let data = await api('/api/agents');
+      if (!data.agents.length) {
+        const { agent } = await api('/api/agents', defaultTaskBody(data));
+        data = { ...data, agents: [agent] };
+      }
+      launching = data.agents[0];
+      const fingerprint = JSON.stringify(data);
+      if (fingerprint !== last) { last = fingerprint; renderAgents(data); }
+      await refreshRun();
+      if (restoreRunView && selectedRun) { showDashboardView('task'); restoreRunView = false; }
+    }
     catch (e) { if (e.status !== 401) $('agentReadiness').textContent = `Agent state unavailable: ${e.message}`; }
     finally { busy = false; }
   }
@@ -293,7 +353,7 @@
   }
   $('agentFundingForm').onsubmit = async event => {
     event.preventDefault(); if (!$('agentFundingConsent').checked) return; $('agentConfirmFunding').disabled = true;
-    try { await api('/api/agent-setup/fund', { consentHash: reviewedHash, confirm: 'fund_mainnet_agent_allowance' }); $('agentFundingDialog').close(); showDashboardView('authority'); message('Review the funding transfer on your physical Ledger. The workspace will verify the chain receipt before enabling paid work.'); last = ''; await refreshAgents(); }
+    try { await api('/api/agent-setup/fund', { consentHash: reviewedHash, confirm: 'fund_mainnet_agent_allowance' }); $('agentFundingDialog').close(); showDashboardView('agents'); message('Review the funding transfer on your physical Ledger. The workspace will verify the chain receipt before enabling paid work.'); last = ''; await refreshAgents(); }
     catch (e) { $('agentFundingDialogError').textContent = e.message; $('agentConfirmFunding').disabled = false; }
   };
   async function previewIncrease() {
@@ -335,44 +395,43 @@
     catch (e) { $('agentReturnDialogError').textContent = e.message; $('agentConfirmReturn').disabled = false; }
   };
   $('agentReconcileReturn').onclick = async () => { try { await api('/api/agent-setup/return-reconcile', {}); last = ''; await refreshAgents(); } catch (e) { message(e.message, true); } };
-  $('agentReviewFunding').onclick = openFunding; $('closeAgentFunding').onclick = () => $('agentFundingDialog').close();
-  $('agentReviewShortcut').onclick = () => showDashboardView('authority');
+  $('agentReviewFunding').onclick = openFunding;
+  $('closeAgentFunding').onclick = () => $('agentFundingDialog').close();
+  $('openAllowanceDialog').onclick = () => openAllowanceDialog(true);
+  $('closeAllowanceDialog').onclick = () => $('agentAllowanceDialog').close();
+  window.addEventListener('mandate:allowance-open', () => openAllowanceDialog(true));
   $('agentReconcileFunding').onclick = async () => { try { await api('/api/agent-setup/reconcile', {}); last = ''; await refreshAgents(); } catch (e) { message(e.message, true); } };
   $('agentStopAllowance').onclick = async () => {
     if (!confirm('Stop this entire allowance? New agent payments will be blocked. This does not reverse submitted payments or automatically return unused funds.')) return;
     try { await api('/api/agent-setup/stop', { confirm: 'stop_agent_allowance' }); last = ''; await refreshAgents(); message('The allowance is stopped. Existing receipts remain available for review.'); } catch (e) { message(e.message, true); }
   };
-  $('createAgentShortcut').onclick = () => openEditor();
   $('agentObserveSubmission').onclick = observePending;
-  $('closeAgentEditor').onclick = () => $('agentEditor').close(); $('closeAgentLaunch').onclick = () => $('agentLaunch').close();
-  $('agentEditorForm').onsubmit = async event => {
-    event.preventDefault(); const submit = event.submitter; submit.disabled = true;
-    try {
-      const body = { name: $('agentName').value, description: $('agentDescription').value, goal: $('agentGoal').value, instructions: $('agentInstructions').value, output: $('agentOutput').value, toolIds: [...$('agentToolChoices').querySelectorAll('input:checked:not(:disabled)')].map(i => i.value), budgetBaseUnits: baseUnits($('agentBudget').value.trim()), perCallBaseUnits: baseUnits($('agentPerCall').value.trim()), maxSteps: Number($('agentSteps').value), maxDurationSeconds: Number($('agentDuration').value) };
-      await api(editing ? `/api/agents/${editing.id}` : '/api/agents', editing ? { ...body, expectedVersion: editing.version } : body, editing ? 'PUT' : 'POST'); $('agentEditor').close(); last = ''; await refreshAgents();
-    } catch (e) { $('agentEditorError').textContent = e.message; } finally { submit.disabled = false; }
-  };
   $('agentLaunchGoal').oninput=()=>{reviewedPlan=null;$('agentPlan').hidden=true;$('launchAgent').disabled=true;};
   $('agentPreview').onclick=async()=>{
+    if(catalog&&!requireFunding(catalog,'Approve a Ledger spending allowance before previewing the plan.'))return;
     $('agentPreview').disabled=true;$('agentLaunchError').textContent='Planning and checking unpaid offers…';reviewedPlan=null;
     try{
       const {plan}=await api('/api/agent-preview',{agentId:launching.id,goal:$('agentLaunchGoal').value.trim()});reviewedPlan=plan;
       const root=$('agentPlan');root.replaceChildren(el('h3','Your proposed plan'),el('p',plan.reasoning));const steps=el('ol');
       for(let index=0;index<plan.steps.length;index++){const step=plan.steps[index],row=el('li');row.append(el('strong',`${toolLabels[step.toolId]||step.toolId} · ${units(plan.stepPrices[index])} USDC`),el('p',step.reason));steps.append(row);}root.append(steps,el('p',`Estimated tools: ${units(plan.estimatedBaseUnits)} USDC. The agent can adapt within its ${units(launching.budgetBaseUnits)} USDC total limit. Prices are checked again before each payment. Model billing is separate.`,'subtle'));
-      root.hidden=false;$('agentLaunchError').textContent='';$('launchAgent').disabled=!catalog?.availability?.[launching.id]?.ready;
+      root.hidden=false;$('agentLaunchError').textContent='';if(catalog)renderTaskForm(catalog);
     }catch(e){$('agentLaunchError').textContent=e.message;}finally{$('agentPreview').disabled=false;}
   };
-  $('agentLaunchForm').onsubmit = async event => {
-    event.preventDefault(); $('launchAgent').disabled = true; let sent = false;
+  $('agentTaskForm').onsubmit = async event => {
+    event.preventDefault();
+    if(catalog&&!requireFunding(catalog,'Approve a Ledger spending allowance before starting this task.')){return;}
+    $('launchAgent').disabled = true; let sent = false;
     try {
       const goal = $('agentLaunchGoal').value.trim(), previous = pendingIntent();
       if(!previous&&(!reviewedPlan||reviewedPlan.expiresAt<=Date.now()))throw new Error('Preview the current plan before starting.');
       if (previous && (previous.goal !== goal || previous.agentId !== launching.id)) throw new Error('A previous submission needs observation. Use “Check existing request” before creating different work.');
       const body = previous || { requestId: crypto.randomUUID(), agentId: launching.id, goal, planId:reviewedPlan.id };
       localStorage.setItem(pendingKey, JSON.stringify(body)); if (localStorage.getItem(pendingKey) !== JSON.stringify(body)) throw new Error('Cannot save the request ID safely. No run was submitted.');
-      sent = true; const { run } = await api('/api/agent-runs', body); localStorage.removeItem(pendingKey); $('agentLaunch').close(); selectedRun = run.id; runLast = ''; last = ''; try { sessionStorage.setItem(selectedKey, run.id); } catch {} showDashboardView('task'); await refreshAgents();
+      sent = true; const { run } = await api('/api/agent-runs', body); localStorage.removeItem(pendingKey);
+      reviewedPlan = null; $('agentPlan').hidden = true; $('agentLaunchGoal').value = '';
+      selectedRun = run.id; runLast = ''; last = ''; try { sessionStorage.setItem(selectedKey, run.id); } catch {} showDashboardView('task'); await refreshAgents();
     } catch (e) { if (sent && [400, 401, 403, 409].includes(e.status)) localStorage.removeItem(pendingKey); $('agentLaunchError').textContent = e.message; renderPending(); }
-    finally { $('launchAgent').disabled = !catalog?.availability?.[launching?.id]?.ready || catalog?.runningCount > 0 || !reviewedPlan; }
+    finally { if (catalog && launching) renderTaskForm(catalog); }
   };
   window.addEventListener('mandate:state', () => { void refreshAgents(); });
   window.addEventListener('focus', () => { void refreshAgents(); });

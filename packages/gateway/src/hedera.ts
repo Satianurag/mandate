@@ -1,4 +1,3 @@
-import { assertHederaDisabled } from "./mainnet.ts";
 /**
  * Hedera specifics: amount normalisation and the sealed signer.
  *
@@ -16,17 +15,17 @@ import {
   type ClientHederaSigner,
 } from "@x402/hedera";
 import type { PaymentRequirements } from "@x402/core/types";
-import { BASE_SEPOLIA, CIRCLE_HEDERA_TESTNET_USDC_HTS } from "./facilitators.ts";
+import { BASE_MAINNET, CIRCLE_HEDERA_MAINNET_USDC_HTS } from "./facilitators.ts";
 import { withSecret } from "./keyring.ts";
 
-/** Circle Hedera testnet USDC (6 decimals). Stock ExactHederaScheme asset. */
+/** Circle Hedera mainnet USDC (6 decimals). Stock ExactHederaScheme asset. */
 export const DEFAULT_HTS_DECIMALS: Record<string, number> = {
-  [CIRCLE_HEDERA_TESTNET_USDC_HTS]: 6,
+  [CIRCLE_HEDERA_MAINNET_USDC_HTS]: 6,
 };
 
-/** Circle Base mainnet USDC (6 decimals). Graph testnet x402 + upto@8453. */
+/** Circle Base mainnet USDC (6 decimals). */
 export const DEFAULT_EVM_DECIMALS: Record<string, number> = {
-  [BASE_SEPOLIA.usdc.toLowerCase()]: 6,
+  [BASE_MAINNET.usdc.toLowerCase()]: 6,
 };
 
 /** Tinybars per HBAR. Exact integer; normalisation divides by this. */
@@ -37,9 +36,8 @@ export const TINYBARS_PER_HBAR = 100_000_000;
  *
  * Returns the amount as a plain number plus a display symbol. Native HBAR
  * divides by 1e8; HTS tokens divide by their configured decimals, which the
- * caller must supply -- guessing wrong here is exactly the off-by-decimal
- * failure mode that slips past a ceiling (see docs/threat-model.md), so an
- * unknown token is a loud throw, never a guess.
+ * caller must supply -- guessing wrong here is the off-by-decimal failure
+ * that slips past a ceiling, so an unknown token is a loud throw, never a guess.
  */
 export function normaliseAmount(
   requirements: PaymentRequirements,
@@ -88,8 +86,7 @@ export function createSealedHederaSigner(
   return {
     accountId,
     createPartiallySignedTransferTransaction: (requirements: PaymentRequirements) => {
-      assertHederaDisabled(requirements.network);
-      if (requirements.network !== "hedera:testnet") throw new Error("Hedera signer only signs hedera:testnet");
+      if (requirements.network !== "hedera:mainnet") throw new Error("Hedera signer only signs hedera:mainnet");
       return withSecret("hedera-payment", ciphertext, async (keyBytes) => {
         const hex = keyBytes.toString("utf8").trim().replace(/^0x/, "");
         const delegate = createClientHederaSigner(

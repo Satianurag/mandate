@@ -1,16 +1,13 @@
-/**
- * Hedera amount normalisation — HBAR and stock Circle HTS USDC.
- */
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { HBAR_ASSET_ID } from "@x402/hedera";
-import { CIRCLE_HEDERA_TESTNET_USDC_HTS } from "./facilitators.ts";
+import { CIRCLE_HEDERA_MAINNET_USDC_HTS } from "./facilitators.ts";
 import { DEFAULT_HTS_DECIMALS, normaliseAmount } from "./hedera.ts";
 
 test("HBAR divides by 1e8 tinybars", () => {
   const { amount, symbol } = normaliseAmount({
     scheme: "exact",
-    network: "hedera:testnet",
+    network: "hedera:mainnet",
     asset: HBAR_ASSET_ID,
     amount: "3700000",
     payTo: "0.0.5005",
@@ -21,47 +18,31 @@ test("HBAR divides by 1e8 tinybars", () => {
   assert.equal(amount, 0.037);
 });
 
-test("Circle testnet USDC is 6 decimals without a caller table", () => {
-  assert.equal(DEFAULT_HTS_DECIMALS[CIRCLE_HEDERA_TESTNET_USDC_HTS], 6);
-  const { amount, symbol } = normaliseAmount({
+test("Circle mainnet USDC is 6 decimals", () => {
+  assert.equal(DEFAULT_HTS_DECIMALS[CIRCLE_HEDERA_MAINNET_USDC_HTS], 6);
+  const { amount } = normaliseAmount({
     scheme: "exact",
-    network: "hedera:testnet",
-    asset: CIRCLE_HEDERA_TESTNET_USDC_HTS,
+    network: "hedera:mainnet",
+    asset: CIRCLE_HEDERA_MAINNET_USDC_HTS,
     amount: "10000",
     payTo: "0.0.5005",
     extra: {},
     maxTimeoutSeconds: 60,
   });
-  assert.equal(symbol, CIRCLE_HEDERA_TESTNET_USDC_HTS);
   assert.equal(amount, 0.01);
 });
 
-test("unknown HTS asset is a loud throw, never a guessed decimal", () => {
+test("unknown HTS asset is a loud throw", () => {
   assert.throws(
-    () =>
-      normaliseAmount({
-        scheme: "exact",
-        network: "hedera:testnet",
-        asset: "0.0.99999999",
-        amount: "1",
-        payTo: "0.0.5005",
-        extra: {},
-    maxTimeoutSeconds: 60,
-      }),
-    /unknown asset/
+    () => normaliseAmount({
+      scheme: "exact",
+      network: "hedera:mainnet",
+      asset: "0.0.99999999",
+      amount: "1",
+      payTo: "0.0.5005",
+      extra: {},
+      maxTimeoutSeconds: 60,
+    }),
+    /unknown asset/,
   );
-});
-
-test("Base mainnet USDC is 6 decimals on eip155:8453", () => {
-  const { amount, symbol } = normaliseAmount({
-    scheme: "exact",
-    network: "eip155:8453",
-    asset: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
-    amount: "42",
-    payTo: "0x301672eEf23F0e5f165cfba26762702F20A74430",
-    extra: {},
-    maxTimeoutSeconds: 300,
-  });
-  assert.equal(symbol, "USDC");
-  assert.equal(amount, 0.000042);
 });

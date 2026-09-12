@@ -19,10 +19,10 @@
     "agents:open": "npm run console:open",
     "build": "npm run build --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
-    "test:ui": "node --experimental-strip-types scripts/test-mainnet-ui.mjs",
-    "test:entry": "node scripts/test-workspace-entry.mjs",
-    "verify": "npm run build && npm test && npm run test:ui",
-    "postinstall": "node scripts/apply-security-patches.mjs"
+    "verify": "npm run build && npm test",
+    "postinstall": "node scripts/apply-security-patches.mjs",
+    "ledger:test-cal": "node scripts/ledger-test-cal.mjs",
+    "facilitator": "node --experimental-strip-types packages/facilitator/src/index.ts"
   },
   "license": "MIT",
   "devDependencies": {

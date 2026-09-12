@@ -24,20 +24,15 @@ import {
 } from "./dmk-session.ts";
 import { formatLedgerError } from "./ledger-errors.ts";
 import {
+  assertProductionClearSigning,
   classifyTypedDataTrace,
   loadLedgerOriginToken,
+  requireLedgerOriginToken,
   uniqueTraceSteps,
   type CalFilterStatus,
   type ClearSigningVerdict,
 } from "./origin-token.ts";
 import type { ContextModule } from "@ledgerhq/context-module";
-import { getAddress, type Address, type Hex } from "viem";
-import {
-  applyLedgerTransactionSignature,
-  unsignedWithdrawalBytes,
-  type PreparedWithdrawalTransaction,
-} from "./withdrawal.ts";
-
 export const DEFAULT_DERIVATION_PATH = "44'/60'/0'/0/0";
 
 export type DmkSigningMessage = {
@@ -76,22 +71,31 @@ export function withExplicitEip712DomainType(message: DmkSigningMessage): DmkSig
 
 export interface ClearSigningReport {
   originTokenPresent: boolean;
+  testCal: boolean;
   verdict: ClearSigningVerdict;
   steps: string[];
   calFilters: CalFilterStatus;
 }
 
-/** Build the Ethereum signer with partner originToken when available. Never log the token. */
-export async function buildEthSigner(sessionId: string) {
+/** Build the Ethereum signer. Signing needs a partner originToken or the loopback CAL used by the ledger-dev Ethereum app. */
+export async function buildEthSigner(sessionId: string, options: { requireOriginToken?: boolean } = {}) {
   const originToken = await loadLedgerOriginToken();
+  const testCal = process.env.MANDATE_LEDGER_TEST_CAL_URL?.trim();
+  if (options.requireOriginToken && !originToken && !testCal) {
+    await requireLedgerOriginToken();
+  }
   const cal = { typedDataFilters: "none" as CalFilterStatus };
   const contextBuilder = new ContextModuleBuilder({
     originToken: originToken ?? "",
     loggerFactory: (tag) => getDmk().getLoggerFactory()(["ContextModule", tag]),
   }).setChain(ContextModuleChainID.Ethereum);
 
-  if (process.env.MANDATE_LEDGER_TEST_CAL_URL) {
-    throw new Error("Mainnet Ledger signing requires production clear-signing context; test CAL is disabled");
+  if (testCal) {
+    const url = new URL(testCal);
+    if (url.protocol !== "http:" || !["127.0.0.1", "localhost"].includes(url.hostname)) {
+      throw new Error("MANDATE_LEDGER_TEST_CAL_URL must be loopback HTTP for the ledger-dev Ethereum app");
+    }
+    contextBuilder.setCalConfig({ url: url.origin, mode: "test", branch: "main" });
   }
 
   const inner = contextBuilder.build();
@@ -109,10 +113,11 @@ export async function buildEthSigner(sessionId: string) {
   const signer = new SignerEthBuilder({
     dmk: getDmk(),
     sessionId,
+    ...(originToken ? { originToken } : {}),
   })
     .withContextModule(contextModule)
     .build();
-  return { signer, originTokenPresent: Boolean(originToken), cal };
+  return { signer, originTokenPresent: Boolean(originToken), testCal: Boolean(testCal), cal };
 }
 
 export interface DmkSignerOptions {
@@ -175,10 +180,18 @@ export class DmkEvmSigner implements ClientEvmSigner {
         });
         const out = await awaitDeviceAction<DmkAddress>(observable, full.timeoutMs);
         return out.address;
-      }, full.timeoutMs);
+      }, full.timeoutMs, { openEthereum: !full.skipOpenApp });
       return new DmkEvmSigner(address as `0x${string}`, full);
     } catch (e) {
-      throw new Error(`DmkEvmSigner.create: ${formatLedgerError(e)}`);
+      const detail = formatLedgerError(e);
+      const exchange = /exchange error/i.test(detail);
+      throw new Error(
+        `DmkEvmSigner.create: ${
+          exchange
+            ? "Unlock the Ledger and open Ethereum, then confirm the address. The last device exchange failed."
+            : detail
+        }`
+      );
     } finally {
       resetDmk();
     }
@@ -195,7 +208,7 @@ export class DmkEvmSigner implements ClientEvmSigner {
     const trace: DeviceActionTrace[] = [];
     try {
       const sig = await withDeviceSession(async (sessionId) => {
-        const { signer, originTokenPresent, cal } = await buildEthSigner(sessionId);
+        const { signer, originTokenPresent, testCal, cal } = await buildEthSigner(sessionId, { requireOriginToken: true });
         try {
           const ledgerMessage = withExplicitEip712DomainType(message);
           const { observable, cancel } = signer.signTypedData(
@@ -209,76 +222,18 @@ export class DmkEvmSigner implements ClientEvmSigner {
           const steps = uniqueTraceSteps(trace);
           const calFilters = cal.typedDataFilters;
           const verdict = classifyTypedDataTrace(trace, calFilters);
-          this.lastClearSigning = { originTokenPresent, verdict, steps, calFilters };
+          this.lastClearSigning = { originTokenPresent, testCal, verdict, steps, calFilters };
           console.error(
-            `>>> Ledger EIP-712 originToken=${originTokenPresent ? "yes" : "no"} calFilters=${calFilters} verdict=${verdict} steps=${steps.join(",") || "none"}`
+            `>>> Ledger EIP-712 originToken=${originTokenPresent ? "yes" : "no"} testCal=${testCal ? "yes" : "no"} calFilters=${calFilters} verdict=${verdict} steps=${steps.join(",") || "none"}`
           );
         }
-      }, this.timeoutMs);
+      }, this.timeoutMs, { openEthereum: !this.skipOpenApp });
+      if (this.lastClearSigning) assertProductionClearSigning(this.lastClearSigning);
       return joinSignature(sig);
     } catch (e) {
       throw new Error(`DmkEvmSigner.signTypedData: ${formatLedgerError(e)}`);
     } finally {
       resetDmk();
     }
-  }
-}
-
-
-export interface LedgerWithdrawalSigningResult {
-  signedSerialized: Hex;
-  transactionHash: Hex;
-  signer: Address;
-  trace: DeviceActionTrace[];
-}
-
-/**
- * Execute exactly one DMK transaction-signing action against an already-built
- * signer. This helper is injectable for hermetic tests and never broadcasts.
- */
-export async function signWithdrawalWithEthSigner(
-  signer: Pick<SignerEth, "signTransaction">,
-  plan: PreparedWithdrawalTransaction,
-  expectedAddress: Address,
-  options: { path?: string; timeoutMs?: number; skipOpenApp?: boolean } = {},
-): Promise<LedgerWithdrawalSigningResult> {
-  if (plan.network !== "eip155:8453" || plan.chainId !== 8453) throw new Error("Ledger transaction signing is restricted to Base mainnet");
-  if (getAddress(plan.payer) !== getAddress(expectedAddress)) throw new Error("Reviewed withdrawal payer differs from the expected Ledger address");
-  const trace: DeviceActionTrace[] = [];
-  const { observable } = signer.signTransaction(
-    options.path ?? DEFAULT_DERIVATION_PATH,
-    unsignedWithdrawalBytes(plan),
-    { skipOpenApp: options.skipOpenApp ?? false },
-  );
-  const signature = await awaitDeviceAction<DmkSignature>(observable, options.timeoutMs ?? 120_000, trace);
-  const applied = await applyLedgerTransactionSignature(plan.unsignedSerialized, signature, expectedAddress);
-  return { ...applied, trace };
-}
-
-/**
- * Ask the physical Ledger to sign one reviewed withdrawal transaction.
- * The result remains unbroadcast. Callers must separately revalidate state and
- * explicitly authorize broadcast.
- */
-export async function signLedgerWithdrawalTransaction(
-  plan: PreparedWithdrawalTransaction,
-  expectedAddress: Address,
-  options: DmkSignerOptions = {},
-): Promise<LedgerWithdrawalSigningResult> {
-  assertMainnetChain(plan.chainId);
-  const full = {
-    path: options.path ?? DEFAULT_DERIVATION_PATH,
-    timeoutMs: options.timeoutMs ?? 120_000,
-    skipOpenApp: options.skipOpenApp ?? process.env.MANDATE_ETH_APP_OPEN === "1",
-  };
-  try {
-    return await withDeviceSession(async sessionId => {
-      const { signer } = await buildEthSigner(sessionId);
-      return signWithdrawalWithEthSigner(signer, plan, expectedAddress, full);
-    }, full.timeoutMs);
-  } catch (error) {
-    throw new Error(`signLedgerWithdrawalTransaction: ${formatLedgerError(error)}`);
-  } finally {
-    resetDmk();
   }
 }

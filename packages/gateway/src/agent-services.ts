@@ -1,6 +1,7 @@
 /** Load explicit production configuration without unlocking keys or spending at startup. */
 import { readFile, access } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { getAddress, type Hex } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { VertexAgentModel, validateVertexConfig, type VertexAgentConfig } from "./agent-model.ts";
@@ -35,7 +36,7 @@ export async function loadAgentServices(dataDir: string, journal: Journal): Prom
   try {
     const config = JSON.parse(text) as AgentRuntimeConfiguration;
     if (config.version !== 1) throw new Error("Unsupported agent runtime configuration version");
-    if (config.authority.hedera || config.sealedHederaKey || config.authority.network !== "eip155:8453") throw new Error("The deployed agent workspace is mainnet-only");
+    if (config.authority.network !== "eip155:8453") throw new Error("The deployed agent workspace is mainnet-only");
     if (config.authority.toolConfigurationHash && config.authority.toolConfigurationHash !== digest(config.tools)) throw new Error("Agent tool definitions changed after the authority was reviewed");
     const model = new VertexAgentModel(validateVertexConfig({ ...config.vertex }));
     const rpc = new URL(config.rpcUrl);
@@ -61,9 +62,28 @@ export async function loadAgentServices(dataDir: string, journal: Journal): Prom
         });
       },
     };
+    const { createSealedHederaSigner } = await import("./hedera.ts");
+    const { hederaSettlementVerifier } = await import("./agent-hedera.ts");
+    const root = join(dirname(fileURLToPath(import.meta.url)), "../../..");
+    const sealedPath = (file: string) => file.startsWith("/") ? file : file.includes("/") ? join(root, file) : join(dataDir, file);
+    const hedera = config.authority.hedera && config.sealedHederaKey?.file ? {
+      signer: createSealedHederaSigner(await readFile(sealedPath(config.sealedHederaKey.file)), config.authority.hedera.accountId),
+      verify: hederaSettlementVerifier(),
+    } : undefined;
+    const { lookupCounterparty } = await import("./reputation.ts");
+    const { evaluateCounterpartyPolicy, skippedCounterpartyPolicy } = await import("./counterparty-policy.ts");
+    const { withSealedGraphKey } = await import("./analytics.ts");
+    const counterpartyCheck = async (payTo: string) => {
+      try {
+        return await withSealedGraphKey(async apiKey => evaluateCounterpartyPolicy(await lookupCounterparty(payTo, apiKey)));
+      } catch {
+        return skippedCounterpartyPolicy("Counterparty reputation lookup skipped (no sealed Graph credential)");
+      }
+    };
     const executor = new ExactAgentExecutor({ authority: config.authority, journal, tools: createAgentTools(config.tools),
       receiptLookupUrls: Object.values(config.tools.endpoints ?? {}), receiptLocator: evmAgentReceiptLocator(config.rpcUrl, config.authority.network),
-      verify: chainSettlementVerifier(config.rpcUrl, config.authority.network), signer: spendingSigner });
+      verify: chainSettlementVerifier(config.rpcUrl, config.authority.network), signer: spendingSigner, hedera,
+      counterpartyCheck: (payTo, _toolId) => counterpartyCheck(payTo) });
     const funding = config.funding ? new AgentFundingController({ authority: config.authority, journal, rpcUrl: config.rpcUrl, facilitatorUrl: config.funding.facilitatorUrl,
       signer: async () => { await ensureKeyRing(); const { DmkEvmSigner } = await import("./dmksigner.ts"); return DmkEvmSigner.create({ timeoutMs: 120000 }); } }) : undefined;
     const returns = config.funding ? new AgentReturnController({ authority: config.authority, journal, rpcUrl: config.rpcUrl, facilitatorUrl: config.funding.facilitatorUrl, signer: spendingSigner }) : undefined;

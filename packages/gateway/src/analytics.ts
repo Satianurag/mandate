@@ -84,14 +84,23 @@ function toRow(agent: Raw): Agent0Row {
   };
 }
 
-/** Unseal the Graph Studio key. Null when this host has no sealed blob. */
-export async function loadSealedGraphKey(): Promise<string | null> {
+/** Unseal the Graph Studio key inside the broker callback. The model never receives it. */
+export async function withSealedGraphKey<T>(fn: (apiKey: string) => Promise<T>): Promise<T> {
   const { readFile } = await import("node:fs/promises");
   const root = join(dirname(fileURLToPath(import.meta.url)), "../../..");
   const path = process.env.MANDATE_GRAPH_KEY_ENC ?? join(root, "secrets/graph.enc");
   const enc = await readFile(path).catch(() => null);
-  if (!enc) return null;
-  return withSecret("graph-gateway", enc, (b) => Promise.resolve(b.toString("utf8").trim()));
+  if (!enc) throw new Error("The live Graph provider has no sealed API credential");
+  return withSecret("graph-gateway", enc, async b => fn(b.toString("utf8").trim()));
+}
+
+/** Unseal the Graph Studio key. Null when this host has no sealed blob. Prefer withSealedGraphKey in product paths. */
+export async function loadSealedGraphKey(): Promise<string | null> {
+  try {
+    return await withSealedGraphKey(async key => key);
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -115,7 +124,7 @@ export async function liveAnalyticsBody(
     const selected = deps.source ?? { provider: "the-graph" as const, chain: "test", deployment: "injected" };
     return analyticsPayload(query, { provider: "the-graph", chain: selected.chain, subgraphId: selected.deployment }, rows, paid);
   }
-  const apiKey = deps.apiKey === undefined ? await loadSealedGraphKey() : deps.apiKey;
+  const apiKey = deps.apiKey === undefined ? await withSealedGraphKey(async key => key) : deps.apiKey;
   if (!apiKey) {
     throw new Error("Graph API key is not sealed — paid analytics cannot invent rows.");
   }
@@ -132,10 +141,11 @@ export async function liveAnalyticsBody(
       data, sourceMetadata: raw._meta ?? null, sourceAttempts: [{ chain: deps.source.chain, status: "available" }] };
   }
   const preferred = [
-    "base-sepolia",
-    "ethereum-sepolia",
-    "bsc-chapel",
-    "monad-testnet",
+    "base",
+    "ethereum",
+    "bsc",
+    "polygon",
+    "monad",
   ].filter((c, i, a) => subgraphs[c] && a.indexOf(c) === i);
   if (preferred.length === 0) throw new Error("MCP discovery returned no Agent0 deployments.");
 

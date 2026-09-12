@@ -11,43 +11,11 @@ export interface AgentProfile {
   goal: string;
   output: string;
   toolIds: AgentToolId[];
-  requiredToolIds?: AgentToolId[];
   budgetBaseUnits: string;
   perCallBaseUnits: string;
   maxSteps: number;
   maxDurationSeconds: number;
 }
-
-export const AGENT_TEMPLATES: readonly AgentProfile[] = [
-  {
-    id: "research-assistant", version: 1, template: true, name: "Research Assistant",
-    description: "Research a question, compare sources and deliver a clear, cited answer.",
-    instructions: "Find primary evidence for the user's goal. Use only relevant available tools, compare observations, identify source dates and limitations, and avoid repetitive paid requests. Do not force market tools into unrelated research. Finish with an honest cited answer and label any gaps.",
-    goal: "", output: "A concise report with findings, supporting sources, spending and limitations.",
-    toolIds: ["web-search", "crypto-news", "crypto-prices"],
-    budgetBaseUnits: "100000", perCallBaseUnits: "20000", maxSteps: 20, maxDurationSeconds: 900,
-  },
-  {
-    id: "protocol-investigator", version: 1, template: true,
-    name: "Protocol Investigator",
-    description: "Investigate protocol activity, data quality and market context using paid evidence.",
-    instructions: "Investigate the user's question about a supported protocol. Establish the available live Graph evidence, then choose relevant x402 sources to explain significant observations. Investigate contradictions. Distinguish measured facts, hypotheses and missing evidence. Never invent a deployment, metric or source. Stop when further calls would not materially improve the answer.",
-    goal: "", output: "A sourced investigation with key findings, explanations, unanswered questions and a spending summary.",
-    toolIds: ["graph-protocol", "web-search", "crypto-news", "crypto-prices", "hedera-analysis"],
-    requiredToolIds: ["graph-protocol"],
-    budgetBaseUnits: "100000", perCallBaseUnits: "20000", maxSteps: 20, maxDurationSeconds: 900,
-  },
-  {
-    id: "agent-selection-analyst", version: 1, template: true,
-    name: "Agent Selection Analyst",
-    description: "Find and compare onchain agents for a job, with evidence behind the shortlist.",
-    instructions: "Find candidates for the user's job using live Agent0 records and corroborating x402 sources. Compare stated capabilities, feedback coverage, published services and observed prices. Registration and feedback counts do not prove quality. Do not claim a candidate was tested without an actual evaluation receipt. Explicitly disclose missing or unverified capabilities. Stop with an honest shortlist or explain why no candidate can be recommended.",
-    goal: "", output: "A ranked shortlist with capability comparisons, linked evidence, observed costs and limitations.",
-    toolIds: ["graph-agent0", "web-search", "hedera-analysis"],
-    requiredToolIds: ["graph-agent0"],
-    budgetBaseUnits: "100000", perCallBaseUnits: "20000", maxSteps: 20, maxDurationSeconds: 900,
-  },
-];
 
 function boundedText(value: unknown, name: string, max: number, empty = false): string {
   if (typeof value !== "string" || (!empty && !value.trim()) || value.length > max) throw new Error(`${name} must contain ${empty ? "0" : "1"}–${max} characters`);

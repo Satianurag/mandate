@@ -28,6 +28,30 @@ export async function loadLedgerOriginToken(): Promise<string | undefined> {
   }
 }
 
+/** Funding and withdrawal signatures fail closed without a partner origin token. Address reads may omit it. */
+export async function requireLedgerOriginToken(): Promise<string> {
+  const token = await loadLedgerOriginToken();
+  if (!token) {
+    throw new Error(
+      "Ledger funding requires LEDGER_ORIGIN_TOKEN or secrets/ledger-origin.enc. Without it CAL returns 403 and the device falls back to legacy signing."
+    );
+  }
+  return token;
+}
+
+export function assertProductionClearSigning(report: {
+  originTokenPresent: boolean;
+  testCal?: boolean;
+  verdict: ClearSigningVerdict;
+}): void {
+  if (!report.originTokenPresent && !report.testCal) {
+    throw new Error("Ledger signature was produced without a partner origin token or the ledger-dev test CAL; the funding authorization was not submitted");
+  }
+  if (report.verdict !== "erc7730" && report.verdict !== "clear-basic") {
+    throw new Error(`Ledger used ${report.verdict} instead of clear signing; the funding authorization was not submitted`);
+  }
+}
+
 export function signerEthCtorArgs(
   dmk: unknown,
   sessionId: string,

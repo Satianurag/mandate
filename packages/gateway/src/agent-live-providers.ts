@@ -73,15 +73,18 @@ export function analyzeCandidateCoverage(data: unknown, requestedIds: string[]):
     sourceMetadata: record(data)._meta ?? null, rawEvidence: data };
 }
 export function createLiveAgentProviders(input: {
-  tools: AgentToolConfiguration; graphKey: () => Promise<string | null>; fetch?: typeof fetch;
+  tools: AgentToolConfiguration;
+  withGraphCredential: <T>(fn: (key: string) => Promise<T>) => Promise<T>;
+  fetch?: typeof fetch;
 }): { evm: PaidAgentProvider[]; hedera: PaidAgentProvider[] } {
   const catalog = createAgentTools(input.tools), transport = input.fetch ?? fetch;
   const definition = (id: string) => { const tool = catalog.find(t => t.id === id); if (!tool) throw new Error(`Tool ${id} is not configured`); return tool; };
   const graph = async (id: string, query: string, signal: AbortSignal) => {
-    signal.throwIfAborted(); const key = await input.graphKey();
-    if (!key) throw new Error("The live Graph provider has no sealed API credential");
-    const fetchFn: typeof fetch = (url, init) => transport(url,{...init,signal:AbortSignal.any([signal,init?.signal ?? AbortSignal.timeout(15000)])});
-    return queryAgent0(id,key,query,undefined,fetchFn);
+    signal.throwIfAborted();
+    return input.withGraphCredential(async key => {
+      const fetchFn: typeof fetch = (url, init) => transport(url,{...init,signal:AbortSignal.any([signal,init?.signal ?? AbortSignal.timeout(15000)])});
+      return queryAgent0(id,key,query,undefined,fetchFn);
+    });
   };
   const provenance = (id: string, title: string) => ({ provider: "the-graph", deployment: id, title, url: sourceUrl(id) });
   const evm: PaidAgentProvider[] = [];

@@ -2,13 +2,11 @@
 import { createServer, type IncomingMessage } from "node:http";
 import { HTTPFacilitatorClient, x402ResourceServer, x402HTTPResourceServer, type RoutesConfig } from "@x402/core/server";
 import { ExactEvmScheme } from "@x402/evm/exact/server";
-import { ExactHederaScheme } from "@x402/hedera/exact/server";
 import { decodePaymentSignatureHeader } from "@x402/core/http";
 import { nodeAdapter } from "./http-adapter.ts";
 import { Journal, digest, type StoredResponse } from "./journal.ts";
-import { writeStored } from "./paid-handler.ts";
+import { writeStored } from "./http-response.ts";
 import { EXACT_USDC } from "./agent-exact.ts";
-import { CIRCLE_HEDERA_TESTNET_USDC_HTS } from "./facilitators.ts";
 import type { AgentToolId } from "./agent-profiles.ts";
 
 export interface PaidAgentProvider {
@@ -25,19 +23,18 @@ async function bodyOf(req: IncomingMessage): Promise<Record<string, unknown>> {
   return body as Record<string, unknown>;
 }
 export async function createAgentToolService(input: {
-  network: "eip155:8453" | "hedera:testnet"; payTo: string; facilitatorUrl: string;
+  network: "eip155:8453"; payTo: string; facilitatorUrl: string;
   journal: Journal; providers: PaidAgentProvider[];
 }) {
-  if(input.network!=="eip155:8453")throw new Error("Paid services support Base mainnet USDC only");
+  if(input.network!=="eip155:8453")throw new Error("Paid first-party services settle USDC on Base mainnet; Hedera is a client-side second rail");
   const core = new x402ResourceServer(new HTTPFacilitatorClient({ url: input.facilitatorUrl }));
-  if (input.network === "eip155:8453") core.register(input.network, new ExactEvmScheme());
-  else core.register(input.network, new ExactHederaScheme());
+  core.register(input.network, new ExactEvmScheme());
   const routes: RoutesConfig = {};
   for (const provider of input.providers) {
     if (!/^[1-9]\d{0,5}$/.test(provider.amountBaseUnits)) throw new Error("Tool price must be a bounded positive base-unit amount");
     routes[`POST /tools/${provider.id}`] = { accepts: { scheme: "exact", network: input.network, payTo: input.payTo,
-      price: { asset: input.network === "eip155:8453" ? EXACT_USDC[input.network] : CIRCLE_HEDERA_TESTNET_USDC_HTS, amount: provider.amountBaseUnits,
-        ...(input.network === "eip155:8453" ? { extra: { name: "USD Coin", version: "2", assetTransferMethod: "eip3009" } } : {}) }, maxTimeoutSeconds: 120 }, description: provider.description };
+      price: { asset: EXACT_USDC[input.network], amount: provider.amountBaseUnits,
+        extra: { name: "USD Coin", version: "2", assetTransferMethod: "eip3009" } }, maxTimeoutSeconds: 120 }, description: provider.description };
   }
   const httpServer = new x402HTTPResourceServer(core, routes); await httpServer.initialize();
   const server = createServer({ maxHeaderSize: 131072 }, (req, res) => { void (async () => {

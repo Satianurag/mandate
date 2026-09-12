@@ -21,7 +21,7 @@ const GATEWAY = "https://gateway.thegraph.com/api";
 // Current canonical mirror endpoints. NOT the stock `@x402/hedera` mirror
 // constants -- those still point at the legacy `*-public` hosts.
 const HEDERA_MIRRORS: Record<string, string> = {
-  "hedera:testnet": "https://testnet.mirrornode.hedera.com/api/v1",
+  "hedera:mainnet": "https://mainnet.mirrornode.hedera.com/api/v1",
 };
 /** Entity-id shape, stock from `@x402/hedera` — identical to the hand-rolled regex this replaces. */
 const HEDERA_ID_RE = HEDERA_ENTITY_ID_REGEX;
@@ -160,7 +160,7 @@ export async function lookupCounterparty(
     // Unknown networks throw rather than defaulting: resolving an alias
     // against the wrong network's mirror would attribute reputation to the
     // wrong account.
-    const network = opts.network ?? "hedera:testnet";
+    const network = opts.network ?? "hedera:mainnet";
     const mirror = HEDERA_MIRRORS[network];
     if (!mirror) throw new Error(`No Hedera mirror for network "${network}".`);
     let alias: string | null;
@@ -332,9 +332,9 @@ export async function resolveDiscoveredSubgraphs(apiKey: string): Promise<Record
   const { subgraphs, toolsUsed } = await discoverAgent0DeploymentsWithKey(apiKey);
   lastMcpToolsUsed = toolsUsed;
   if (!Object.keys(subgraphs).length) throw new Error("Discovery returned no deployments");
-  const supported = new Set(["base-sepolia","ethereum-sepolia","bsc-chapel","monad-testnet"]);
+  const supported = new Set(["base","ethereum","bsc","polygon","monad"]);
   discoveredCache = Object.fromEntries(Object.entries(subgraphs).filter(([chain]) => supported.has(chain)));
-  if (!Object.keys(discoveredCache).length) throw new Error("MCP discovery returned no supported testnet deployments");
+  if (!Object.keys(discoveredCache).length) throw new Error("MCP discovery returned no supported Agent0 deployments");
   discoveredAt = Date.now();
   return { ...discoveredCache };
 }

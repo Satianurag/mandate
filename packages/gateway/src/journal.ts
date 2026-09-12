@@ -41,43 +41,6 @@ export interface AgentAllowanceIncreaseRow {
   consent_hash: string; from_block: string | null; payload: string | null; offer: string | null;
   transaction_hash: string | null; error: string | null; created_at: number;
 }
-export interface FullySpentClosureProof {
-  network: string;
-  channelId: string;
-  balanceBaseUnits: string;
-  claimedBaseUnits: string;
-  receiverAggregateClaimedBaseUnits: string;
-  receiverAggregateSettledBaseUnits: string;
-  withdrawalAmountBaseUnits: string;
-  blockNumber?: string;
-  observedAt?: string;
-}
-export interface TimedWithdrawalSnapshot {
-  network: string;
-  channelId: string;
-  balanceBaseUnits: string;
-  claimedBaseUnits: string;
-  payerBalanceBaseUnits: string;
-  receiverAggregateClaimedBaseUnits: string;
-  receiverAggregateSettledBaseUnits: string;
-  withdrawalAmountBaseUnits: string;
-  withdrawalInitiatedAt: number;
-  blockNumber?: string;
-  observedAt?: string;
-}
-export interface TimedWithdrawalInitiatedProof {
-  transaction: string;
-  amountBaseUnits: string;
-  readyAt: number;
-  before: TimedWithdrawalSnapshot;
-  after: TimedWithdrawalSnapshot;
-}
-export interface TimedWithdrawalFinalizedProof {
-  transaction: string;
-  returnedBaseUnits: string;
-  before: TimedWithdrawalSnapshot;
-  after: TimedWithdrawalSnapshot;
-}
 export interface EventRow {
   seq: number; id: string; mandate_id: string; request_id: string | null;
   kind: string; data: string; previous_hash: string; hash: string; created_at: number;
@@ -153,101 +116,6 @@ export class Journal {
     const row = this.mandate(id);
     if (!row || row.state !== "active") throw new Error(`Mandate is ${row?.state ?? "not configured"}; new spending is blocked`);
   }
-  refundConfirmed(id:string, proof:{transaction:string;returnedBaseUnits:string;before:{channelId:string};after:{channelId:string}}):void {
-    this.transaction(()=>{
-      const row=this.mandate(id);
-      if(!row || row.channel_id!==proof.before.channelId || row.channel_id!==proof.after.channelId || !/^0x[0-9a-fA-F]{64}$/.test(proof.transaction) || units(proof.returnedBaseUnits)<=0n)throw new Error("Refund proof does not bind to this mandate");
-      if(row.state==="refunded") {
-        const existing=this.events(id).find(event=>event.kind==="refund.transaction_confirmed");
-        if(!existing || JSON.parse(existing.data).transaction!==proof.transaction)throw new Error("Conflicting refund proof");
-        return;
-      }
-      this.db.prepare("UPDATE mandates SET state='refunded' WHERE id=?").run(id);
-      this.append(id,null,"refund.transaction_confirmed",proof);
-    });
-  }
-  withdrawalInitiated(id: string, proof: TimedWithdrawalInitiatedProof): void {
-    this.transaction(() => {
-      const row = this.mandate(id);
-      if (!row || row.deposit !== "funded" || !row.channel_id) throw new Error("Only a funded mandate with a pinned channel can start timed withdrawal");
-      if (["refunded", "closed"].includes(row.state)) throw new Error("Terminal mandate cannot start timed withdrawal");
-      if (row.state === "withdrawal_pending") {
-        const existing = this.events(id).find(event => event.kind === "withdrawal.initiated");
-        if (!existing || JSON.parse(existing.data).transaction !== proof.transaction) throw new Error("Conflicting timed withdrawal proof");
-        return;
-      }
-      if (!/^0x[0-9a-fA-F]{64}$/.test(proof.transaction) || units(proof.amountBaseUnits, true) <= 0n) throw new Error("Timed withdrawal proof is malformed");
-      if (proof.before.channelId.toLowerCase() !== row.channel_id.toLowerCase() || proof.after.channelId.toLowerCase() !== row.channel_id.toLowerCase()) throw new Error("Timed withdrawal proof is for another channel");
-      if (proof.before.network !== proof.after.network) throw new Error("Timed withdrawal proof changes network");
-      const unresolved = this.requests(id).filter(request => ["reserved", "signed", "uncertain"].includes(request.state));
-      if (unresolved.length) throw new Error("Resolve uncertain or reserved payment liabilities before timed withdrawal");
-      const totals = this.totals(id, Number.MAX_SAFE_INTEGER);
-      if (units(totals.reserved) !== 0n || units(totals.spent) !== units(proof.after.claimedBaseUnits)) throw new Error("Accepted liability is not fully claimed before timed withdrawal");
-      if (units(proof.after.receiverAggregateClaimedBaseUnits) !== units(proof.after.receiverAggregateSettledBaseUnits)) throw new Error("Merchant revenue remains unsettled");
-      if (units(proof.before.withdrawalAmountBaseUnits) !== 0n || units(proof.after.withdrawalAmountBaseUnits) !== units(proof.amountBaseUnits)) throw new Error("Timed withdrawal pending amount does not match the reviewed amount");
-      if (proof.after.withdrawalInitiatedAt <= 0 || proof.readyAt <= proof.after.withdrawalInitiatedAt) throw new Error("Timed withdrawal delay proof is invalid");
-      if (proof.before.balanceBaseUnits !== proof.after.balanceBaseUnits || proof.before.claimedBaseUnits !== proof.after.claimedBaseUnits || proof.before.payerBalanceBaseUnits !== proof.after.payerBalanceBaseUnits) throw new Error("Initiation unexpectedly moved or changed channel funds");
-      this.db.prepare("UPDATE mandates SET state='withdrawal_pending' WHERE id=?").run(id);
-      this.append(id, null, "withdrawal.initiated", proof);
-    });
-  }
-  withdrawalFinalized(id: string, proof: TimedWithdrawalFinalizedProof): void {
-    this.transaction(() => {
-      const row = this.mandate(id);
-      if (!row || row.deposit !== "funded" || !row.channel_id) throw new Error("Only a funded mandate with a pinned channel can finalize timed withdrawal");
-      if (row.state === "refunded") {
-        const existing = this.events(id).find(event => event.kind === "withdrawal.transaction_confirmed");
-        if (!existing || JSON.parse(existing.data).transaction !== proof.transaction) throw new Error("Conflicting timed withdrawal finalization proof");
-        return;
-      }
-      if (row.state !== "withdrawal_pending") throw new Error("No confirmed timed withdrawal is pending");
-      if (!/^0x[0-9a-fA-F]{64}$/.test(proof.transaction) || units(proof.returnedBaseUnits, true) <= 0n) throw new Error("Timed withdrawal finalization proof is malformed");
-      if (proof.before.channelId.toLowerCase() !== row.channel_id.toLowerCase() || proof.after.channelId.toLowerCase() !== row.channel_id.toLowerCase()) throw new Error("Timed withdrawal finalization is for another channel");
-      const returned = units(proof.returnedBaseUnits, true);
-      if (units(proof.before.withdrawalAmountBaseUnits) !== returned || units(proof.after.withdrawalAmountBaseUnits) !== 0n) throw new Error("Timed withdrawal finalization does not clear the reviewed pending amount");
-      if (units(proof.before.balanceBaseUnits) - units(proof.after.balanceBaseUnits) !== returned || units(proof.after.payerBalanceBaseUnits) - units(proof.before.payerBalanceBaseUnits) !== returned) throw new Error("Timed withdrawal finalization does not prove the expected payer return");
-      if (proof.before.claimedBaseUnits !== proof.after.claimedBaseUnits || proof.after.balanceBaseUnits !== proof.after.claimedBaseUnits) throw new Error("Timed withdrawal did not leave exactly the accepted liability in the channel");
-      if (proof.after.receiverAggregateClaimedBaseUnits !== proof.after.receiverAggregateSettledBaseUnits) throw new Error("Merchant revenue remains unsettled after timed withdrawal");
-      this.db.prepare("UPDATE mandates SET state='refunded' WHERE id=?").run(id);
-      this.append(id, null, "withdrawal.transaction_confirmed", proof);
-    });
-  }
-  closeFullySpent(id: string, ceilingBaseUnits: string, proof: FullySpentClosureProof): void {
-    this.transaction(() => {
-      const row = this.mandate(id);
-      if (!row || row.deposit !== "funded" || !row.channel_id) throw new Error("Only a funded mandate with a pinned channel can close as fully spent");
-      if (row.state === "refunded") throw new Error("A refunded mandate cannot also close as fully spent");
-      if (row.state === "closed") {
-        const existing = this.events(id).find(event => event.kind === "mandate.closed");
-        const data = existing ? JSON.parse(existing.data) as { reason?: string; spentBaseUnits?: string; proof?: { channelId?: string } } : null;
-        if (!data || data.reason !== "fully_spent" || data.spentBaseUnits !== String(units(ceilingBaseUnits, true)) || data.proof?.channelId?.toLowerCase() !== row.channel_id.toLowerCase()) {
-          throw new Error("Conflicting mandate closure proof");
-        }
-        return;
-      }
-      const descriptor = JSON.parse(row.descriptor) as { scope?: { network?: string; ceilingBaseUnits?: string }; network?: string; ceilingBaseUnits?: string };
-      const describedNetwork = descriptor.scope?.network ?? descriptor.network;
-      const describedCeiling = descriptor.scope?.ceilingBaseUnits ?? descriptor.ceilingBaseUnits;
-      if (describedNetwork && proof.network !== describedNetwork) throw new Error("Closure proof is for another network");
-      if (describedCeiling && String(units(describedCeiling, true)) !== String(units(ceilingBaseUnits, true))) throw new Error("Closure ceiling differs from the configured mandate");
-      const unresolved = this.requests(id).filter(request => ["reserved", "signed", "uncertain"].includes(request.state));
-      if (unresolved.length > 0) throw new Error("Resolve uncertain or reserved payment liabilities before closing the mandate");
-      const ceiling = units(ceilingBaseUnits, true);
-      const totals = this.totals(id, Number.MAX_SAFE_INTEGER);
-      if (units(totals.reserved) !== 0n || units(totals.spent) !== ceiling) throw new Error("Mandate is not fully consumed according to durable accounting");
-      if (proof.channelId.toLowerCase() !== row.channel_id.toLowerCase()) throw new Error("Closure proof is for another channel");
-      if (units(proof.balanceBaseUnits) !== ceiling || units(proof.claimedBaseUnits) !== ceiling) throw new Error("On-chain channel is not fully consumed");
-      if (units(proof.receiverAggregateClaimedBaseUnits) !== units(proof.receiverAggregateSettledBaseUnits)) throw new Error("Merchant revenue remains unsettled");
-      if (units(proof.withdrawalAmountBaseUnits) !== 0n) throw new Error("An outstanding withdrawal prevents terminal closure");
-      this.db.prepare("UPDATE mandates SET state='closed' WHERE id=?").run(id);
-      this.append(id, null, "mandate.closed", {
-        reason: "fully_spent",
-        spentBaseUnits: String(ceiling),
-        refundableBaseUnits: "0",
-        proof,
-      });
-    });
-  }
   stop(id: string): void {
     this.transaction(() => {
       const row = this.mandate(id);
@@ -271,7 +139,7 @@ export class Journal {
   closeEmptyAgentWallet(id:string, proof:{network:string;asset:string;account:string;balanceBaseUnits:string;block:string}):void {
     this.transaction(()=>{
       const row=this.mandate(id),scope=row?JSON.parse(row.descriptor):null;
-      if(!row || row.state!=="stopped" || row.deposit!=="funded" || row.channel_id || proof.network!=="eip155:8453" || scope.network!==proof.network || scope.asset.toLowerCase()!==proof.asset.toLowerCase() || row.session?.toLowerCase()!==proof.account.toLowerCase() || proof.balanceBaseUnits!=="0" || !/^[0-9]+$/.test(proof.block))throw new Error("An exact-agent empty-wallet closure needs an observed matching testnet balance");
+      if(!row || row.state!=="stopped" || row.deposit!=="funded" || row.channel_id || proof.network!=="eip155:8453" || scope.network!==proof.network || scope.asset.toLowerCase()!==proof.asset.toLowerCase() || row.session?.toLowerCase()!==proof.account.toLowerCase() || proof.balanceBaseUnits!=="0" || !/^[0-9]+$/.test(proof.block))throw new Error("An exact-agent empty-wallet closure needs an observed matching Base mainnet balance");
       if(this.requests(id).some(r=>["reserved","signed","uncertain"].includes(r.state)))throw new Error("Pending payments prevent closure");
       const paid=this.requests(id).filter(r=>r.state==="accepted"&&r.network===proof.network&&r.asset.toLowerCase()===proof.asset.toLowerCase()).reduce((sum,r)=>sum+units(r.charged??"0"),0n);
       const effectiveCeiling=units(this.effectiveAgentCeiling(id,String(scope.ceilingBaseUnits)),true);

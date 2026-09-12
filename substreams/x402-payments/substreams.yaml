@@ -3,9 +3,9 @@ package:
   name: x402-payments
   version: v0.1.0
   url: https://github.com/Satianurag/mandate
-  description: Maps USDC / batch-settlement / Permit2 logs on Base Sepolia.
+  description: Maps USDC / batch-settlement / Permit2 logs on Base mainnet.
 
-network: base-sepolia
+network: base
 
 protobuf:
   files:

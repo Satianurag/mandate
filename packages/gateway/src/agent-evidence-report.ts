@@ -11,7 +11,7 @@ const provenance=(observations:ToolObservation[])=>{
 export function specialistEvidenceReport(run:AgentRun,observations:ToolObservation[]):string|undefined{
  const verified=observations.filter(o=>!o.error&&o.data!==null);
  const lab=verified.find(o=>o.toolId==='hedera-analysis');if(!lab)return undefined;const data=object(lab.data);
- if(run.agent.id==='protocol-investigator'&&data.rawSnapshots&&Array.isArray(data.flags)&&verified.some(o=>o.toolId==='graph-protocol')){
+ if(data.rawSnapshots&&Array.isArray(data.flags)&&verified.some(o=>o.toolId==='graph-protocol')){
   const snapshots=object(data.rawSnapshots),factory=rows(object(snapshots.overview).factories)[0]??{},pools=rows(object(snapshots.pools).pools),source=object(data.source);
   const lines=[`# ${text(source.title??'Protocol')} investigation`,'',
    '## Conclusion','',
@@ -39,7 +39,7 @@ export function specialistEvidenceReport(run:AgentRun,observations:ToolObservati
   lines.push('','## Evidence and payment boundary','',`${verified.length} retained paid observations informed this report. The Evidence Lab analysis was purchased through native Hedera testnet; other receipts retain their own settlement network. Exact costs and transfer evidence are displayed separately from this factual summary. No new service was called to format this report.`,'',...provenance(verified));
   return lines.join('\n');
  }
- if(run.agent.id==='agent-selection-analyst'&&Array.isArray(data.candidates)&&verified.some(o=>o.toolId==='graph-agent0')){
+ if(Array.isArray(data.candidates)&&verified.some(o=>o.toolId==='graph-agent0')){
   const candidates=rows(data.candidates),lines=['# Agent candidate evidence review','','## Decision boundary','',
    'These observations support a bounded comparison of indexed candidates, not a verified hiring recommendation. Declared x402 support and feedback are not substitutes for a successful, authorized job-specific service test. No candidate endpoint was independently invoked by this evidence service.','',
    '| Candidate | Declared x402 support | Distinct reviewers in sample | Sampled validation records |','| --- | --- | --- | --- |',

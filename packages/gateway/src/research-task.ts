@@ -2,7 +2,7 @@
 
 export const RESEARCH_TEMPLATE = "agent0-due-diligence" as const;
 export const RESEARCH_PURPOSE = "Compare Agent0 service registrations using paid registry evidence";
-export const RESEARCH_CHAINS = ["base-sepolia", "ethereum-sepolia", "bsc-chapel", "monad-testnet"] as const;
+export const RESEARCH_CHAINS = ["base", "ethereum", "bsc", "polygon", "monad"] as const;
 export type ResearchChain = typeof RESEARCH_CHAINS[number];
 
 export interface ResearchSourceScope {
@@ -58,7 +58,7 @@ function exactObject(value: unknown, fields: string[], label: string): Record<st
 export function validateResearchSource(value: unknown): ResearchSourceScope {
   const source = exactObject(value, ["provider", "chain", "deployment"], "Research source");
   if (source.provider !== "the-graph") throw new Error("Research source provider must be the-graph");
-  if (!RESEARCH_CHAINS.includes(source.chain as ResearchChain)) throw new Error("Research source must be a supported Agent0 testnet");
+  if (!RESEARCH_CHAINS.includes(source.chain as ResearchChain)) throw new Error("Research source must be a supported Agent0 network");
   if (typeof source.deployment !== "string" || !DEPLOYMENT_RE.test(source.deployment)) throw new Error("Research deployment must be an exact discovered subgraph ID");
   return Object.freeze({ provider: "the-graph", chain: source.chain as ResearchChain, deployment: source.deployment });
 }

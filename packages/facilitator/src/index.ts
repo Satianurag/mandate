@@ -10,24 +10,19 @@
  * expects: GET /supported, POST /verify|/settle with
  * {x402Version, paymentPayload, paymentRequirements}.
  *
- * Networks: whatever `eth_chainId` + `getCode` on the operator RPC(s)
- * actually return (x402 `.register(caip2, scheme)`). Envelope merchants
- * stay on Base mainnet (`eip155:8453`). Hedera EVM `eip155:296` is
- * registered when Hashio has the CREATE2 vanity stack (F28) and
- * `secrets/hedera.enc` can submit HBAR gas. Paid HTS deposits into that
- * escrow are blocked by Hedera association (F28); do not invent a wrapper.
+ * Networks: `eth_chainId` + `getCode` on the operator RPC, then
+ * x402 `.register(caip2, scheme)`. This facilitator settles Base mainnet
+ * (`eip155:8453`) only. Native Hedera x402 (`hedera:mainnet`) is a client
+ * second rail on the gateway, not an EVM scheme registered here.
  *
  * Keys (sealed in the Key Ring, never on disk or in env):
- * - mandate-facilitator: Base mainnet settlement txs (needs testnet ETH).
- * - hedera-payment: Hedera EVM settlement txs (needs testnet HBAR).
+ * - mandate-facilitator: Base mainnet settlement txs (needs mainnet ETH for gas).
  * - mandate-authorizer: the receiverAuthorizer — signs claim/refund EIP-712
  *   so the paid service doesn't hold a hot claiming key.
  */
 
 import { createServer, type Server } from "node:http";
 import { readFile } from "node:fs/promises";
-import { existsSync } from "node:fs";
-import { join } from "node:path";
 import { x402Facilitator } from "@x402/core/facilitator";
 import type {
   PaymentPayload,
@@ -211,13 +206,6 @@ export async function buildCore(
     chain,
     transport: http(rpcUrl),
   });
-  const hederaGas = chainId === 296;
-  const withHederaGas = <T extends { gas?: bigint }>(args: T): T => {
-    if (!hederaGas) return args;
-    const min = 2_000_000n;
-    if (!args.gas || args.gas < min) return { ...args, gas: min };
-    return args;
-  };
   const signer = toFacilitatorEvmSigner(
     {
       address: submitter.address,
@@ -248,11 +236,9 @@ export async function buildCore(
       },
       verifyTypedData: (args) => publicClient.verifyTypedData(args as never),
       writeContract: (args) =>
-        walletClient.writeContract(withHederaGas(args) as never) as Promise<`0x${string}`>,
+        walletClient.writeContract(args as never) as Promise<`0x${string}`>,
       sendTransaction: (args) =>
-        walletClient.sendTransaction(
-          { ...args, account: submitter, chain, ...(hederaGas ? { gas: 2_000_000n } : {}) }
-        ),
+        walletClient.sendTransaction({ ...args, account: submitter, chain }),
       waitForTransactionReceipt: async (args) => {
         const receipt = await publicClient.waitForTransactionReceipt(args);
         return { status: receipt.status, logs: receipt.logs };
@@ -308,20 +294,8 @@ if (import.meta.url === `file://${process.argv[1]}`) {
       await readFile(`${root}/secrets/mandate-authorizer.enc`)
     ),
   };
-  let hederaSubmitter: Buffer | undefined;
   try {
-    let core = await buildCore(need("MANDATE_EVM_RPC_URL"), keys);
-    const hederaEnc = join(root, "secrets/hedera.enc");
-    const hederaRpc =
-      process.env.MANDATE_HEDERA_EVM_RPC_URL ?? "https://testnet.hashio.io/api";
-    if (process.env.MANDATE_ENABLE_HEDERA_EVM === "1" && existsSync(hederaEnc)) {
-      hederaSubmitter = await unseal("hedera-payment", await readFile(hederaEnc));
-      core = await buildCore(
-        hederaRpc,
-        { submitter: hederaSubmitter, authorizer: keys.authorizer },
-        core as x402Facilitator
-      );
-    }
+    const core = await buildCore(need("MANDATE_EVM_RPC_URL"), keys);
     const port = Number(process.env.FACILITATOR_PORT ?? 8406);
     const host = process.env.FACILITATOR_HOST ?? "127.0.0.1";
     const kinds = core.getSupported().kinds.map((k) => `${k.scheme}@${k.network}`).join(" ");
@@ -335,6 +309,5 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     // Our buffers are wiped; viem holds string copies until GC (documented
     // keyring caveat — the keys never touch disk, env, or logs).
     wipeKeys(keys);
-    hederaSubmitter?.fill(0);
   }
 }

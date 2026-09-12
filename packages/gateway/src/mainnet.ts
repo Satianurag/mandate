@@ -6,6 +6,5 @@ export function assertMainnetNetwork(network: unknown): asserts network is typeo
 export function assertMainnetChain(chainId: unknown): void {
   if (chainId !== 8453 && chainId !== 8453n) throw new Error(`Mainnet-only: chain ${String(chainId)} is not authorized for signing`);
 }
-export function assertHederaDisabled(_network: unknown): void {
-  throw new Error('Native Hedera payments are disabled: this application settles USDC on Base mainnet');
-}
+/** Optional second rail. Native Hedera x402 is enabled when a reviewed Hedera scope is present. */
+export function assertHederaDisabled(_network: unknown): void {}

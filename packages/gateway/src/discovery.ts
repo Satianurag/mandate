@@ -10,11 +10,16 @@ const SUBGRAPH_ID_RE = /\b[A-Za-z0-9]{40,50}\b/g;
 
 const CHAIN_ALIASES: Array<[RegExp, string]> = [
   [/base[_\s-]*sepolia|basesepolia/i, "base-sepolia"],
-  // MCP sometimes truncates "base-sepolia" to "base-8"; must beat the generic `base` rule.
-  [/base[_\s-]*8\b|chainid[:\s]*8453|\b8453\b/i, "base-sepolia"],
+  [/base[_\s-]*8\b|chainid[:\s]*84532|\b84532\b/i, "base-sepolia"],
   [/ethereum[_\s-]*sepolia|eth[_\s-]*sepolia/i, "ethereum-sepolia"],
   [/bsc[_\s-]*chapel|bnb[_\s-]*chapel|chapel|bsc[_\s-]*test/i, "bsc-chapel"],
   [/monad[_\s-]*test/i, "monad-testnet"],
+  [/polygon[_\s-]*amoy|amoy/i, "polygon-amoy"],
+  [/\bbase\b|chainid[:\s]*8453\b|\b8453\b/i, "base"],
+  [/\bethereum\b|\beth\b|chainid[:\s]*1\b/i, "ethereum"],
+  [/\bbsc\b|\bbnb\b/i, "bsc"],
+  [/\bpolygon\b|\bmatic\b/i, "polygon"],
+  [/\bmonad\b/i, "monad"],
 ];
 
 export interface DiscoveryResult {
@@ -37,7 +42,8 @@ function canSatisfyFromKeyword(tool: McpTool): boolean {
  * discovery, not a license to fall back to a hardcoded table.
  */
 export async function discoverAgent0Deployments(
-  mcp: McpClient
+  mcp: McpClient,
+  keyword = "Agent0"
 ): Promise<DiscoveryResult> {
   const tools = await mcp.listTools();
   if (tools.length === 0) {
@@ -67,13 +73,13 @@ export async function discoverAgent0Deployments(
     if (!DISCOVERY_ARG_SET.has(name)) return;
     if (required.includes(name) || props.includes(name)) args[name] = value;
   };
-  fill("keyword", "Agent0");
-  fill("query", "Agent0");
-  fill("search", "Agent0");
-  fill("q", "Agent0");
-  fill("text", "Agent0");
+  fill("keyword", keyword);
+  fill("query", keyword);
+  fill("search", keyword);
+  fill("q", keyword);
+  fill("text", keyword);
   if (Object.keys(args).length === 0) {
-    args.keyword = "Agent0";
+    args.keyword = keyword;
   }
 
   const raw = await mcp.callTool(search.name, args);
@@ -89,8 +95,8 @@ export async function discoverAgent0Deployments(
     if (byContract) {
       toolsUsed.push(byContract.name);
       const extra = await mcp.callTool(byContract.name, {
-        keyword: "Agent0",
-        query: "Agent0",
+        keyword,
+        query: keyword,
       });
       Object.assign(subgraphs, parseSubgraphs(extra));
     }
@@ -98,7 +104,7 @@ export async function discoverAgent0Deployments(
 
   if (Object.keys(subgraphs).length === 0) {
     throw new Error(
-      `Subgraph MCP tools [${tools.map((t) => t.name).join(", ")}] returned no Agent0 subgraph IDs.`
+      `Subgraph MCP tools [${tools.map((t) => t.name).join(", ")}] returned no ${keyword} subgraph IDs.`
     );
   }
   return { subgraphs, toolsUsed };
@@ -107,9 +113,16 @@ export async function discoverAgent0Deployments(
 export async function discoverAgent0DeploymentsWithKey(
   apiKey: string
 ): Promise<DiscoveryResult> {
+  return discoverKeywordDeployments(apiKey, "Agent0");
+}
+
+export async function discoverKeywordDeployments(
+  apiKey: string,
+  keyword: string
+): Promise<DiscoveryResult> {
   const mcp = await openSubgraphMcp(apiKey);
   try {
-    return await discoverAgent0Deployments(mcp);
+    return await discoverAgent0Deployments(mcp, keyword);
   } finally {
     await mcp.close();
   }

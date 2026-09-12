@@ -1,34 +1,89 @@
 # Mandate
 
-An autonomous x402 workspace with Ledger-approved spending on **Base mainnet** (chain 8453), using native USDC. One frontend, one local application, one port.
+Ledger-approved autonomous x402 agents on **Base mainnet** (chain 8453) with native USDC. One local workspace, one port.
 
-## Open
+ETHOnline 2026 Continuity submission for **Ledger**, **The Graph**, and **Hedera**. This repository existed before the event. Only event-period work is judged.
 
-Use Node 22.13 or newer:
+**Deadline:** Sunday 13 Sep 2026, 12:00 pm EDT — public GitHub repo + per-track demo videos.
+
+## Run
+
+Node 22.13+:
 
 ```sh
 npm ci
-npm start
-# In another terminal, optionally:
-npm run console:open
+npm start   # also starts the self-hosted facilitator on :8406 when secrets exist
 ```
 
-Open http://127.0.0.1:8410/. The workspace opens directly and creates an authenticated local session. There is no landing page, terminal-command gate or second frontend. Startup does not unlock a wallet, sign or spend. The boot/console/gateway/agents:boot aliases all use the same entry point; a second process refuses to start on an occupied port.
+Open http://127.0.0.1:8410/. Startup does not unlock a wallet, sign, or spend.
 
-## Configure
+Workspace config lives in `state/mainnet/operator/setup-draft.json` (not `mandate.yaml` — the legacy YAML gateway was removed).
 
-1. **Settings:** use your gcloud project with Gemini 3.5 Flash (HIGH thinking, 65,536 output tokens), Base mainnet RPC, an x402 v2 exact facilitator and your existing Ledger Key Ring key. Google application credentials must already be available on this host. Model usage is billed separately by Google.
-2. Tool selection is autonomous. Wallet preparation checks unpaid offers and pins the approved endpoints, recipients and limits. The agent chooses useful tools within that Ledger-approved scope.
-3. **Ledger budget:** enter or read your public Ledger address, set the total, per-call and rolling limits, and prepare an encrypted spending wallet. Drafts can be saved before an address is available. Preparation requires a provisioned Key Ring; it does not fund the wallet.
-4. Review and explicitly fund the displayed allowance on Ledger. Funding must settle before agents become ready.
-5. **New task:** choose an agent, describe the outcome, review its proposed steps and quoted cost, then start. Run details, receipts and settings have separate views.
+## How it works
 
-The software spending wallet executes approved x402 requests without asking Ledger for each call. Ledger approves initial funding and explicit increases. The broker enforces scope, expiry and spending limits; those policies are not hardware-enforced. Return unused funds through the Ledger budget page.
+Same shape as a reliable x402 agent loop: describe a goal, unpaid-probe prices, approve a plan, pay sequential tools inside a budget, checkpoint, compose a report from evidence.
 
-## Architecture and status
+1. **Settings:** Vertex Gemini (gcloud), Base mainnet RPC, x402 facilitator, existing Ledger Key Ring key.
+2. **Ledger budget:** read the device address, set limits, prepare a Key Ring–sealed spending wallet. Review and fund the allowance on Ledger. Agents cannot raise that cap.
+3. **New task:** create an agent for this goal and tool set. Preview unpaid offers. Start. When the run ends, the agent is discarded. Receipts and the report remain.
+4. Paid tool calls use the sealed software wallet. Ledger is required again only for allowance increases.
 
-The engine adapts the reference project's planning, unpaid estimates, approval, paid-step execution, durable checkpoints and evidence-based reporting to Mandate's Vertex model, SQLite journal and Ledger Key Ring. See [implementation mapping](docs/AGENT-WORKSPACE.md).
+The broker enforces endpoints, recipients, per-call/rolling limits, and expiry. Those rules are not hardware-enforced.
 
-The current implementation is mainnet-only. Old testnet keys and state are not migrated into spending authority. Historical proof documents under `docs/verification` describe retired testnet runs and do **not** verify this mainnet release. Actual Ledger funding, vendor settlement and the configured model still require live acceptance with the user's address, funded account and credentials. No live mainnet payment has been claimed or authorized by this migration.
+## Architecture
 
-The latest instruction pauses test writing and execution. Earlier fixture results predate the final integration changes and are not a current all-tests-passing claim.
+- `scripts/start.mjs` → operator on 8410, state in `state/mainnet/operator`
+- Gateway broker: SQLite reservations, x402 exact EVM, DMK signing for funding
+- Key Ring (`wallet-cli ring`) seals the spending key; decrypt does not need USB after `ring init`
+- First-party Graph / Agent0 tools and optional Hedera rail
+- Self-hosted facilitator in `packages/facilitator` (auto-started on `http://127.0.0.1:8406` when `secrets/mandate-*.enc` exist; default in Settings)
+- Graph Substreams artifact in `substreams/x402-payments`
+
+## Continuity (before / after)
+
+**Before:** Mandate was a scoped x402 workspace with Ledger funding experiments and separate specialist templates.
+
+**After (this event):** one mainnet workspace; ephemeral per-task agents; plan → probe → pay → compose; Key Ring + DMK as the trust layer; Graph as load-bearing evidence; Hedera x402/HCS on the submitted path.
+
+Live Ledger funding is a separate operator action. Older Sepolia experiments are not proof of this binary.
+
+HCS topic submits are compiled in but do not broadcast unless `MANDATE_HCS_LIVE=1` is set.
+
+Clear-signing on this machine uses the Ethereum app from `ledger-dev` (`CAL_TEST_KEY=1`):
+
+```sh
+npm run ledger:test-cal
+MANDATE_LEDGER_TEST_CAL_URL=http://127.0.0.1:8427 npm start
+```
+
+Open that development Ethereum app on the Ledger before funding. A partner `LEDGER_ORIGIN_TOKEN` is the production alternative.
+
+## Track qualification map
+
+| Track | What judges need | Where in this repo |
+|-------|------------------|-------------------|
+| **Ledger Continuity** | Agent Stack + `wallet-cli ring`; device confirmation before funds move; x402 payments; DX feedback | DMK (`dmksigner.ts`, `agent-funding.ts`), Key Ring (`keyring.ts`), operator UI (`console/`), [DX.md](DX.md) |
+| **Graph Continuity** | Graph load-bearing; **live data** (mocks don't qualify); meaningful analysis | `discovery.ts`, `mcp.ts`, `agent-live-providers.ts`, `analytics.ts`, `reputation.ts`, Substreams source |
+| **Hedera Continuity** | Substantive new Hedera integration during event | `agent-hedera.ts`, `hedera.ts`, `hcs-anchor.ts`, native `hedera:mainnet` in `agent-exact.ts` |
+
+## Dev probes (no funding required)
+
+Manual checks before Phase 9 live proofs:
+
+```sh
+node scripts/dev/probe-unpaid-x402.mjs    # third-party 402 offers, paymentMade: false
+node scripts/dev/probe-unpaid-plan.mjs    # Vertex plan preview without settlement
+node scripts/dev/probe-ledger-preflight.mjs
+```
+
+## Submission checklist
+
+- [ ] Public GitHub repo linked in Hacker Dashboard
+- [ ] Ledger: paste [DX.md](DX.md) into partner form; device on camera in video
+- [ ] Graph: 2–4 min demo showing **live** Graph query in the run
+- [ ] Hedera: ≤5 min video focused on new Hedera rail / HCS hook
+- [ ] `npm run verify` green on a clean clone
+
+## Ledger DX
+
+See [DX.md](DX.md).

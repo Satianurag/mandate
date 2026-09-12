@@ -11,9 +11,11 @@ const require = createRequire(join(dirname(fileURLToPath(import.meta.url)), "../
 export const {
   DeviceManagementKitBuilder,
   DeviceActionStatus,
+  OpenAppDeviceAction,
 }: {
   DeviceManagementKitBuilder: typeof import("@ledgerhq/device-management-kit").DeviceManagementKitBuilder;
   DeviceActionStatus: typeof import("@ledgerhq/device-management-kit").DeviceActionStatus;
+  OpenAppDeviceAction: typeof import("@ledgerhq/device-management-kit").OpenAppDeviceAction;
 } = require("@ledgerhq/device-management-kit");
 
 export type DeviceActionState<TOutput> =

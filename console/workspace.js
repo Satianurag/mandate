@@ -52,7 +52,10 @@ async function api(path, body, method) {
 }
 
 function statusType(s) { return ['completed','confirmed','funded','accepted'].includes(s)?'success':['failed','stopped','expired'].includes(s)?'error':['uncertain','pending','running','interrupted'].includes(s)?'warning':'neutral'; }
-const views = new Set(['home','agents','task','history','authority','evidence','settings']);
+const views = new Set(['home','agents','task','history','evidence','settings']);
+function normalizeView(view) {
+  return view === 'authority' ? 'agents' : view;
+}
 function showDashboardView(view, focus=true) {
  if (!views.has(view)) view='home';
  for(const panel of document.querySelectorAll('[data-view]')) panel.hidden=panel.dataset.view!==view;
@@ -81,8 +84,13 @@ async function start(){
  const token=new URLSearchParams(location.hash.slice(1)).get('token');
  if(token){history.replaceState(null,'',location.pathname);try{const session=await api('/api/session',{token});csrf=session.csrf;}catch(e){message(e.message,true);}}
  await refresh();
- showDashboardView(views.has(location.hash.slice(1))?location.hash.slice(1):'home',false);
+ const initial=normalizeView(location.hash.slice(1));
+ showDashboardView(views.has(initial)?initial:'home',false);
 }
-window.addEventListener('hashchange',()=>showDashboardView(location.hash.slice(1)));
+window.addEventListener('hashchange',()=>{
+ const view=normalizeView(location.hash.slice(1));
+ if(view!==location.hash.slice(1))history.replaceState(null,'',`${location.pathname}#${view}`);
+ showDashboardView(view);
+});
 setInterval(()=>{if(!document.hidden)void refresh();},5000);
 void start();

@@ -1,20 +1,20 @@
 /** Native Hedera exact-x402 payments share the agent's USDC budget, not an EVM bridge. */
 import { inspectHederaTransaction, type ClientHederaSigner } from "@x402/hedera";
 import type { PaymentPayload, PaymentRequirements } from "@x402/core/types";
-export const AGENT_HEDERA_USDC = "0.0.429274";
+export const AGENT_HEDERA_USDC = "0.0.456858";
 export interface AgentHederaScope {
   accountId: string; payTo: string; feePayer: string; endpoint: string;
 }
 const entity = /^0\.0\.[1-9][0-9]{0,14}$/;
 export function validateHederaScope(scope: AgentHederaScope): AgentHederaScope {
-  for (const id of [scope.accountId, scope.payTo, scope.feePayer]) if (!entity.test(id)) throw new Error("Hedera authority requires explicit numeric testnet account IDs");
+  for (const id of [scope.accountId, scope.payTo, scope.feePayer]) if (!entity.test(id)) throw new Error("Hedera authority requires explicit numeric mainnet account IDs");
   if (scope.accountId === scope.payTo || scope.accountId === scope.feePayer) throw new Error("Hedera payer must differ from service recipient and facilitator fee payer");
   const url = new URL(scope.endpoint);
-  if (!(url.protocol === "https:" || url.protocol === "http:" && url.hostname === "127.0.0.1") || url.username || url.password || url.search || url.hash || url.pathname !== "/tools/hedera-analysis") throw new Error("Hedera analysis must use the reviewed first-party testnet endpoint");
+  if (!(url.protocol === "https:" || url.protocol === "http:" && url.hostname === "127.0.0.1") || url.username || url.password || url.search || url.hash || url.pathname !== "/tools/hedera-analysis") throw new Error("Hedera analysis must use the reviewed first-party mainnet endpoint");
   return structuredClone(scope);
 }
 export function assertHederaOffer(scope: AgentHederaScope, offer: PaymentRequirements): void {
-  if (offer.scheme !== "exact" || offer.network !== "hedera:testnet" || offer.asset !== AGENT_HEDERA_USDC || offer.payTo !== scope.payTo || offer.extra?.feePayer !== scope.feePayer) throw new Error("Hedera offer changed the approved network, asset, recipient or fee payer");
+  if (offer.scheme !== "exact" || offer.network !== "hedera:mainnet" || offer.asset !== AGENT_HEDERA_USDC || offer.payTo !== scope.payTo || offer.extra?.feePayer !== scope.feePayer) throw new Error("Hedera offer changed the approved network, asset, recipient or fee payer");
 }
 export function transactionIdForMirror(value: string): string {
   const match = /^(0\.0\.\d{1,15})[-@](\d{1,12})[-.](\d{1,9})$/.exec(value);
@@ -41,7 +41,7 @@ export function hederaSettlementVerifier(options: { fetch?: typeof fetch; timeou
     if (transactionIdForMirror(transaction) !== expected) throw new Error("Hedera settlement ID does not match the signed transaction");
     const until = Date.now() + (options.timeoutMs ?? 45000);
     while (Date.now() < until) {
-      const response = await transport(`https://testnet.mirrornode.hedera.com/api/v1/transactions/${expected}`, { redirect: "error", signal: AbortSignal.timeout(10000) });
+      const response = await transport(`https://mainnet.mirrornode.hedera.com/api/v1/transactions/${expected}`, { redirect: "error", signal: AbortSignal.timeout(10000) });
       if (response.ok) {
         const body = await response.json() as { transactions?: Array<{ transaction_id?: string; result?: string; token_transfers?: Array<{ token_id: string; account: string; amount: number | string }> }> };
         const settled = body.transactions?.find(row => row.transaction_id === expected && row.result === "SUCCESS");

@@ -14,25 +14,25 @@
 
 import { HTTPFacilitatorClient } from "@x402/core/http";
 
-/** Blocky402 testnet facilitator base URL (trailing slash tolerated). */
-export const BLOCKY402_URL = "https://api.testnet.blocky402.com";
-
 /**
  * Base mainnet USDC + chain facts, single-sourced for the mandate service.
  * Observed against the live chain; the service boot gate re-asserts the
  * deployment before serving.
  */
-export const BASE_SEPOLIA = {
+export const BASE_MAINNET = {
   chainId: 8453,
   usdc: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" as const,
 } as const;
 
-/** Circle Hedera testnet USDC HTS id (https://developers.circle.com/stablecoins/usdc-contract-addresses). */
-export const CIRCLE_HEDERA_TESTNET_USDC_HTS = "0.0.429274" as const;
+/** Loopback self-hosted facilitator started by `scripts/start.mjs` when secrets exist. */
+export const DEFAULT_FACILITATOR_URL = "http://127.0.0.1:8406" as const;
+
+/** Circle Hedera mainnet USDC HTS id. Confirmed live via mainnet mirror as USD Coin / 6 decimals. */
+export const CIRCLE_HEDERA_MAINNET_USDC_HTS = "0.0.456858" as const;
 
 /**
  * Assert the facilitator at `url` currently supports `kind`
- * (`"<scheme>@<network>"`, e.g. `"exact@hedera:testnet"`). Throws otherwise.
+ * (`"<scheme>@<network>"`, e.g. `"exact@hedera:mainnet"`). Throws otherwise.
  */
 export async function assertSupports(url: string, kind: string): Promise<void> {
   const client = new HTTPFacilitatorClient({ url });
