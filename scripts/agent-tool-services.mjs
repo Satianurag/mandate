@@ -1,0 +1,20 @@
+#!/usr/bin/env node
+import {readFile,mkdir} from 'node:fs/promises';import {resolve,join} from 'node:path';
+import {createAgentToolService} from '../packages/gateway/src/agent-tool-service.ts';
+import {createLiveAgentProviders} from '../packages/gateway/src/agent-live-providers.ts';
+import {loadSealedGraphKey} from '../packages/gateway/src/analytics.ts';
+import {Journal,digest} from '../packages/gateway/src/journal.ts';
+import {ensureWalletPass} from './load-wallet-pass.mjs';
+import {BLOCKY402_URL} from '../packages/gateway/src/facilitators.ts';
+const root=resolve(new URL('..',import.meta.url).pathname),state=resolve(process.env.MANDATE_AGENT_STATE??join(root,'state/agents'));
+const config=JSON.parse(await readFile(join(state,'operator/agent-runtime.json'),'utf8'));
+if(config.authority.network!=='eip155:84532'||config.authority.toolConfigurationHash!==digest(config.tools))throw new Error('Provider configuration differs from the reviewed testnet authority');
+await ensureWalletPass();await mkdir(state,{recursive:true,mode:0o700});
+const providers=createLiveAgentProviders({tools:config.tools,graphKey:loadSealedGraphKey});
+const evmJournal=new Journal(join(state,'evm-services.sqlite')),hederaJournal=new Journal(join(state,'hedera-services.sqlite'));
+const releaseEvm=evmJournal.own('agent-evm-service'),releaseHedera=hederaJournal.own('agent-hedera-service');
+const evm=await createAgentToolService({network:'eip155:84532',payTo:config.authority.tools[0].payTo,facilitatorUrl:config.funding.facilitatorUrl,journal:evmJournal,providers:providers.evm});
+const hedera=await createAgentToolService({network:'hedera:testnet',payTo:config.authority.hedera.payTo,facilitatorUrl:BLOCKY402_URL,journal:hederaJournal,providers:providers.hedera});
+await Promise.all([[evm,8425],[hedera,8423]].map(([server,port])=>new Promise((resolve,reject)=>{server.once('error',reject);server.listen(port,'127.0.0.1',resolve);})));
+console.log('AGENT_SERVICES_READY Base Sepolia :8425; native Hedera testnet :8423. No paid request was submitted.');
+let closing=false;for(const signal of ['SIGTERM','SIGINT'])process.on(signal,()=>{if(closing)return;closing=true;void Promise.all([evm,hedera].map(server=>new Promise(r=>server.close(r)))).finally(()=>{releaseEvm();releaseHedera();evmJournal.close();hederaJournal.close();process.exit(0);});});

@@ -1,6 +1,8 @@
-# Architecture and authority
+# Batch-channel architecture and authority
 
-This is the current testnet workspace architecture, not the pre-audit prototype.
+This document describes the retained batch-channel workspace on port 8410. The new adaptive exact-payment workspace on port 8420 has separate payment/funding semantics: see [Agent workspace](AGENT-WORKSPACE.md). Do not attribute batch escrow constraints or isolated-container demonstrations to the new agent runtime without separate evidence.
+
+This is the remediated batch-workspace architecture, not the pre-audit prototype.
 The application uses stock x402 clients, resource servers, and settlement contracts;
 it does not introduce a custom token, payment header dialect, or escrow contract.
 

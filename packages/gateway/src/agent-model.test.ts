@@ -13,7 +13,7 @@ test("Vertex sends bounded JSON reasoning with credentials only in headers and r
     assert.equal(String(options?.body).includes("test-credential-not-for-model"), false);
     const request = JSON.parse(String(options?.body));
     assert.equal(request.generationConfig.responseMimeType, "application/json");
-    assert.equal(request.generationConfig.maxOutputTokens, 4096); captured = true;
+    assert.equal(request.generationConfig.maxOutputTokens, 8192); captured = true;
     return Response.json({ candidates: [{ finishReason: "STOP", content: { parts: [{ text: JSON.stringify({ action: "finish", result: "No evidence available.", complete: false, evidenceIds: [] }) }] } }], usageMetadata: { totalTokenCount: 25 } });
   }) as typeof fetch });
   const result = await model.next(context, new AbortController().signal);
@@ -24,4 +24,15 @@ test("model output cannot invent tools and truncated generations do not execute"
   assert.throws(() => validateVertexConfig({ ...config, project: "https://attacker.invalid" }), /project ID/);
   const model = new VertexAgentModel(config, { token: async () => "test", fetch: (async () => Response.json({ candidates: [{ finishReason: "MAX_TOKENS", content: { parts: [{ text: '{"action":"tool"}' }] } }] })) as typeof fetch });
   await assert.rejects(model.next(context, new AbortController().signal), /complete action/);
+});
+
+test("MAX_TOKENS retries reasoning once with more room, retains both usage records, and never emits the truncated action", async () => {
+  const budgets: number[] = [];
+  const model = new VertexAgentModel(config, { token: async () => "test", fetch: (async (_url, options) => {
+    budgets.push(JSON.parse(String(options?.body)).generationConfig.maxOutputTokens);
+    if (budgets.length === 1) return Response.json({ candidates: [{ finishReason: "MAX_TOKENS", content: { parts: [{ text: '{"action":"tool","toolId":"graph-protocol"' }] } }], usageMetadata: { totalTokenCount: 8192 } });
+    return Response.json({ candidates: [{ finishReason: "STOP", content: { parts: [{ text: JSON.stringify({ action: "finish", result: "Recovered conclusion without purchasing another source.", complete: false, evidenceIds: [] }) }] } }], usageMetadata: { totalTokenCount: 1500 } });
+  }) as typeof fetch });
+  const response = await model.next(context,new AbortController().signal);
+  assert.deepEqual(budgets,[8192,16384]);assert.equal(response.decision.action,"finish");assert.equal(response.usage.requestCount,2);assert.equal(response.usage.totalTokenCount,9692);
 });

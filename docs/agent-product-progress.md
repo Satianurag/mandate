@@ -1,74 +1,137 @@
-# Autonomous x402 agents — implementation record
+# Agent product acceptance - 12 September 2026
 
-Approved scope: two goal-completing templates (Protocol Investigator and Agent
-Selection Analyst), prompt-created custom agents, adaptive Vertex reasoning,
-multiple useful x402 tools, Ledger-approved bounded spending, live Graph evidence,
-useful Hedera x402 service, durable history/receipts and honest failure handling.
-The existing single-query flow is not completion of this scope.
+## Status
 
-Mainnet experiment allowance: at most $5 total, including transaction costs from
-that allowance. No automatic increases. No mainnet expenditure in this work yet.
+The two specialists, saved custom agents, adaptive runtime, real testnet providers,
+Ledger funding review, explicit operator-approved allowance increases, shared
+accounting, native Hedera payments, report-first UI, receipt recovery and
+unused-funds return are implemented. The project is **partially
+live-verified**, not declared complete across every hardware/network path.
 
-User steering: complete the real testnet flow first, then move to mainnet. The
-mainnet funding request is deferred. Do not treat absent mainnet funds as a
-testnet blocker. Public vendors observed so far offered mainnet; testnet work
-must use explicitly identified real x402 services and actual testnet receipts,
-not pretend those vendors accept test tokens. The endpoint/provider distinction
-must remain clear in the UI and evidence.
+A real Protocol Investigator run purchased five useful responses across Base
+Sepolia and native Hedera. Its original final model generation reached MAX_TOKENS.
+The evidence was retained and the report was recovered without purchasing those
+services again. The final specialist summary is rendered from observed fields,
+with unknown causes and valuation-quality limits stated explicitly. Its audit trail
+still says `partial`; it was not relabeled as a flawless completed run.
 
-## Verified starting state
+## Fresh live evidence
 
-- Existing workspace broker is Base Sepolia, single-receiver batch settlement.
-- Existing isolated consumer submits a fixed research task; no adaptive model loop.
-- Older orchestrator plans once and executes a sequence. Reuse needs adaptation.
-- Unpaid live probes returned x402 offers from Graph, Exa, Otto, APIToll and
-  OneSource. OneSource offered exact and batch settlement. These probes do not
-  establish paid delivery or data quality.
-- Existing scope/journal suite: 17 passed before implementation.
-- Graph testnet gateway and Blocky402 testnet support responded; local native
-  Hedera service port 8403 was not listening at that observation.
+The sanitized record is
+[`verification/agent-paid-proof-2026-09-12.json`](verification/agent-paid-proof-2026-09-12.json).
+The underlying retained authorizations, responses and independent readbacks remain
+in ignored local state. No private key, operator token or full signing payload is
+published in the sanitized record.
 
-## Completion gates (all remain open until directly verified)
+| Verified item | Observed result |
+| --- | --- |
+| Ledger-funded software wallet | 0.25 test USDC credited on Base Sepolia; authorization and transfer independently matched |
+| Stored device report | `clear-basic`; ERC-7730 reported unsupported for this run, not rich display of every policy field |
+| Graph protocol requests | Three real paid responses, 0.003 test USDC total |
+| Native Hedera Evidence Lab | One real paid response, 0.002 test USDC; SDK transaction and Mirror transfers independently matched |
+| Market-data service | One real paid response, 0.001 test USDC; Mandate is the merchant, Coinbase is the upstream data source |
+| Total service spending | **0.006 test USDC**, five paid requests across three service types |
+| Remaining shared authority at readback | 0.244 test USDC |
+| EVM software-wallet balance at readback | 0.246 test USDC; native Hedera spending debited a separate account |
+| Report recovery | No additional x402 payment; final observed-field rebuild also made zero model requests |
+| Vertex reasoning | Gemini 3.5 Flash produced real valid actions; inference is billed separately from test-USDC spending |
 
-- Two saved templates plus custom-agent creation/editing in Run task.
-- Goal -> multiple paid x402 services -> observation-driven next action -> result.
-- Vertex integration verified with the configured project/model; usage distinct
-  from x402 spending. No credentials exposed to the model or browser.
-- Protected exact signer and Ledger funding authority verified before mainnet use.
-- Durable spending reservations, uncertain outcome reconciliation, stop/restart,
-  immutable per-run authority and no silent increase in permissions.
-- Useful live Graph and Hedera x402 outputs materially contribute to a result.
-- Source-linked result, receipts, history, partial results and failure UX.
-- Live small paid experiments, adversarial recovery tests and browser verification.
-- Reused code attribution, event-period change documentation and runnable demo.
+Independent readback checks the intended payer, receiver, asset, amount and
+transaction/authorization, rather than accepting only a facilitator success flag.
+This is fresh agent-path evidence, separate from the older batch-channel proofs.
+It does not establish a successful live return of unused funds or every template.
 
-This file records evidence and outstanding work; it is not a completion claim.
+## Verification completed
 
-## Implementation evidence — first working slice
+The final `npm run verify` gate passed **228 automated tests**:
+208 gateway/runtime tests, five policy tests, six service tests, two mandate-service
+tests, four security-ratchet tests and three source-resolution tests. TypeScript
+builds, descriptor/schema validation and release-consistency checks also passed.
+The release check found no credential-shaped literals or local-path leaks in the
+checked source set. This is not a claim of zero dependency vulnerabilities.
 
-- Added persistent custom profiles, immutable run snapshots, idempotent run
-  submission, progress events, stop and interrupted-run preservation.
-- Added adaptive model/tool/observation loop; controlled tests prove a second
-  action depends on the first observation, and unknown payments prevent retries.
-- Added Vertex adapter. Live gcloud project catalog access succeeded after
-  supplying the quota-project header. A tiny `gemini-2.5-flash` inference returned
-  HTTP 200 and valid JSON (48 total tokens). This is model access proof, not an
-  end-to-end agent run.
-- Added exact x402 adapter with fixed endpoint mapping, approved recipients,
-  durable shared/per-run reservations and USDC transfer+nonce chain verification.
-  Four controlled tests pass; live paid settlement remains unverified.
-- Browser test passes custom creation/edit/reload, desktop/mobile layouts,
-  accessibility and existing workspace recovery flows. Screenshots are under
-  `.live-results/repair/browser/agents-{desktop,mobile}.png`.
-- Production agent services are not yet configured/wired. The UI explicitly
-  disables execution until those services and spending authority are ready.
-- Still outstanding: full production setup/funding/recovery UX, real paid
-  multi-tool output, protocol source coverage, useful Hedera integration, end-to-end
-  verification and submission documentation. Mainnet expenditure remains zero.
-- Full gateway regression suite passed 174 tests before the subsequent production
-  loader/readiness refinements; rerun after the next implementation slice.
-- Physical Ledger read-only probe matched saved payer
-  `0x57a2a47Ca22AE52867c5313c4d9ab43070D7C202`. Live Base mainnet balance read:
-  0 USDC, 0 ETH. No signature requested, no funds moved. User was asked to fund
-  the verified account within the existing $5 allowance; this is a paid-test
-  prerequisite, not a reason to stop independent implementation.
+Browser verification is separate from those unit/integration counts:
+
+- The legacy browser suite passed, including its funding/recovery regressions,
+  desktop/mobile behavior and accessibility checks.
+- The new isolated browser fixture passed for **both specialists and a custom
+  agent created through the form**. It exercises the real operator, SQLite,
+  runtime, SDK serialization, accounting, report export, reload and cancellation
+  with explicitly simulated model/settlement. The second specialist uses a
+  candidate ID from its preceding observation, not a hardcoded production result.
+- The actual prepared workspace passed desktop/mobile navigation and accessibility
+  checks. Saving/editing a custom agent persists across reloads. This check does
+  not initiate funding or a paid run.
+- The actual recovered live report passed desktop and mobile checks with no
+  horizontal page overflow or serious/critical accessibility violations. Its five
+  real receipts remained unchanged during that read-only inspection.
+
+Fixture screenshots/results are labeled and stored separately from the actual live
+report under `.live-results/agent-integration`. A test-double settlement is never
+presented as evidence of a real chain payment.
+
+## Important implementation boundaries
+
+The Ledger signs funding, not every application policy rule. Key Ring protects
+software-key storage; the trusted broker enforces service scope, recipients,
+shared/run budgets, expiry and revocation. The native Hedera wallet is separately
+reviewed, not bridged from the EVM wallet or claimed to be hardware-held.
+
+Reservations are durable before signing. A lost merchant response can be recovered
+through a read-only original-response lookup. When its cache is lost, the retained
+native transaction or a verified EVM nonce/transaction lookup can establish the
+charge while explicitly marking the service evidence unavailable. Unknown outcomes
+remain reserved; neither a timeout nor a missing log releases them for replacement
+spending.
+
+Return of unused EVM funds is restricted to the original Ledger payer and requires
+explicit operator review. Pending payments block it. An uncertain return cannot be
+silently signed again. A zero-balance closure requires accounting that explains the
+fully spent deposit; an unexplained empty wallet is not called a successful refund.
+These return paths passed controlled tests, not a fresh live transfer in this pass.
+
+The model adapter now retries a truncated generation once with a larger bounded
+output allowance, records both attempts, and never executes truncated tool JSON.
+Specialist reports with the required structured evidence are rendered from observed
+fields. Causes, true economic values and candidate capabilities absent from the
+sources remain unknown. Generic custom-agent prose is model interpretation, not a
+guarantee of independently verified facts.
+
+## Remaining acceptance gates
+
+The **second specialist's paid workflow, custom-agent paid workflow, latest cold
+restart/retry path, Ledger allowance increase and unused-funds return** still need
+live acceptance checks.
+Automated new paid runs and the isolated-stack restart were blocked during this
+pass. They were not bypassed or represented as successes.
+
+The current running preview has its earlier in-memory backend. The latest source is
+on disk and has passed the controlled checks above. Restart only the isolated agent
+stack after confirming that no device review, funding, return or investigation is
+in flight. Do not kill unrelated Node processes or disturb Tailscale or the older
+workspace.
+
+Agent0's inspected candidate sample has incomplete capabilities, service URLs and
+validation coverage. The selection specialist can legitimately conclude that there
+is insufficient evidence to hire. The protocol source contains extreme indexed USD
+valuations; the report flags them rather than treating them as real reserves or
+asserting an unproven pricing-feed diagnosis. Testnet web-search and news providers
+are not configured and are not exposed as working tools.
+
+The services are local. No public cloud deployment, all-sponsor eligibility approval,
+production security certification or winning claim was made. Mainnet money movement
+remains outside the deployed agent path.
+
+## Reproducible entry points
+
+See [Agent workspace](AGENT-WORKSPACE.md) for prerequisites, trust boundaries and
+operation. `agents:prepare` and `agents:boot` do not fund or execute an agent.
+`agents:verify-live` reads existing chain evidence only. `agents:recover-report`
+never calls a paid tool; it either formats retained specialist fields or uses
+separately billed Vertex inference with no execution tools.
+
+The reference orchestrator was inspected at
+`b1d5dc4709237a7a64474f7b3320ac163dcd2b59`; this work extends Mandate's earlier
+`bedd1dfc3bf14e9bd71280d9a836ac6672964f3f` skeleton. The reusable reporting/product
+patterns were adapted, not its unrestricted wallet or plan-once execution paths.
+Record prior work and the event-period delta truthfully for any submission.

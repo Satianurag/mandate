@@ -10,6 +10,7 @@ import { createPublicClient, getAddress, http, erc20Abi, type Address, type Hex 
 import { decodePaymentRequiredHeader } from "@x402/core/http";
 import { Journal, digest, type OutboxRow } from "./journal.ts";
 import { AgentStore } from "./agent-store.ts";
+import { buildAgentReport, agentReportToMarkdown, type AgentPaymentView } from "./agent-report.ts";
 import { AgentRuntime, type AgentModel, type AgentToolExecutor } from "./agent-runtime.ts";
 import { loadAgentServices, type AgentServices } from "./agent-services.ts";
 import { parseMandateFile, scopeOf, type MandateFile } from "./mandate-config.ts";
@@ -164,6 +165,18 @@ export async function createOperatorApp(options: OperatorOptions): Promise<Opera
   const agentServices = loadedAgentServices.services;
   const agentRuntime = agentServices ? new AgentRuntime(agents, agentServices.model, agentServices.executor) : null;
   const activeAgentRuns = new Map<string, Promise<void>>();
+  let agentSetupTask: Promise<unknown> | null = null;
+  const runAgentSetupTask = (action: () => Promise<unknown>) => {
+    if (agentSetupTask) throw new HttpError(409, "An allowance operation is already in progress");
+    const task = Promise.resolve().then(action).catch(e => {
+      if (agentServices) journal.event(agentServices.authorityId, null, "agent.setup_operation_failed", { error: messageOf(e) });
+    }).finally(() => { if (agentSetupTask === task) agentSetupTask = null; });
+    agentSetupTask = task;
+  };
+  const paymentsForAgentRun = (id: string): AgentPaymentView[] => {
+    const rows = journal.db.prepare("SELECT r.* FROM requests r JOIN request_budget_groups g ON r.id=g.request_id WHERE g.group_id=? ORDER BY r.created_at").all(id) as unknown as Array<{id:string;state:string;network:string;asset:string;charged:string|null;maximum:string;receipt:string|null;error:string|null;created_at:number}>;
+    return rows.map(r => { const receipt = r.receipt ? JSON.parse(r.receipt) as {transaction?:string;chainVerified?:boolean} : null; return {id:r.id,state:r.state,network:r.network,asset:r.asset,amountBaseUnits:r.charged??r.maximum,transaction:receipt?.transaction??null,chainVerified:receipt?.chainVerified===true,error:r.error,createdAt:r.created_at}; });
+  };
   journal.db.exec(`CREATE TABLE IF NOT EXISTS workspace_tasks (
     id TEXT PRIMARY KEY,kind TEXT NOT NULL,mandate_id TEXT NOT NULL,capability_id TEXT,
     query TEXT NOT NULL,task_spec TEXT,intent_hash TEXT,state TEXT NOT NULL,result TEXT,error TEXT,created_at INTEGER NOT NULL,updated_at INTEGER NOT NULL);`);
@@ -734,6 +747,75 @@ export async function createOperatorApp(options: OperatorOptions): Promise<Opera
       }
       const principal = auth.authenticate(req, origin);
       if (path === "/api/session" && req.method === "DELETE") { auth.logout(principal, res); respond(res, 200, { ok: true }); return; }
+      if (path === "/api/agent-setup" && req.method === "GET") {
+        auth.operator(principal); respond(res,200,{setup:agentServices?.inspect?.()??null,readiness:agentServices?.readiness?.()??{ready:false,reason:loadedAgentServices.reason},busy:Boolean(agentSetupTask)});return;
+      }
+      if (path === "/api/agent-setup/fund" && req.method === "POST") {
+        auth.operator(principal);const body=await jsonBody(req);
+        if(Object.keys(body).some(k=>!["consentHash","confirm"].includes(k))||body.confirm!=="fund_testnet_agent_allowance"||typeof body.consentHash!=="string")throw new HttpError(400,"Review and explicitly approve the testnet allowance first");
+        const funding=agentServices?.funding;if(!funding)throw new HttpError(409,"Prepare the agent allowance before funding");
+        if(activeAgentRuns.size)throw new HttpError(409,"Finish or stop the current investigation first");
+        if(body.consentHash!==funding.review().consentHash||funding.review().funding.status!=="none")throw new HttpError(409,"Funding was already requested or its review changed. Observe or reconcile the existing attempt.");
+        runAgentSetupTask(()=>funding.fund(body.consentHash as string));respond(res,202,{accepted:true,action:"ledger_testnet_funding"});return;
+      }
+      if (path === "/api/agent-setup/reconcile" && req.method === "POST") {
+        auth.operator(principal);const body=await jsonBody(req);if(Object.keys(body).some(k=>k!=="transactionHash"))throw new HttpError(400,"Only an optional existing funding transaction hash is accepted");
+        const funding=agentServices?.funding;if(!funding)throw new HttpError(409,"No funding setup is configured");
+        runAgentSetupTask(()=>funding.reconcile(body.transactionHash===undefined?undefined:String(body.transactionHash)));respond(res,202,{accepted:true,newPaymentRequested:false});return;
+      }
+      if (path === "/api/agent-setup/increase-preview" && req.method === "POST") {
+        auth.operator(principal);const body=await jsonBody(req);
+        if(Object.keys(body).some(k=>k!=="amountBaseUnits")||typeof body.amountBaseUnits!=="string"||!/^[1-9][0-9]{0,15}$/.test(body.amountBaseUnits))throw new HttpError(400,"Choose a positive test-USDC allowance increase");
+        const funding=agentServices?.funding;if(!funding)throw new HttpError(409,"No Ledger funding setup is configured");
+        if(activeAgentRuns.size||agentSetupTask)throw new HttpError(409,"Finish the current investigation or allowance operation before reviewing an increase");
+        respond(res,200,{review:funding.reviewIncrease(body.amountBaseUnits)});return;
+      }
+      if (path === "/api/agent-setup/increase" && req.method === "POST") {
+        auth.operator(principal);const body=await jsonBody(req);
+        if(Object.keys(body).some(k=>!["amountBaseUnits","consentHash","confirm"].includes(k))||typeof body.amountBaseUnits!=="string"||!/^[1-9][0-9]{0,15}$/.test(body.amountBaseUnits)||typeof body.consentHash!=="string"||body.confirm!=="increase_testnet_agent_allowance")throw new HttpError(400,"Review and explicitly approve the allowance increase first");
+        const funding=agentServices?.funding;if(!funding)throw new HttpError(409,"No Ledger funding setup is configured");
+        if(activeAgentRuns.size||agentSetupTask)throw new HttpError(409,"Finish the current investigation or allowance operation before increasing the allowance");
+        const review=funding.reviewIncrease(body.amountBaseUnits);if(review.consentHash!==body.consentHash)throw new HttpError(409,"Allowance increase changed. Review it again before signing.");
+        runAgentSetupTask(()=>funding.increase(body.amountBaseUnits as string,body.consentHash as string));respond(res,202,{accepted:true,action:"ledger_testnet_allowance_increase"});return;
+      }
+      if (path === "/api/agent-setup/increase-reconcile" && req.method === "POST") {
+        auth.operator(principal);const body=await jsonBody(req);if(Object.keys(body).some(k=>k!=="transactionHash"))throw new HttpError(400,"Only an optional existing allowance-increase transaction hash is accepted");
+        const funding=agentServices?.funding;if(!funding)throw new HttpError(409,"No Ledger funding setup is configured");
+        if(activeAgentRuns.size)throw new HttpError(409,"Finish the current investigation before reconciling an allowance increase");
+        runAgentSetupTask(()=>funding.reconcileIncrease(body.transactionHash===undefined?undefined:String(body.transactionHash)));respond(res,202,{accepted:true,newSignatureCreated:false,newPaymentRequested:false});return;
+      }
+      if (path === "/api/agent-setup/stop" && req.method === "POST") {
+        auth.operator(principal);const body=await jsonBody(req);if(body.confirm!=="stop_agent_allowance"||Object.keys(body).some(k=>k!=="confirm"))throw new HttpError(400,"Explicitly confirm stopping the allowance");
+        if(!agentServices)throw new HttpError(409,"No agent allowance is configured");
+        journal.stop(agentServices.authorityId);for(const id of activeAgentRuns.keys())agentRuntime?.stop(id);
+        respond(res,200,{stopped:true,reversesPayments:false});return;
+      }
+      if (path === "/api/agent-setup/return-preview" && req.method === "GET") {
+        auth.operator(principal);if(!agentServices?.returns)throw new HttpError(409,"The exact-wallet return path is not configured");
+        if(activeAgentRuns.size||agentSetupTask)throw new HttpError(409,"Finish the current run or allowance operation before reviewing a return");
+        respond(res,200,{review:await agentServices.returns.preview()});return;
+      }
+      if (path === "/api/agent-setup/return" && req.method === "POST") {
+        auth.operator(principal);const body=await jsonBody(req);if(Object.keys(body).some(k=>!["consentHash","confirm"].includes(k))||typeof body.consentHash!=="string"||body.confirm!=="return_unused_test_usdc")throw new HttpError(400,"Review and explicitly confirm returning unused testnet funds");
+        const returns=agentServices?.returns;if(!returns)throw new HttpError(409,"The exact-wallet return path is not configured");
+        if(activeAgentRuns.size||agentSetupTask)throw new HttpError(409,"Finish or stop the current investigation or allowance operation first");
+        if((await returns.preview()).consentHash!==body.consentHash)throw new HttpError(409,"Return amount changed. Review the current balance again.");
+        runAgentSetupTask(()=>returns.returnUnused(body.consentHash as string));respond(res,202,{accepted:true,action:"return_to_original_payer"});return;
+      }
+      if (path === "/api/agent-setup/return-reconcile" && req.method === "POST") {
+        auth.operator(principal);const body=await jsonBody(req);if(Object.keys(body).some(k=>k!=="transactionHash"))throw new HttpError(400,"Only an optional existing return transaction hash is accepted");
+        const returns=agentServices?.returns;if(!returns)throw new HttpError(409,"No return path is configured");
+        runAgentSetupTask(()=>returns.reconcile(body.transactionHash===undefined?undefined:String(body.transactionHash)));respond(res,202,{accepted:true,newPaymentRequested:false});return;
+      }
+      if (path === "/api/agent-payments/reconcile" && req.method === "POST") {
+        auth.operator(principal);const body=await jsonBody(req);if(Object.keys(body).some(k=>!["requestId","transaction"].includes(k))||typeof body.requestId!=="string"||body.transaction!==undefined&&(typeof body.transaction!=="string"||!/^(0x[0-9a-fA-F]{64}|0\.0\.[0-9]{1,15}[-@][0-9]{1,12}[-.][0-9]{1,9})$/.test(body.transaction)))throw new HttpError(400,"Choose one existing payment request");
+        if(!agentServices?.reconcilePayment)throw new HttpError(409,"No first-party payment reconciliation is configured");
+        if(activeAgentRuns.size)throw new HttpError(409,"Wait for the current investigation to stop before recovering its receipt");
+        const result=await agentServices.reconcilePayment(body.requestId, body.transaction as string | undefined);
+        const existing=agents.events(result.runId).some(e=>e.kind==="payment_reconciled"&&(e.data as {observation?:{requestId?:string}}).observation?.requestId===body.requestId);
+        if(!existing)agents.event(result.runId,"payment_reconciled",{observation:result.observation,newSignatureCreated:false,newPaymentRequested:false});
+        respond(res,200,{reconciled:true,runId:result.runId,observation:result.observation,newPaymentRequested:false});return;
+      }
       if (path === "/api/agents" && req.method === "GET") {
         auth.operator(principal);
         const readiness = agentServices?.readiness?.() ?? { ready: Boolean(agentRuntime), reason: loadedAgentServices.reason };
@@ -744,7 +826,7 @@ export async function createOperatorApp(options: OperatorOptions): Promise<Opera
             reason: !readiness.ready ? readiness.reason : missing.length ? `This specialist needs ${missing.join(", ")} configured before it can investigate.` : !p.toolIds.some(id => availableTools.includes(id)) ? "None of this agent's selected tools is configured." : readiness.reason }];
         }));
         respond(res, 200, { agents: agents.profiles(), runs: agents.runs(), ready: readiness.ready,
-          availableTools, availability, readiness: readiness.reason }); return;
+          availableTools, availability, readiness: readiness.reason, setup: agentServices?.inspect?.() ?? null, runningCount: activeAgentRuns.size, busy: Boolean(agentSetupTask) }); return;
       }
       if (path === "/api/agents" && req.method === "POST") {
         auth.operator(principal);
@@ -766,6 +848,7 @@ export async function createOperatorApp(options: OperatorOptions): Promise<Opera
           respond(res, 200, { run }); return;
         }
         if (!agentRuntime || !agentServices) throw new HttpError(409, "Model and x402 spending authority are not ready");
+        if (activeAgentRuns.size) throw new HttpError(409, "One investigation is already using this allowance. Finish or stop it before starting another.");
         const readiness = agentServices.readiness?.();
         if (readiness && !readiness.ready) throw new HttpError(409, readiness.reason);
         const profile = agents.profile(String(body.agentId ?? "")), available = agentServices.executor.catalog();
@@ -777,6 +860,12 @@ export async function createOperatorApp(options: OperatorOptions): Promise<Opera
         }
         respond(res, 202, { run: agents.run(run.id) }); return;
       }
+      const agentReport = path.match(/^\/api\/agent-runs\/([A-Za-z0-9_-]+)\/report$/);
+      if (agentReport && req.method === "GET") {
+        auth.operator(principal);const run=agents.run(agentReport[1]!);if(!run)throw new HttpError(404,"Agent run not found");
+        const report=buildAgentReport(run,agents.events(run.id),paymentsForAgentRun(run.id));
+        res.writeHead(200,{"content-type":"text/markdown; charset=utf-8","content-disposition":`attachment; filename="mandate-${run.id}.md"`,"cache-control":"no-store","x-content-type-options":"nosniff"});res.end(agentReportToMarkdown(report));return;
+      }
       const agentRun = path.match(/^\/api\/agent-runs\/([A-Za-z0-9_-]+)(\/stop)?$/);
       if (agentRun) {
         auth.operator(principal);
@@ -787,7 +876,7 @@ export async function createOperatorApp(options: OperatorOptions): Promise<Opera
           if (agentRuntime) agentRuntime.stop(run.id); else agents.stop(run.id);
           respond(res, 200, { run: agents.run(run.id) }); return;
         }
-        if (req.method === "GET" && !agentRun[2]) { respond(res, 200, { run, events: agents.events(run.id) }); return; }
+        if (req.method === "GET" && !agentRun[2]) { respond(res, 200, { run, events: agents.events(run.id), report: buildAgentReport(run, agents.events(run.id), paymentsForAgentRun(run.id)) }); return; }
       }
       if (path === "/api/state" && req.method === "GET") {
         auth.operator(principal);
@@ -1230,6 +1319,7 @@ export async function createOperatorApp(options: OperatorOptions): Promise<Opera
     for (const id of activeAgentRuns.keys()) agentRuntime?.stop(id);
     await new Promise<void>(resolveClose => server.close(() => resolveClose()));
     await Promise.allSettled(activeAgentRuns.values());
+    if (agentSetupTask) await agentSetupTask;
     await serial; signedWithdrawals.clear(); mandate?.close(); releaseOwner(); journal.close();
   } };
 }

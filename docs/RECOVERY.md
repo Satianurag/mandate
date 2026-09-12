@@ -1,4 +1,6 @@
-# Recovery without another payment
+# Batch-channel recovery without another payment
+
+These CLI commands and channel lifecycle rules apply to the earlier batch workspace. For exact-agent funding, native Hedera/EVM receipt recovery and unused-wallet returns, use [Agent workspace recovery](AGENT-WORKSPACE.md#recovery-and-unused-funds).
 
 First preserve the channel snapshots, broker/merchant databases, reviewed config,
 sealed session key, and Key Ring member. Never delete state or rotate a key merely

@@ -22,7 +22,7 @@ export const AGENT_TEMPLATES: readonly AgentProfile[] = [
   {
     id: "protocol-investigator", version: 1, template: true,
     name: "Protocol Investigator",
-    description: "Investigate a protocol using onchain evidence, news and market context.",
+    description: "Investigate protocol activity, data quality and market context using paid evidence.",
     instructions: "Investigate the user's question about a supported protocol. Establish the available live Graph evidence, then choose relevant x402 sources to explain significant observations. Investigate contradictions. Distinguish measured facts, hypotheses and missing evidence. Never invent a deployment, metric or source. Stop when further calls would not materially improve the answer.",
     goal: "", output: "A sourced investigation with key findings, explanations, unanswered questions and a spending summary.",
     toolIds: ["graph-protocol", "web-search", "crypto-news", "crypto-prices", "hedera-analysis"],

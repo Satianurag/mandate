@@ -15,7 +15,7 @@ export interface GraphToolSource {
   queries: Array<{ id: string; description: string; query: string }>;
 }
 export interface AgentToolConfiguration {
-  agent0?: { endpoint: string; source: ResearchSourceScope };
+  agent0?: { endpoint: string; source: ResearchSourceScope; detailed?: boolean };
   protocols?: GraphToolSource[];
   /** Explicit first-party testnet service URLs, not a claim that public vendors accept test tokens. */
   testnetEndpoints?: Partial<Record<AgentToolId, string>>;
@@ -29,10 +29,10 @@ function boundedString(value: unknown, name: string, max: number): string {
 }
 function graphEndpoint(raw: string): string {
   const url = new URL(raw);
-  if (url.origin !== "https://gateway.thegraph.com" || !/^\/api\/x402\/subgraphs\/id\/[A-Za-z0-9]+$/.test(url.pathname) || url.search || url.hash || url.username || url.password) throw new Error("Graph tool must use an explicitly reviewed production x402 deployment");
+  if (url.origin !== "https://gateway.thegraph.com" || !/^\/api\/x402\/subgraphs\/id\/[A-Za-z0-9]+$/.test(url.pathname) || url.search || url.hash || url.username || url.password) throw new Error("Graph tool must use an explicitly reviewed Graph deployment");
   return url.toString();
 }
-function validateConfiguredQuery(query: string): void {
+export function validateConfiguredQuery(query: string): void {
   if (Buffer.byteLength(query) > 12000) throw new Error("Configured query exceeds 12 KB");
   const doc = parse(query, { maxTokens: 800 }), op = doc.definitions[0];
   if (doc.definitions.length !== 1 || op?.kind !== Kind.OPERATION_DEFINITION || op.operation !== "query" || op.variableDefinitions?.length) throw new Error("Configured protocol queries must be single read-only operations without variables");
@@ -56,6 +56,15 @@ export function observedSources(data: unknown): Array<{ url: string; title: stri
   }
   visit(data, 0); return [...found].slice(0,100).map(([url, title]) => ({ url, title }));
 }
+/** Reviewed against the live Agent0 schema; declared endpoints are evidence, never destinations. */
+export function detailedAgentQuery(count: number): string {
+  if (!Number.isInteger(count) || count < 2 || count > 10) throw new Error("Choose 2-10 candidates");
+  return `{ agents(first:${count},where:{registrationFile_not:null},orderBy:totalFeedback,orderDirection:desc) {
+    id agentId agentWallet totalFeedback
+    registrationFile { name description active x402Support mcpEndpoint a2aEndpoint webEndpoint }
+    feedback(first:5,orderBy:createdAt,orderDirection:desc) { value isRevoked }
+  } _meta { block { number } hasIndexingErrors } }`;
+}
 export function createAgentTools(config: AgentToolConfiguration = {}): AgentToolDefinition[] {
   const tools: AgentToolDefinition[] = [
     { id: "web-search", description: "Search the web through Exa's x402 endpoint. Returns ranked sources for a specific investigation question.", inputSchema: { type: "object", properties: { query: { type: "string", maxLength: 1000 }, numResults: { type: "integer", minimum: 1, maximum: 5 } }, required: ["query"], additionalProperties: false },
@@ -69,7 +78,7 @@ export function createAgentTools(config: AgentToolConfiguration = {}): AgentTool
     const { endpoint, source } = config.agent0; const url = graphEndpoint(endpoint);
     if (!url.endsWith(`/subgraphs/id/${source.deployment}`)) throw new Error("Agent0 endpoint differs from the reviewed deployment");
     tools.push({ id: "graph-agent0", description: `Read agent registrations and feedback from the reviewed ${source.chain} Agent0 deployment. Feedback coverage is not proof of service quality.`, inputSchema: { type: "object", properties: { maxResults: { type: "integer", minimum: 2, maximum: 10 } }, additionalProperties: false },
-      request(input) { exactFields(input, ["maxResults"]); const maxResults = input.maxResults ?? 5; if (!Number.isInteger(maxResults) || Number(maxResults) < 2 || Number(maxResults) > 10) throw new Error("Choose 2–10 candidates"); const query = compileResearchQuery({ version: 1, template: "agent0-due-diligence", source, maxResults: Number(maxResults) }); return { url, method: "POST", body: JSON.stringify({ query }) }; }, sources: () => [{ url, title: `Agent0 · ${source.chain} · ${source.deployment}` }] });
+      request(input) { exactFields(input, ["maxResults"]); const maxResults = input.maxResults ?? 5; if (!Number.isInteger(maxResults) || Number(maxResults) < 2 || Number(maxResults) > 10) throw new Error("Choose 2–10 candidates"); const query = config.agent0?.detailed ? detailedAgentQuery(Number(maxResults)) : compileResearchQuery({ version: 1, template: "agent0-due-diligence", source, maxResults: Number(maxResults) }); return { url, method: "POST", body: JSON.stringify({ query }) }; }, sources: () => [{ url, title: `Agent0 · ${source.chain} · ${source.deployment}` }] });
   }
   if (config.protocols?.length) {
     const sources = structuredClone(config.protocols);
@@ -81,12 +90,31 @@ export function createAgentTools(config: AgentToolConfiguration = {}): AgentTool
     tools.push({ id: "graph-protocol", description: `Query verified protocol datasets: ${sources.map(s => `${s.id} (${s.label}): ${s.queries.map(q => `${q.id} — ${q.description}`).join("; ")}`).join("\n")}`, inputSchema: { type: "object", properties: { sourceId: { type: "string", enum: sources.map(s => s.id) }, queryId: { type: "string" } }, required: ["sourceId", "queryId"], additionalProperties: false },
       request(input) { exactFields(input, ["sourceId", "queryId"]); const source = sources.find(s => s.id === input.sourceId), query = source?.queries.find(q => q.id === input.queryId); if (!source || !query) throw new Error("Choose a reviewed source and query from the tool description"); return { url: source.endpoint, method: "POST", body: JSON.stringify({ query: query.query }) }; }, sources: observedSources });
   }
+  const hederaEndpoint = config.testnetEndpoints?.["hedera-analysis"];
+  if (hederaEndpoint) {
+    const sourceIds = [...(config.protocols ?? []).map(s => s.id), ...(config.agent0 ? ["agent0"] : [])];
+    tools.push({ id: "hedera-analysis", description: "Buy a reproducible evidence-quality analysis, settled natively on Hedera testnet. protocol-quality checks complete-day trends, anomalous valuations and concentration using fresh Graph reads. candidate-check examines selected Agent0 candidates, feedback diversity, revocations, validation coverage and missing capabilities. This service does not test arbitrary candidate endpoints or guarantee trust.",
+      inputSchema: { type: "object", properties: { mode: { type: "string", enum: ["protocol-quality", "candidate-check"] }, sourceId: { type: "string", enum: sourceIds }, agentIds: { type: "array", items: { type: "string" }, minItems: 1, maxItems: 5 } }, required: ["mode", "sourceId"], additionalProperties: false },
+      request(input) {
+        exactFields(input, ["mode", "sourceId", "agentIds"]);
+        if (input.mode === "protocol-quality") {
+          if (!(config.protocols ?? []).some(s => s.id === input.sourceId) || input.agentIds !== undefined) throw new Error("Choose a configured protocol source without candidate IDs");
+        } else if (input.mode === "candidate-check") {
+          if (input.sourceId !== "agent0" || !config.agent0 || !Array.isArray(input.agentIds) || input.agentIds.length < 1 || input.agentIds.length > 5 || input.agentIds.some(id => typeof id !== "string" || !/^[0-9]{1,12}:[0-9]{1,18}$/.test(id)) || new Set(input.agentIds).size !== input.agentIds.length) throw new Error("Choose 1-5 distinct observed Agent0 IDs");
+        } else throw new Error("Choose a supported evidence-analysis mode");
+        return { url: hederaEndpoint, method: "POST", body: JSON.stringify(input) };
+      }, sources: observedSources });
+  }
   if (config.testnetEndpoints) {
     for (const tool of tools) {
       const endpoint = config.testnetEndpoints[tool.id];
       if (!endpoint) continue;
       const url = new URL(endpoint);
       if (!(url.protocol === "https:" || url.protocol === "http:" && url.hostname === "127.0.0.1") || url.username || url.password || url.search || url.hash) throw new Error("Invalid first-party testnet endpoint");
+      if (tool.id === "crypto-prices") {
+        tool.description = "Retrieve a fresh Coinbase public spot-price observation for BTC, ETH or SOL. Mandate sells this data service for testnet USDC; Coinbase does not accept the payment.";
+        tool.inputSchema = { type: "object", properties: { coins: { type: "array", items: { type: "string", enum: ["BTC", "ETH", "SOL"] }, minItems: 1, maxItems: 3 } }, required: ["coins"], additionalProperties: false };
+      }
       const validate = tool.request;
       tool.request = input => { validate(input); return { url: url.toString(), method: "POST", body: JSON.stringify(input) }; };
       tool.description = `Mandate-hosted testnet x402 service. ${tool.description.replace(/through Exa's x402 endpoint|through Otto's x402 endpoint|through APIToll's x402 endpoint/g, "through the configured live data provider")}`;

@@ -1,16 +1,64 @@
 # Mandate
 
-**Testnet-only, Ledger-funded access to paid agent services.** A person reviews a
-spending envelope, an isolated consumer performs useful paid work through a trusted
-broker, and the workspace shows the actual charges, blocked requests, settlement,
-zero-refund closure, and remaining-funds recovery.
+**Delegate complete investigations. Keep spending under human control.**
+Mandate has two ready-made specialists and prompt-created custom agents. They choose
+useful next steps from observed evidence, buy approved x402 services, and retain the
+result, actual cost, source evidence and chain-verified receipts together.
 
-The verified workspace uses **Base Sepolia USDC** for payments, **testnet Agent0
-subgraphs** for real query results, and **Hedera testnet** for authenticated evidence.
-There is no mainnet mode. Ledger and x402 supply the signing and channel primitives;
-Mandate supplies the constrained execution, durable accounting, recovery, and UI.
+The new agent workspace combines **Ledger funding and Key Ring custody**, **The Graph
+for live evidence**, **native Hedera testnet x402 analysis**, and **Gemini through
+Vertex AI**. Payments are testnet-only. The model cannot grant itself more authority.
+The trusted broker enforces endpoint, recipient, shared/run budget, expiry and stop
+rules outside the model.
 
-## What was demonstrated live
+## Open the new agent workspace
+
+On an already-provisioned host with sealed credentials, reviewed testnet identities
+and authorized Google Cloud access:
+
+```sh
+npm run agents:prepare
+npm run agents:boot
+# In a second terminal:
+npm run agents:open
+```
+
+The app opens locally on port **8420**, separately from the earlier batch workspace
+on 8410. Preparation and startup never fund or run an agent. The user must review
+and initiate the specific Ledger testnet transfer before paid work becomes ready.
+After funding, **Increase allowance** is also explicit: each additional amount gets
+its own Ledger review/signature and chain verification, while service scope,
+per-call/rolling limits and expiry remain unchanged.
+See [setup, architecture, recovery and limitations](docs/AGENT-WORKSPACE.md).
+
+Current tools are a protocol evidence service, Agent0 candidate discovery, public
+spot-price observations and a native Hedera Evidence Lab. They are real Mandate-
+operated services with live upstream data, not mock vendors pretending to accept
+public providers' testnet payments. Base and Hedera have separate accounts/assets;
+their USDC spending shares one broker-enforced ceiling. There is no cross-chain
+bridge or hardware-enforced all-policy guarantee.
+
+**Verification boundary:** source queries, model access and real 402 challenges have
+been exercised. Automated SDK, HTTP/SQLite, recovery and browser tests use explicitly
+isolated fixtures where payments are simulated. A fresh Ledger-funded allowance and five real paid tool responses have now been
+independently verified: three Graph protocol queries and a market-data call on Base
+Sepolia, plus Evidence Lab on native Hedera. Total service spending was **0.006 test
+USDC**. Final model generation initially hit its token limit; the report was recovered
+from retained evidence without repeating payments, and the original run remains
+`partial` in its audit trail. The second specialist, custom paid runs and the new
+unused-funds-return flow still need live acceptance checks. Older batch-channel
+proofs below remain separate history, not new agent evidence.
+[Current acceptance record](docs/agent-product-progress.md).
+
+```sh
+npm ci
+npm run verify
+npx playwright install chromium
+npm run test:ui
+npm run test:agents:ui
+```
+
+## Earlier live batch-channel demonstrations (11 September 2026)
 
 Two complementary Base Sepolia testnet cycles are retained.
 
@@ -31,8 +79,8 @@ in a separate read-only archive.
 See the [human-readable lifecycle record](docs/LIVE-LEDGER-CYCLE-2026-09-11.md)
 and [machine-readable proof](docs/verification/ledger-paid-lifecycle-2026-09-11.json).
 
-These are real testnet operations, not unit-test fixtures. The latest post-run gate
-passes `npm run verify` with 181 deterministic checks, `npm run verify:linux`
+These are real testnet operations, not unit-test fixtures. The historical post-run gate
+passed `npm run verify` with 181 deterministic checks, `npm run verify:linux`
 inside a no-runtime-network container, and `npm run test:ui` against a real local
 HTTP/SQLite application. [Audit acceptance](docs/AUDIT-REMEDIATION.md)
 separates implementation, deterministic tests, live observations, and excluded
@@ -75,7 +123,7 @@ logs. Its verification container has no external network. The source image and
 agent runtime are pinned by digest. See [dependency security](docs/DEPENDENCIES.md)
 for patched transitive dependencies, parser guards, and remaining upstream risk.
 
-## Open the workspace without making a payment
+## Earlier batch workspace: open without making a payment
 
 ```sh
 npm run console
@@ -90,7 +138,7 @@ remains available as an explicit launcher, and removes the token from the URL
 immediately. Do not copy that token, the private capability files, or the Key
 Ring profile into chat, public files, or a tunnel. Startup does not sign or spend.
 
-## Configure the real testnet stack
+## Earlier batch workspace: configure the testnet stack
 
 Prerequisites are an unlocked Ledger with Ethereum installed, password-protected
 `wallet-cli` Key Ring provisioning, sealed credentials, and small testnet balances.
@@ -131,7 +179,7 @@ does not touch Tailscale or another tunnel. Do not start a second copy over a
 running stack. Missing credentials or unsupported contracts produce errors, not
 fake readiness or a fallback network.
 
-## Use one reviewed authority
+## Earlier batch workspace: use one reviewed authority
 
 In the workspace, review the exact payer, recipient, token, authorizer, resource,
 expiry, lifetime deposit, per-call maximum, and rolling limit. Inspecting an offer
@@ -154,8 +202,8 @@ The container gets only a query and a bounded IPC interface. The trusted host
 relay keeps the scoped token; it exposes task submission/observation only. The
 consumer has no external network, no host-data mount, no wallet password, no
 Docker socket, and no authority to fund or widen scope. It produces a deterministic
-comparison of live registrations; this repository does not pretend to operate an
-LLM fleet.
+comparison of live registrations. That earlier fixed-task consumer is distinct
+from the new adaptive Vertex workspace described above.
 
 The CLI companion uses the same authenticated broker as the UI:
 
@@ -169,9 +217,9 @@ Initial CLI funding additionally requires `--authorize-funding`. Reuse a request
 ID to observe an uncertain operation; do not create another charge to hide a lost
 response. See [recovery](docs/RECOVERY.md).
 
-## Security boundary and non-goals
+## Shared security boundary and earlier batch-channel constraints
 
-The contract constrains the channel identity, asset, receiver and funded liability.
+For the earlier batch path, the contract constrains the channel identity, asset, receiver and funded liability.
 The broker enforces resource scope, task expiry, per-call and rolling limits, and
 revocation. A UI label is not an on-chain constraint. Withdrawal delay is not task
 expiry. A voucher acceptance is not a merchant bank balance or an on-chain sweep.
@@ -189,7 +237,7 @@ integration. They must remain testnet-only and have separate explicit live gates
 
 ## Documentation
 
-[Architecture](docs/architecture.md) · [Recovery](docs/RECOVERY.md) ·
+[Agent workspace](docs/AGENT-WORKSPACE.md) · [Batch architecture](docs/architecture.md) · [Recovery](docs/RECOVERY.md) ·
 [Ledger DX](DX.md) · [Current findings](docs/FINDINGS.md) ·
 [Walkthrough](docs/WALKTHROUGH.md) · [Live Ledger cycle](docs/LIVE-LEDGER-CYCLE-2026-09-11.md) ·
 [Dependency security](docs/DEPENDENCIES.md)

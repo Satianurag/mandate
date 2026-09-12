@@ -69,7 +69,15 @@
     "verify:linux": "bash scripts/clean-linux-verify.sh",
     "postinstall": "node scripts/apply-security-patches.mjs",
     "ledger:test-cal": "node scripts/ledger-test-cal.mjs",
-    "ledger:test-context": "node scripts/probe-ledger-test-context.mjs"
+    "ledger:test-context": "node scripts/probe-ledger-test-context.mjs",
+    "agents:prepare": "node --experimental-strip-types scripts/prepare-agents.mjs",
+    "agents:boot": "node --experimental-strip-types scripts/agent-stack.mjs",
+    "agents:open": "MANDATE_CONSOLE_PORT=8420 MANDATE_OPERATOR_STATE=state/agents/operator node scripts/open-console.mjs",
+    "test:agents:ui": "node --experimental-strip-types scripts/test-agent-run-ui.mjs",
+    "test:agents:workspace": "node --experimental-strip-types scripts/test-agent-ui.mjs",
+    "agents:recover-report": "node --experimental-strip-types scripts/recover-agent-report.mjs",
+    "agents:verify-live": "node --experimental-strip-types scripts/verify-agent-live.mjs",
+    "test:agents:live-report": "node --experimental-strip-types scripts/test-live-agent-report-ui.mjs"
   },
   "license": "MIT",
   "devDependencies": {

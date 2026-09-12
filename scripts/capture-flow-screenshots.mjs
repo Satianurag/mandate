@@ -1,25 +1,34 @@
 #!/usr/bin/env node
-/** Capture every public page and workspace UI state without triggering payments. */
+/** Capture every public page and agent-workspace UI state without triggering payments. */
 import { chromium } from '@playwright/test';
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 
 const root = new URL('..', import.meta.url).pathname;
+const port = Number(process.env.MANDATE_CONSOLE_PORT ?? 8420);
 const outputDir = join(process.env.HOME ?? '/Users/Apple', 'Documents', 'mandate-screenshots');
-const origin = 'http://127.0.0.1:8410';
-const tokenPath = process.env.MANDATE_OPERATOR_STATE
-  ? join(process.env.MANDATE_OPERATOR_STATE, 'operator-token')
-  : join(root, 'state/live/operator/operator-token');
-const token = (await readFile(tokenPath, 'utf8')).trim();
+const origin = `http://127.0.0.1:${port}`;
+const tokenDir = process.env.MANDATE_OPERATOR_STATE ?? join(root, 'state/agents/operator');
+const token = (await readFile(join(tokenDir, 'operator-token'), 'utf8')).trim();
 
-const report = { capturedAt: new Date().toISOString(), origin, outputDir, screenshots: [] };
+const report = { capturedAt: new Date().toISOString(), origin, port, outputDir, screenshots: [] };
 
 async function shot(page, name, options = {}) {
   const path = join(outputDir, `${name}.png`);
-  await page.screenshot({ path, fullPage: options.fullPage ?? true });
+  if (options.element) {
+    await page.locator(options.element).screenshot({ path });
+  } else {
+    await page.screenshot({ path, fullPage: options.fullPage ?? true });
+  }
   report.screenshots.push({ name, path });
   console.log(`  ✓ ${name}.png`);
+}
+
+async function navigateView(page, view, headingId) {
+  await page.locator(`nav [data-navigate="${view}"]`).first().click();
+  await page.locator(`#${headingId}`).waitFor();
+  await page.waitForTimeout(200);
 }
 
 const launchOptions = existsSync('/Applications/Google Chrome.app')
@@ -28,7 +37,7 @@ const launchOptions = existsSync('/Applications/Google Chrome.app')
 
 await mkdir(outputDir, { recursive: true });
 const browser = await chromium.launch(launchOptions);
-const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
+const context = await browser.newContext({ viewport: { width: 1440, height: 1040 } });
 const page = await context.newPage();
 
 try {
@@ -41,172 +50,169 @@ try {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.waitForTimeout(150);
   await shot(page, '02-landing-mobile');
-  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.setViewportSize({ width: 1440, height: 1040 });
 
-  const landingSections = [
+  for (const section of [
     { id: 'hero', selector: '.hero' },
     { id: 'idea', selector: '#idea' },
     { id: 'boundaries', selector: '#boundaries' },
     { id: 'workflow', selector: '.workflow' },
     { id: 'closing', selector: '.closing' },
-  ];
-  for (const section of landingSections) {
+  ]) {
     await page.locator(section.selector).scrollIntoViewIfNeeded();
     await page.waitForTimeout(200);
     await shot(page, `03-landing-section-${section.id}`, { fullPage: false });
   }
 
-  // ── Workspace (landing transition) ─────────────────────────────────────────
-  console.log('\nWorkspace connected from landing');
-  await page.goto(`${origin}/workspace`);
-  await page.locator('#workspace').waitFor({ state: 'visible' });
-  await shot(page, '04-workspace-from-landing-desktop');
+  // ── Workspace login (fresh context, no session cookie) ────────────────────
+  console.log('\nWorkspace login');
+  const loginContext = await browser.newContext({ viewport: { width: 1440, height: 1040 } });
+  const loginPage = await loginContext.newPage();
+  await loginPage.goto(`${origin}/workspace`);
+  await loginPage.locator('#loginPanel').waitFor({ state: 'visible' });
+  await shot(loginPage, '04-workspace-login-desktop');
 
-  await page.setViewportSize({ width: 390, height: 844 });
-  await page.waitForTimeout(150);
-  await shot(page, '05-workspace-from-landing-mobile');
-  await page.setViewportSize({ width: 1440, height: 1000 });
+  await loginPage.setViewportSize({ width: 390, height: 844 });
+  await loginPage.waitForTimeout(150);
+  await shot(loginPage, '05-workspace-login-mobile');
+  await loginPage.setViewportSize({ width: 1440, height: 1040 });
 
-  // ── Workspace login fallback (direct deep link) ────────────────────────────
-  console.log('\nWorkspace login fallback');
-  const directContext = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
-  const directPage = await directContext.newPage();
-  await directPage.goto(`${origin}/workspace`);
-  await directPage.getByRole('heading', { name: /Let the agent work/ }).waitFor();
-  await shot(directPage, '06-workspace-login-fallback-desktop');
-  await directPage.locator('#loginPanel details summary').click();
-  await directPage.waitForTimeout(150);
-  await shot(directPage, '06b-workspace-login-manual-token');
-  await directContext.close();
+  await loginPage.locator('#loginPanel details summary').click();
+  await loginPage.waitForTimeout(150);
+  await shot(loginPage, '06-workspace-login-manual-token');
+  await loginContext.close();
 
-  // ── Workspace (authenticated) ───────────────────────────────────────────────
-  console.log('\nWorkspace connected');
+  // ── Agent workspace (authenticated) ─────────────────────────────────────────
+  console.log('\nAgent workspace');
   await page.goto(`${origin}/workspace#token=${token}`);
+  await page.waitForFunction(() => document.body.classList.contains('agent-mode'));
   await page.locator('#workspace').waitFor({ state: 'visible' });
   await page.waitForTimeout(500);
-  await shot(page, '07-workspace-main-desktop');
 
-  await page.setViewportSize({ width: 390, height: 844 });
-  await page.waitForTimeout(300);
-  await shot(page, '08-workspace-main-mobile');
-  await page.setViewportSize({ width: 1440, height: 1000 });
+  const views = [
+    { view: 'home', heading: 'agentHomeTitle', label: 'home' },
+    { view: 'task', heading: 'agentsTitle', label: 'task' },
+    { view: 'authority', heading: 'agentAllowanceTitle', label: 'authority' },
+    { view: 'history', heading: 'agentHistoryTitle', label: 'history' },
+    { view: 'evidence', heading: 'agentReceiptsTitle', label: 'evidence' },
+  ];
 
-  // Task panel close-up
-  await page.locator('.task-panel').scrollIntoViewIfNeeded();
-  await page.waitForTimeout(150);
-  await shot(page, '09-workspace-task-panel', { fullPage: false });
+  for (const { view, heading, label } of views) {
+    await navigateView(page, view, heading);
+    await shot(page, `07-workspace-${label}-desktop`);
+  }
 
-  // Authority panel close-up
-  await page.locator('.authority-panel').scrollIntoViewIfNeeded();
-  await page.waitForTimeout(150);
-  await shot(page, '10-workspace-authority-panel', { fullPage: false });
+  for (const { view, heading, label } of views) {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await navigateView(page, view, heading);
+    await page.waitForTimeout(150);
+    await shot(page, `08-workspace-${label}-mobile`);
+  }
+  await page.setViewportSize({ width: 1440, height: 1040 });
 
-  // History section (collapsed)
-  await page.locator('#history').scrollIntoViewIfNeeded();
-  await page.waitForTimeout(150);
-  await shot(page, '11-workspace-history', { fullPage: false });
+  // Single-query payment diagnostics (legacy batch panel)
+  await navigateView(page, 'task', 'agentsTitle');
+  await page.evaluate(() => { const el = document.querySelector('.task-diagnostics'); if (el) el.open = true; });
+  await page.waitForTimeout(200);
+  await shot(page, '09b-workspace-task-diagnostics', { fullPage: false });
 
-  // History archive expanded
-  const archiveSummary = page.locator('.history-archive summary');
-  if (await archiveSummary.count() > 0) {
-    await page.evaluate(() => { const el = document.querySelector('.history-archive'); if (el) el.open = true; });
-    await page.waitForTimeout(300);
-    await shot(page, '11b-workspace-history-archive-expanded', { fullPage: false });
-    const inspectBtn = page.locator('.history-archive .text-button').first();
-    if (await inspectBtn.count() > 0) {
-      await inspectBtn.scrollIntoViewIfNeeded();
-      await inspectBtn.click();
-      await page.waitForTimeout(500);
-      await page.locator('.task-panel').screenshot({ path: join(outputDir, '11c-workspace-history-task-inspect.png') });
-      report.screenshots.push({ name: '11c-workspace-history-task-inspect', path: join(outputDir, '11c-workspace-history-task-inspect.png') });
-      console.log('  ✓ 11c-workspace-history-task-inspect.png');
+  // Allowance technical details
+  await navigateView(page, 'authority', 'agentAllowanceTitle');
+  await page.evaluate(() => { const el = document.querySelector('#agentAllowancePanel details'); if (el) el.open = true; });
+  await page.waitForTimeout(200);
+  await shot(page, '09-workspace-allowance-technical', { fullPage: false });
+
+  // Existing run detail
+  const runs = await page.evaluate(() => api('/api/agents').then(d => d.runs));
+  if (runs?.length) {
+    const runId = runs[0].id;
+    await page.evaluate(id => sessionStorage.setItem('mandate.agent-run.selected.v1', id), runId);
+    await page.reload();
+    await page.waitForFunction(() => document.body.classList.contains('agent-mode'));
+    await navigateView(page, 'task', 'agentsTitle');
+    const detail = page.locator('#agentRunDetail');
+    if (await detail.isVisible()) {
+      await shot(page, '10-workspace-run-detail-desktop', { element: '#agentRunDetail' });
+      const receiptSummary = page.locator('#agentRunDetail details[data-group="receipts"] summary');
+      if (await receiptSummary.count() > 0) {
+        await receiptSummary.click();
+        await page.waitForTimeout(200);
+        await shot(page, '10b-workspace-run-receipts-expanded', { element: '#agentRunDetail' });
+      }
+      const stepsSummary = page.locator('#agentRunDetail details[data-group="steps"] summary');
+      if (await stepsSummary.count() > 0) {
+        await stepsSummary.click();
+        await page.waitForTimeout(200);
+        await shot(page, '10c-workspace-run-steps-expanded', { element: '#agentRunDetail' });
+      }
+      await page.setViewportSize({ width: 390, height: 844 });
+      await page.waitForTimeout(200);
+      await shot(page, '10d-workspace-run-detail-mobile', { element: '#agentRunDetail' });
+      await page.setViewportSize({ width: 1440, height: 1040 });
     }
   }
 
-  // Evidence section
-  await page.locator('#evidence').scrollIntoViewIfNeeded();
-  await page.waitForTimeout(150);
-  await shot(page, '12-workspace-evidence', { fullPage: false });
-
-  // Evidence event detail expanded
-  const eventDetail = page.locator('#evidence details summary').first();
-  if (await eventDetail.count() > 0) {
-    await eventDetail.click();
-    await page.waitForTimeout(200);
-    await shot(page, '12b-workspace-evidence-event-inspect', { fullPage: false });
-  }
-
-  // Expand result details if present
-  const resultDetails = page.locator('#result details summary');
-  if (await resultDetails.count() > 0) {
-    await resultDetails.first().click();
-    await page.waitForTimeout(150);
-    await page.locator('#result').screenshot({ path: join(outputDir, '13-workspace-result-expanded.png') });
-    report.screenshots.push({ name: '13-workspace-result-expanded', path: join(outputDir, '13-workspace-result-expanded.png') });
-    console.log('  ✓ 13-workspace-result-expanded.png');
-  }
-
-  // Preflight check
-  const preflightBtn = page.getByRole('button', { name: 'Check live dependencies', exact: true });
-  if (await preflightBtn.isEnabled()) {
-    await preflightBtn.click();
-    await page.waitForTimeout(800);
-    await page.locator('#preflightDetails').evaluate(el => { el.open = true; });
-    await page.waitForTimeout(200);
-    await shot(page, '14-workspace-preflight', { fullPage: false });
-  }
-
-  // Config dialog
+  // ── Dialogs (read-only opens, no submissions) ───────────────────────────────
   console.log('\nDialogs');
-  await page.getByRole('button', { name: 'Review authority', exact: true }).click();
-  await page.waitForTimeout(300);
-  await page.locator('#configDialog').screenshot({ path: join(outputDir, '15-dialog-review-authority.png') });
-  report.screenshots.push({ name: '15-dialog-review-authority', path: join(outputDir, '15-dialog-review-authority.png') });
-  console.log('  ✓ 15-dialog-review-authority.png');
+  await navigateView(page, 'task', 'agentsTitle');
 
-  const loadSourcesBtn = page.getByRole('button', { name: 'Verify live research sources', exact: true });
-  if (await loadSourcesBtn.isVisible()) {
-    await loadSourcesBtn.click();
-    await page.waitForTimeout(1500);
-    await page.locator('#configDialog').screenshot({ path: join(outputDir, '16-dialog-research-sources.png') });
-    report.screenshots.push({ name: '16-dialog-research-sources', path: join(outputDir, '16-dialog-research-sources.png') });
-    console.log('  ✓ 16-dialog-research-sources.png');
-  }
-
-  const probeBtn = page.getByRole('button', { name: 'Inspect live payment offer', exact: true });
-  if (await probeBtn.isVisible()) {
-    await probeBtn.click();
-    await page.waitForTimeout(2000);
-    await page.locator('#configDialog').screenshot({ path: join(outputDir, '16b-dialog-payment-offer.png') });
-    report.screenshots.push({ name: '16b-dialog-payment-offer', path: join(outputDir, '16b-dialog-payment-offer.png') });
-    console.log('  ✓ 16b-dialog-payment-offer.png');
-  }
-
-  await page.keyboard.press('Escape');
-  await page.waitForTimeout(200);
-
-  // Refund dialog (only open if button enabled — no actual refund)
-  const refundBtn = page.getByRole('button', { name: 'Request remaining-funds refund', exact: true });
-  if (await refundBtn.isEnabled()) {
-    await refundBtn.click();
+  const createAgentBtn = page.getByRole('button', { name: /Create an agent|Describe the job/i }).first();
+  if (await createAgentBtn.count() > 0) {
+    await createAgentBtn.click();
+    await page.locator('#agentEditor').waitFor();
     await page.waitForTimeout(200);
-    await page.locator('#refundDialog').screenshot({ path: join(outputDir, '17-dialog-refund.png') });
-    report.screenshots.push({ name: '17-dialog-refund', path: join(outputDir, '17-dialog-refund.png') });
-    console.log('  ✓ 17-dialog-refund.png');
+    await shot(page, '11-dialog-create-agent', { element: '#agentEditor' });
     await page.keyboard.press('Escape');
   }
 
-  // Funding consent prompt (no payment triggered)
-  await page.getByRole('button', { name: 'Run paid task', exact: true }).click();
-  await page.waitForTimeout(300);
-  await page.locator('.task-panel').screenshot({ path: join(outputDir, '19-workspace-funding-consent-prompt.png') });
-  report.screenshots.push({ name: '19-workspace-funding-consent-prompt', path: join(outputDir, '19-workspace-funding-consent-prompt.png') });
-  console.log('  ✓ 19-workspace-funding-consent-prompt.png');
+  const launchBtn = page.locator('.agent-card button').filter({ hasText: /Give it a goal/i }).first();
+  if (await launchBtn.count() > 0) {
+    await launchBtn.click();
+    await page.locator('#agentLaunch').waitFor();
+    await page.waitForTimeout(200);
+    await shot(page, '12-dialog-launch-agent', { element: '#agentLaunch' });
+    await page.keyboard.press('Escape');
+  }
 
-  // Full workspace scroll (final overview)
+  await navigateView(page, 'authority', 'agentAllowanceTitle');
+  const reviewFunding = page.locator('#agentReviewFunding');
+  if (await reviewFunding.isVisible()) {
+    await reviewFunding.click();
+    await page.locator('#agentFundingDialog').waitFor();
+    await page.waitForTimeout(200);
+    await shot(page, '13-dialog-funding-review', { element: '#agentFundingDialog' });
+    await page.keyboard.press('Escape');
+  }
+
+  const increaseBtn = page.locator('#agentIncreaseAllowance');
+  if (await increaseBtn.isVisible()) {
+    await increaseBtn.click();
+    await page.locator('#agentIncreaseDialog').waitFor();
+    await page.waitForTimeout(200);
+    await shot(page, '14-dialog-increase-allowance', { element: '#agentIncreaseDialog' });
+    const previewBtn = page.locator('#agentPreviewIncrease');
+    if (await previewBtn.isVisible()) {
+      await previewBtn.click();
+      await page.waitForTimeout(1000);
+      await shot(page, '14b-dialog-increase-preview', { element: '#agentIncreaseDialog' });
+    }
+    await page.keyboard.press('Escape');
+  }
+
+  const returnBtn = page.locator('#agentReviewReturn');
+  if (await returnBtn.isVisible()) {
+    await returnBtn.click();
+    await page.locator('#agentReturnDialog').waitFor();
+    await page.waitForTimeout(200);
+    await shot(page, '15-dialog-return-funds', { element: '#agentReturnDialog' });
+    await page.keyboard.press('Escape');
+  }
+
+  // Final full overview from home
+  await navigateView(page, 'home', 'agentHomeTitle');
   await page.evaluate(() => window.scrollTo(0, 0));
   await page.waitForTimeout(200);
-  await shot(page, '20-workspace-full-overview');
+  await shot(page, '16-workspace-full-overview');
 
   report.ok = true;
   report.count = report.screenshots.length;

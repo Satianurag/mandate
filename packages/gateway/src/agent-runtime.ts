@@ -1,5 +1,6 @@
 /** Adaptive goal execution. Payment signing belongs exclusively to the broker executor. */
 import { randomUUID } from "node:crypto";
+import { specialistEvidenceReport } from "./agent-evidence-report.ts";
 import { AgentStore, TERMINAL_AGENT_STATES, type AgentRun } from "./agent-store.ts";
 import type { AgentToolId } from "./agent-profiles.ts";
 
@@ -34,6 +35,10 @@ export interface AgentToolExecutor {
   /** Must atomically enforce shared authority AND run budget before signing.
    * Return only a confirmed payment+response; never blindly retry an uncertain charge. */
   execute(input: { run: AgentRun; quote: X402Quote; requestId: string; remainingBaseUnits: string; signal: AbortSignal }): Promise<ToolObservation>;
+}
+export class AgentModelError extends Error {
+  readonly usage?: Record<string, unknown>;
+  constructor(message: string, usage?: Record<string, unknown>) { super(message); this.usage = usage; }
 }
 export class UncertainAgentPayment extends Error {}
 export class AgentAuthorityError extends Error {}
@@ -84,8 +89,9 @@ export class AgentRuntime {
           const minimumTools = run.agent.template ? 2 : 1;
           const cited = observations.filter(o => !o.error && decision.evidenceIds.includes(o.requestId));
           const complete = decision.complete && new Set(cited.map(o => o.toolId)).size >= minimumTools && (run.agent.requiredToolIds ?? []).every(id => cited.some(o => o.toolId === id));
-          this.store.event(id, "conclusion", { complete, evidenceIds: decision.evidenceIds });
-          this.store.finish(id, complete ? "completed" : "partial", decision.result,
+          const observedReport = specialistEvidenceReport(run, observations);
+          this.store.event(id, "conclusion", { complete, evidenceIds: decision.evidenceIds, reportStrategy: observedReport ? "observed-specialist-fields" : "model-interpretation" });
+          this.store.finish(id, complete ? "completed" : "partial", observedReport ?? decision.result,
             complete ? null : "The investigation did not establish completion using multiple paid tools.");
           return;
         }
@@ -127,6 +133,7 @@ export class AgentRuntime {
       }
       this.store.finish(id, "partial", partial("Step limit reached"));
     } catch (e) {
+      if (e instanceof AgentModelError && e.usage) this.store.event(id, "model_usage", { ...e.usage, failed: true });
       const reason = errorText(e);
       this.store.event(id, e instanceof UncertainAgentPayment ? "payment_uncertain" : "execution_stopped", { reason });
       const state = this.store.run(id)?.state;

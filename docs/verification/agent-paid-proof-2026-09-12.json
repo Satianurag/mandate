@@ -1,0 +1,95 @@
+{
+  "version": 1,
+  "date": "2026-09-12",
+  "verification": "independent-read-only-chain-verification",
+  "authorityId": "agent-d7024f21-8e12-4ec5-9266-e2a814e59af6",
+  "funding": {
+    "transaction": "0x61f6eec3d8ab62dd13feadacafd83289e0eeafb58a7f66389f7132f39f21cdb9",
+    "network": "eip155:84532",
+    "amountBaseUnits": "250000",
+    "chainVerified": true
+  },
+  "payments": [
+    {
+      "requestId": "7dae2775-6e0f-4ed5-a218-4b978a67efd1",
+      "toolId": "graph-protocol",
+      "runId": "b11d608a-8313-40ce-b11c-8f118d10bf43",
+      "network": "eip155:84532",
+      "asset": "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
+      "amountBaseUnits": "1000",
+      "transaction": "0x03e04f61f9697c09a836b0624d765121cedae5c674d44bbdc7b732037ef63725",
+      "chainVerified": true,
+      "responseRetained": true,
+      "responseStatus": 200
+    },
+    {
+      "requestId": "d4410161-05e2-42d9-8cba-3dafe14e603c",
+      "toolId": "graph-protocol",
+      "runId": "b11d608a-8313-40ce-b11c-8f118d10bf43",
+      "network": "eip155:84532",
+      "asset": "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
+      "amountBaseUnits": "1000",
+      "transaction": "0x0826af08f27278ee1d8f4879a24d579b3fa685031362aa3caed6c1ba76e8d4d2",
+      "chainVerified": true,
+      "responseRetained": true,
+      "responseStatus": 200
+    },
+    {
+      "requestId": "64ac3ec6-0eab-4a7b-a360-2c372c880ba0",
+      "toolId": "graph-protocol",
+      "runId": "b11d608a-8313-40ce-b11c-8f118d10bf43",
+      "network": "eip155:84532",
+      "asset": "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
+      "amountBaseUnits": "1000",
+      "transaction": "0xea8783b21ed2de7adb7d859ae8afb330da65c7b3690c23c21ae5bc25a163d662",
+      "chainVerified": true,
+      "responseRetained": true,
+      "responseStatus": 200
+    },
+    {
+      "requestId": "016f4a38-22ab-4a31-bcd8-4d4fdfe1b7fd",
+      "toolId": "hedera-analysis",
+      "runId": "b11d608a-8313-40ce-b11c-8f118d10bf43",
+      "network": "hedera:testnet",
+      "asset": "0.0.429274",
+      "amountBaseUnits": "2000",
+      "transaction": "0.0.7162784@1789197532.631026600",
+      "chainVerified": true,
+      "responseRetained": true,
+      "responseStatus": 200
+    },
+    {
+      "requestId": "14924a78-400d-4853-95c4-b2c22694235f",
+      "toolId": "crypto-prices",
+      "runId": "b11d608a-8313-40ce-b11c-8f118d10bf43",
+      "network": "eip155:84532",
+      "asset": "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
+      "amountBaseUnits": "1000",
+      "transaction": "0xc28a6fcb6639c557d2e30f308f07923aed399e5c071b8111cee2d159f7971f59",
+      "chainVerified": true,
+      "responseRetained": true,
+      "responseStatus": 200
+    }
+  ],
+  "totalPaidBaseUnits": "6000",
+  "remainingSharedAuthorityBaseUnits": "244000",
+  "spendingWalletBalanceBaseUnits": "246000",
+  "run": {
+    "id": "b11d608a-8313-40ce-b11c-8f118d10bf43",
+    "recordedState": "partial",
+    "originalFailure": "Vertex final generation reached MAX_TOKENS",
+    "reportRecovered": true,
+    "reportStrategy": "observed-specialist-fields",
+    "recoveryAddedX402Payments": 0,
+    "finalObservedFieldRebuildModelCalls": 0
+  },
+  "boundaries": [
+    "All listed funding and service transfers were independently read back from testnet chain evidence.",
+    "Native Hedera and Base Sepolia account balances are separate; a shared budget is broker-enforced, not bridged.",
+    "The actual execution remains partial in its audit trail; report recovery does not rewrite that status.",
+    "Some earlier failed model inference has no retained token metadata. Cloud usage is separate from x402 spending.",
+    "The stored device mode is clear-basic, not proof that every mandate field used rich clear signing.",
+    "Second-specialist, custom-agent and unused-funds-return live flows have not been verified in this pass.",
+    "The latest backend source needs a controlled restart of the isolated stack; the automated restart was blocked."
+  ]
+}

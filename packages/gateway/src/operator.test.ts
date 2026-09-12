@@ -94,6 +94,9 @@ test('scoped agents cannot widen query, change authority, read operator state or
     ...(body === undefined ? {} : {body:JSON.stringify(body)}),
   });
   assert.equal((await agent('/api/state')).status,403);
+  for (const path of ['/api/agent-setup', '/api/agent-setup/return-preview', '/api/agents']) assert.equal((await agent(path)).status,403);
+  for (const path of ['/api/agent-setup/fund','/api/agent-setup/reconcile','/api/agent-setup/stop','/api/agent-setup/return','/api/agent-setup/return-reconcile','/api/agent-payments/reconcile']) assert.equal((await agent(path,{})).status,403);
+
   assert.equal((await agent('/api/config',cfg)).status,403);
   assert.equal((await agent('/api/refund',{confirm:'request_refund'})).status,403);
   assert.equal((await agent('/api/tasks',{task:RESEARCH_TASK,authorizeFunding:true})).status,403);

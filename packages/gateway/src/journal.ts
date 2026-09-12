@@ -36,6 +36,11 @@ export interface MandateRow {
   id: string; descriptor: string; state: string; channel_id: string | null;
   deposit: string; payer: string | null; session: string | null; created_at: number;
 }
+export interface AgentAllowanceIncreaseRow {
+  id: string; mandate_id: string; state: string; amount: string; resulting_ceiling: string;
+  consent_hash: string; from_block: string | null; payload: string | null; offer: string | null;
+  transaction_hash: string | null; error: string | null; created_at: number;
+}
 export interface FullySpentClosureProof {
   network: string;
   channelId: string;
@@ -115,6 +120,11 @@ export class Journal {
       CREATE TABLE IF NOT EXISTS approvals (
         nonce TEXT PRIMARY KEY, action_hash TEXT NOT NULL, expires_at INTEGER NOT NULL,
         state TEXT NOT NULL DEFAULT 'pending', evidence TEXT);
+      CREATE TABLE IF NOT EXISTS agent_allowance_increases (
+        id TEXT PRIMARY KEY, mandate_id TEXT NOT NULL REFERENCES mandates(id), state TEXT NOT NULL,
+        amount TEXT NOT NULL, resulting_ceiling TEXT NOT NULL, consent_hash TEXT NOT NULL,
+        from_block TEXT, payload TEXT, offer TEXT, transaction_hash TEXT, error TEXT, created_at INTEGER NOT NULL);
+      CREATE INDEX IF NOT EXISTS agent_allowance_increase_mandate ON agent_allowance_increases(mandate_id, created_at);
     `);
   }
   close(): void { this.db.close(); }
@@ -247,6 +257,28 @@ export class Journal {
       this.append(id, null, "mandate.stopped", { paidRequestsAreNotReversed: true });
     });
   }
+  closeAgentWalletReturn(id: string, proof: {network:string;asset:string;from:string;to:string;returnedBaseUnits:string;transaction:string;chainVerified:boolean}): void {
+    this.transaction(() => {
+      const row=this.mandate(id), scope=row ? JSON.parse(row.descriptor) : null;
+      const effectiveCeiling=this.effectiveAgentCeiling(id,String(scope?.ceilingBaseUnits??"0"));
+      if(!row || row.channel_id || row.deposit!=="funded" || !["stopped","closed"].includes(row.state) || proof.network!=="eip155:84532" || scope.network!==proof.network || String(scope.asset).toLowerCase()!==proof.asset.toLowerCase() || row.session?.toLowerCase()!==proof.from.toLowerCase() || row.payer?.toLowerCase()!==proof.to.toLowerCase() || !/^0x[0-9a-fA-F]{64}$/.test(proof.transaction) || !proof.chainVerified || units(proof.returnedBaseUnits,true)>units(effectiveCeiling)) throw new Error("Return proof does not bind to the reviewed exact-agent allowance");
+      if(this.requests(id).some(r=>["reserved","signed","uncertain"].includes(r.state))) throw new Error("Pending payments must be reconciled before closing the allowance");
+      const prior=this.db.prepare("SELECT data FROM events WHERE mandate_id=? AND kind='agent.unspent_returned' ORDER BY seq DESC LIMIT 1").get(id) as {data:string}|undefined;
+      if(row.state==="closed") {if(!prior || JSON.parse(prior.data).transaction!==proof.transaction)throw new Error("Conflicting agent return proof");return;}
+      this.db.prepare("UPDATE mandates SET state='closed' WHERE id=?").run(id);this.append(id,null,"agent.unspent_returned",proof);
+    });
+  }
+  closeEmptyAgentWallet(id:string, proof:{network:string;asset:string;account:string;balanceBaseUnits:string;block:string}):void {
+    this.transaction(()=>{
+      const row=this.mandate(id),scope=row?JSON.parse(row.descriptor):null;
+      if(!row || row.state!=="stopped" || row.deposit!=="funded" || row.channel_id || proof.network!=="eip155:84532" || scope.network!==proof.network || scope.asset.toLowerCase()!==proof.asset.toLowerCase() || row.session?.toLowerCase()!==proof.account.toLowerCase() || proof.balanceBaseUnits!=="0" || !/^[0-9]+$/.test(proof.block))throw new Error("An exact-agent empty-wallet closure needs an observed matching testnet balance");
+      if(this.requests(id).some(r=>["reserved","signed","uncertain"].includes(r.state)))throw new Error("Pending payments prevent closure");
+      const paid=this.requests(id).filter(r=>r.state==="accepted"&&r.network===proof.network&&r.asset.toLowerCase()===proof.asset.toLowerCase()).reduce((sum,r)=>sum+units(r.charged??"0"),0n);
+      const effectiveCeiling=units(this.effectiveAgentCeiling(id,String(scope.ceilingBaseUnits)),true);
+      if(paid!==effectiveCeiling)throw new Error("The empty wallet is not explained by confirmed Base service charges and Ledger funding increases; investigate rather than claiming a successful close");
+      this.db.prepare("UPDATE mandates SET state='closed' WHERE id=?").run(id);this.append(id,null,"agent.empty_wallet_closed",{...proof,returnedBaseUnits:"0",transferCreated:false});
+    });
+  }
   bindIdentity(id: string, payer: string, session: string): void {
     this.transaction(() => {
       const row = this.mandate(id);
@@ -295,6 +327,15 @@ export class Journal {
       }
     }
     return { spent: String(spent), reserved: String(reserved), window: String(window + reserved) };
+  }
+  agentAllowanceIncreases(id: string): AgentAllowanceIncreaseRow[] {
+    return this.db.prepare("SELECT * FROM agent_allowance_increases WHERE mandate_id=? ORDER BY created_at ASC, id ASC").all(id) as unknown as AgentAllowanceIncreaseRow[];
+  }
+  confirmedAgentAllowanceIncrease(id: string): string {
+    return String(this.agentAllowanceIncreases(id).filter(row => row.state === "confirmed").reduce((sum, row) => sum + units(row.amount, true), 0n));
+  }
+  effectiveAgentCeiling(id: string, initialCeilingBaseUnits: string): string {
+    return String(units(initialCeilingBaseUnits, true) + BigInt(this.confirmedAgentAllowanceIncrease(id)));
   }
   reserve(input: { id: string; mandateId: string; digest: string; network: string; asset: string; amount: string; limits: BudgetLimits; now?: number; group?: { id: string; ceilingBaseUnits: string; perCallBaseUnits: string } }): RequestRow {
     return this.transaction(() => {
