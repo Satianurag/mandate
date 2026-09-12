@@ -1,0 +1,115 @@
+name: ui-compat-fix
+on:
+  push:
+    branches: [ui-rehaul-buffer-20260912]
+    paths: [.github/workflows/ui-compat-fix.yml]
+permissions:
+  contents: write
+jobs:
+  apply:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ui-rehaul-buffer-20260912
+          fetch-depth: 0
+      - name: Apply product and recovery UI fix
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          html_path = Path('console/workspace.html')
+          css_path = Path('console/workspace.css')
+          text = html_path.read_text()
+
+          text = text.replace(
+              '<h1 id="loginTitle">Open your local workspace</h1>\n    <p class="lead">Launch the workspace from the Mandate CLI. Your local session stays on this machine.</p>',
+              '<h1 id="loginTitle">Let the agent work.<br>Keep spending controlled.</h1>\n    <p class="lead">Open the authenticated local workspace. Payment keys stay behind the broker, and paid work stays inside reviewed testnet limits.</p>'
+          )
+
+          if 'id="createAgentShortcut"' not in text:
+              needle = '          <p class="page-subtitle">Choose a specialist, then give it the outcome you want. Mandate handles the permitted paid tools underneath.</p>\n        </div>\n      </div>'
+              replacement = '          <p class="page-subtitle">Choose a specialist, then give it the outcome you want. Mandate handles the permitted paid tools underneath.</p>\n        </div>\n        <button class="secondary" id="createAgentShortcut" type="button">Create agent</button>\n      </div>'
+              if needle not in text:
+                  raise SystemExit('task page header anchor not found')
+              text = text.replace(needle, replacement, 1)
+
+          home_pos = text.index('<section id="homeView"')
+          compat_start = text.index('      <div class="compat-only" aria-hidden="true">', home_pos)
+          home_end = text.index('    </section>\n\n    <section class="panel agents-panel', compat_start)
+          home_compat = '''      <!-- Compatibility/recovery shell. It is visible only when the agent stack is not configured. -->
+      <div class="compat-only legacy-home-shell" aria-hidden="true">
+        <div class="legacy-home-card">
+          <div>
+            <p class="eyebrow">LOCAL WORKSPACE</p>
+            <h2>Review a Mandate before paid work.</h2>
+            <p class="subtle">The source-bound operator tools remain available for recovery and test environments. Agent mode hides this surface.</p>
+          </div>
+          <button class="secondary" data-navigate="authority" type="button">Review authority</button>
+        </div>
+        <div class="legacy-overview" aria-label="Mandate accounting">
+          <div><span>Spending limit</span><strong id="cap">Not configured</strong><small id="capLabel">Configured ceiling</small></div>
+          <div><span>Budget used</span><strong id="budgetPercent">—</strong><small id="budgetNote">Review your spending limit</small></div>
+          <div><span>Tasks completed</span><strong id="completedCount">0</strong><small id="completedNote">In this Mandate</small></div>
+          <div><span>Accepted / reserved / remaining</span><strong><span id="spent">—</span> · <span id="reserved">—</span> · <span id="remaining">—</span></strong><small>Testnet accounting</small></div>
+        </div>
+        <span id="recentCount" class="sr-only"></span><div id="recentWork" class="legacy-recent"></div><span id="attentionCount" class="sr-only"></span><div id="attentionList" class="legacy-recent"></div>
+      </div>
+'''
+          text = text[:compat_start] + home_compat + text[home_end:]
+
+          footer_pos = text.index('<footer class="workspace-footer">')
+          compat_start = text.index('    <div class="compat-only" aria-hidden="true">', footer_pos)
+          compat_end_marker = '    </div>\n  </div>\n</main>'
+          compat_end = text.index(compat_end_marker, compat_start)
+          recovery = '''    <div class="compat-only legacy-controls" aria-hidden="true">
+      <details class="compat-panel task-diagnostics" data-view="task"><summary>Single-query diagnostics</summary>
+        <section class="task-panel" aria-labelledby="taskStatus">
+          <div class="panel-header"><div><p class="eyebrow">RECOVERY TOOL</p><h2>Source-bound research task</h2></div><span id="taskStatus" class="badge neutral">No task yet</span></div>
+          <form id="taskForm"><div id="taskDefinition" class="task-definition"></div><label>Candidate count<select id="maxResults"><option value="2">2</option><option value="3">3</option><option value="5" selected>5</option><option value="8">8</option><option value="10">10</option></select></label><label id="fundingConsent" class="checkline"><input id="authorizeFunding" type="checkbox"><span>Authorize initial escrow funding on my Ledger. The device review—not this checkbox—approves funding.</span></label><div id="pendingIntent" class="notice compact" hidden><div><strong>Previous paid intent needs observation</strong><span id="pendingIntentText"></span></div><button id="checkPendingTask" class="secondary" type="button">Check existing task</button></div><div class="actions"><button id="runTask" class="primary" type="submit">Run paid task</button><span id="taskHint" class="subtle"></span></div></form><div class="result-region"><span id="resultSource" class="subtle"></span><div id="result"></div></div>
+        </section>
+      </details>
+      <section class="compat-panel authority-panel" data-view="authority">
+        <div class="panel-header"><div><p class="eyebrow">RECOVERY & SOURCE SCOPE</p><h2>Reviewed authority</h2></div><span id="mandateStatus" class="badge neutral">Not configured</span></div>
+        <div id="legacyWarning" class="notice compact"></div><dl id="authorityFields" class="facts"></dl>
+        <div class="actions legacy-actions"><button id="configure" class="secondary" type="button">Review authority</button><button id="preflight" class="secondary" type="button">Run preflight</button><button id="delegate" class="primary" type="button">Delegate authority</button><button id="stop" class="danger" type="button">Stop new work</button><button id="reconcile" class="secondary" type="button">Reconcile</button><button id="settle" class="secondary" type="button">Settle</button><button id="closeMandate" class="secondary" type="button">Close Mandate</button><button id="refund" class="secondary" type="button">Recover remaining funds</button></div>
+        <span id="authorityHint" class="subtle"></span><details id="preflightDetails"><summary>Preflight evidence</summary><pre id="preflightResult"></pre></details>
+      </section>
+      <section class="compat-panel" data-view="history"><div class="panel-header"><div><p class="eyebrow">RECOVERY HISTORY</p><h2 id="activityTitle">Task history</h2></div></div><div id="history"></div></section>
+      <section class="compat-panel" data-view="evidence"><div class="panel-header"><div><p class="eyebrow">TECHNICAL EVIDENCE</p><h2 id="evidenceTitle">Activity & receipts</h2></div><span id="chainIntegrity" class="badge neutral"></span></div><div class="actions"><button id="publishEvidence" class="secondary" type="button">Publish evidence</button><span id="anchorHint" class="subtle"></span></div><div id="evidence"></div></section>
+'''
+          text = text[:compat_start] + recovery + text[compat_end:]
+          html_path.write_text(text)
+
+          css = css_path.read_text()
+          base_hide = '[hidden],.compat-only{display:none!important}'
+          conditional = '[hidden],.compat-only{display:none!important}body:not(.agent-mode) .compat-only{display:block!important}body:not(.agent-mode) .agent-only{display:none!important}'
+          if 'body:not(.agent-mode) .compat-only' not in css:
+              if base_hide not in css:
+                  raise SystemExit('compatibility visibility anchor not found')
+              css = css.replace(base_hide, conditional, 1)
+
+          css = css.replace('grid-template-areas:"eyebrow" "title" "desc" "meta" "actions";padding:15px', 'grid-template-areas:"eyebrow" "title" "desc" "tools" "allowance" "actions";padding:15px')
+
+          refinements = r'''
+
+/* Buffer-style product refinements 2026-09-12 */
+body.agent-mode .compat-only{display:none!important}
+body.agent-mode #agentHomePrimary{display:none}
+.page-header>.secondary{flex:0 0 auto;background:#fff}.agent-picker-heading{margin-top:6px}.agent-card{min-height:112px}.agent-card .actions{align-self:center}.agent-card .actions .primary{min-width:104px}.agent-tool-pills{margin-top:7px}.agent-allowance{margin-top:1px!important}.agent-history-row{min-height:68px}.agent-history-copy{line-height:1.35}.agent-history-copy p{margin-top:1px}.legacy-home-shell{max-width:920px}.legacy-home-card{border:1px solid var(--line);border-radius:10px;background:var(--subtle);padding:20px;display:flex;align-items:center;justify-content:space-between;gap:20px}.legacy-home-card h2{font-size:18px;margin-bottom:5px}.legacy-home-card p{max-width:650px}.legacy-overview{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--line);border-radius:10px;overflow:hidden;margin-top:14px;background:#fff}.legacy-overview>div{padding:15px;border-right:1px solid var(--line);display:grid;gap:4px}.legacy-overview>div:last-child{border-right:0}.legacy-overview span,.legacy-overview small{color:var(--muted);font-size:11px}.legacy-overview strong{font-size:15px;font-weight:620}.legacy-recent{margin-top:12px}.legacy-controls{margin-top:18px}.compat-panel{max-width:920px;border:1px solid var(--line);border-radius:10px;background:#fff;padding:20px}.compat-panel+.compat-panel{margin-top:12px}.panel-header{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;margin-bottom:14px}.task-definition{display:grid;gap:6px;margin:12px 0}.task-definition>div{display:flex;justify-content:space-between;gap:20px;border-bottom:1px solid var(--line);padding:8px 0}.result-region{margin-top:20px}.legacy-actions{gap:7px}.history-archive{margin-top:18px}.sr-only{position:absolute!important;width:1px!important;height:1px!important;padding:0!important;margin:-1px!important;overflow:hidden!important;clip:rect(0,0,0,0)!important;white-space:nowrap!important;border:0!important}
+@media(max-width:900px){.legacy-overview{grid-template-columns:1fr 1fr}}
+@media(max-width:680px){.legacy-home-card{align-items:flex-start;flex-direction:column}.legacy-overview{grid-template-columns:1fr}.legacy-overview>div{border-right:0;border-bottom:1px solid var(--line)}.legacy-overview>div:last-child{border-bottom:0}.page-header{flex-direction:column;gap:14px;margin-bottom:24px}.page-header>.secondary{width:100%;align-self:stretch}.agent-card{grid-template-columns:1fr;grid-template-areas:"eyebrow" "title" "desc" "tools" "allowance" "actions";row-gap:5px;min-height:0}.agent-card .actions{margin-top:8px;width:100%}.agent-card .actions>*{flex:1;min-width:0}.agent-tool-pills{margin-top:5px}.agent-allowance{margin-top:0!important}.agent-picker-heading{margin-top:2px}}
+'''
+          if '/* Buffer-style product refinements 2026-09-12 */' not in css:
+              css += refinements
+          css_path.write_text(css)
+          PY
+          git diff --check
+      - name: Commit clean UI fix
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/ui-compat-fix.yml
+          git add console/workspace.html console/workspace.css
+          git commit -m "fix(ui): preserve recovery flow and polish mobile layout"
+          git push origin HEAD:ui-rehaul-buffer-20260912
