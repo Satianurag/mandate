@@ -4,7 +4,7 @@
 (() => {
   const $ = id => document.getElementById(id);
   const compatStyle = document.createElement('style');
-  compatStyle.textContent = 'body:not(.agent-mode) .compat-only{display:block!important}body:not(.agent-mode) #newMandate{display:none!important}';
+  compatStyle.textContent = 'body:not(.agent-mode) .compat-only{display:block!important}body:not(.agent-mode) #newMandate{display:none!important}.text-button,summary{min-height:44px}.text-button{min-width:44px}';
   document.head.append(compatStyle);
   $('loginTitle')?.setAttribute('aria-label', 'Let the agent work. Keep spending controlled.');
 
@@ -101,6 +101,22 @@
     }
   }
 
+  function syncCompatibilityState() {
+    const agentMode = document.body.classList.contains('agent-mode');
+    for (const root of document.querySelectorAll('.compat-only')) {
+      if (agentMode) root.setAttribute('aria-hidden', 'true');
+      else root.removeAttribute('aria-hidden');
+    }
+  }
+
+  function ensurePrimaryView() {
+    const workspace = $('workspace');
+    if (!workspace || workspace.hidden) return;
+    const views = [...document.querySelectorAll('.product-view[data-view]')];
+    if (views.some(view => !view.hidden)) return;
+    document.querySelector('nav [data-navigate="home"]')?.click();
+  }
+
   function polish() {
     polishPrimaryAction();
     polishAgentCards();
@@ -113,9 +129,12 @@
     polishRunBoundary();
     polishStatusCopy();
     polishReceipts();
+    syncCompatibilityState();
+    ensurePrimaryView();
   }
 
+  window.addEventListener('mandate:state', () => setTimeout(polish, 0));
   const observer = new MutationObserver(polish);
-  observer.observe(document.documentElement, { subtree: true, childList: true, characterData: true });
+  observer.observe(document.documentElement, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ['hidden', 'class'] });
   polish();
 })();
