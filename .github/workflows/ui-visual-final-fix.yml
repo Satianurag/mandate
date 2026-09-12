@@ -1,0 +1,45 @@
+name: ui-visual-final-fix
+on:
+  push:
+    branches: [ui-rehaul-buffer-20260912]
+    paths: [.github/workflows/ui-visual-final-fix.yml]
+permissions:
+  contents: write
+jobs:
+  apply:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ui-rehaul-buffer-20260912
+          fetch-depth: 0
+      - name: Apply final visual QA fixes
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('console/workspace.css')
+          s=p.read_text()
+          replacements={
+            'grid-template-areas:"eyebrow actions" "title actions" "desc actions" "meta actions";':'grid-template-areas:"eyebrow actions" "title actions" "desc actions" "tools actions" "allowance actions";',
+            '.agent-tool-pills{grid-area:meta;':'.agent-tool-pills{grid-area:tools;',
+            '.agent-allowance{grid-area:meta;':'.agent-allowance{grid-area:allowance;',
+            '.agent-create{display:grid;grid-template-columns:auto minmax(0,1fr);grid-template-areas:"plus title" "plus desc";column-gap:12px;row-gap:2px;min-height:68px;border-style:dashed;background:#fafaf8}':'.agent-create{display:grid;grid-template-columns:auto minmax(0,1fr);grid-template-areas:"plus title" "plus desc";column-gap:12px;row-gap:2px;min-height:68px;border-style:dashed;background:#fafaf8;text-align:left;align-content:center;justify-items:start}'
+          }
+          for old,new in replacements.items():
+            if old not in s:
+              raise SystemExit('visual anchor not found: '+old[:80])
+            s=s.replace(old,new,1)
+          final='\n/* Final screenshot QA: keep compatibility trigger out of the product shell and preserve the compact create row on mobile. */\n#newMandate{display:none!important}\n@media(max-width:680px){.agent-create{grid-template-columns:auto minmax(0,1fr);grid-template-areas:"plus title" "plus desc";min-height:68px;text-align:left;align-content:center;justify-items:start}.agent-create .agent-plus{grid-area:plus}.agent-create strong{grid-area:title}.agent-create .subtle{grid-area:desc}}\n'
+          if '/* Final screenshot QA:' not in s:
+            s+=final
+          p.write_text(s)
+          PY
+          git diff --check
+      - name: Commit clean visual fix
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/ui-visual-final-fix.yml
+          git add console/workspace.css
+          git commit -m "fix(ui): separate agent card metadata rows"
+          git push origin HEAD:ui-rehaul-buffer-20260912
