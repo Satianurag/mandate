@@ -1,0 +1,36 @@
+name: ui-footer-a11y
+on:
+  push:
+    branches: [ui-rehaul-buffer-20260912]
+    paths: [.github/workflows/ui-footer-a11y.yml]
+permissions:
+  contents: write
+jobs:
+  apply:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ui-rehaul-buffer-20260912
+          fetch-depth: 0
+      - name: Raise footer metadata contrast
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('console/workspace.css')
+          s=p.read_text()
+          old='.workspace-footer{margin-top:34px;padding-top:16px;border-top:1px solid var(--line);display:flex;justify-content:space-between;color:#90928b;font-size:10px}'
+          new='.workspace-footer{margin-top:34px;padding-top:16px;border-top:1px solid var(--line);display:flex;justify-content:space-between;color:var(--muted);font-size:10px}'
+          if old not in s:
+              raise SystemExit('footer rule anchor not found')
+          p.write_text(s.replace(old,new,1))
+          PY
+          git diff --check
+      - name: Commit clean contrast fix
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/ui-footer-a11y.yml
+          git add console/workspace.css
+          git commit -m "fix(ui): meet footer contrast requirement"
+          git push origin HEAD:ui-rehaul-buffer-20260912
