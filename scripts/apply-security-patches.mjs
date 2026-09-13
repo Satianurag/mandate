@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /** Reproducible, version-checked guards for an upstream parser without a published fixed release.
  * npm audit still reports the original package/advisories; this does not disguise the version.
- * GHSA-w3rx-r6r6-pgpr and GHSA-5p2g-fcmc-qvqq. See docs/DEPENDENCIES.md.
+ * GHSA-w3rx-r6r6-pgpr and GHSA-5p2g-fcmc-qvqq.
  */
 import {readFile,writeFile} from 'node:fs/promises';
 import {createHash} from 'node:crypto';

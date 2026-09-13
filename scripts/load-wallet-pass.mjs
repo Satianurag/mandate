@@ -48,7 +48,7 @@ export async function ensureWalletPass() {
 if (import.meta.url === `file://${process.argv[1]}`) {
   const pass = await ensureWalletPass();
   if (!pass) {
-    console.error("WALLET_PASS missing — run npm run device first");
+    console.error("WALLET_PASS missing — unlock the Ledger Key Ring so the OS keychain has service ledger-wallet-cli / account default");
     process.exit(1);
   }
   // --print is for shell capture (VAR=$(node load-wallet-pass.mjs --print)):

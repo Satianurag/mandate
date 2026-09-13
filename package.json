@@ -11,12 +11,7 @@
   },
   "scripts": {
     "start": "node --experimental-strip-types scripts/start.mjs",
-    "boot": "npm start",
-    "console": "npm start",
-    "gateway": "npm start",
-    "agents:boot": "npm start",
     "console:open": "node scripts/open-console.mjs",
-    "agents:open": "npm run console:open",
     "build": "npm run build --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
     "verify": "npm run build && npm test",
@@ -25,10 +20,6 @@
     "facilitator": "node --experimental-strip-types packages/facilitator/src/index.ts"
   },
   "license": "MIT",
-  "devDependencies": {
-    "@axe-core/playwright": "4.13.0",
-    "@playwright/test": "1.63.0"
-  },
   "overrides": {
     "protobufjs@<8": "7.6.6",
     "protobufjs@>=8 <9": "8.8.0",
