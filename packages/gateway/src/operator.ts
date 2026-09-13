@@ -12,6 +12,7 @@ import { loadAgentServices, type AgentServices } from "./agent-services.ts";
 import { startLocalAgentTools, LOCAL_TOOL_ORIGIN } from "./agent-local-tools.ts";
 import { readSetupDraft, saveSetupDraft, inspectSetup, prepareSetup } from "./workspace-setup.ts";
 import { HttpError, OperatorAuth } from "./operator-auth.ts";
+import { ledgerFundingReadiness } from "./origin-token.ts";
 export interface OperatorOptions { root: string; dataDir?: string; port?: number; agentServices?: AgentServices }
 export interface OperatorApp { server: Server; journal: Journal; dataDir: string; close: () => Promise<void> }
 async function jsonBody(req: IncomingMessage): Promise<Record<string, unknown>> {
@@ -33,6 +34,21 @@ function respond(res: ServerResponse, status: number, body: unknown): void {
   res.end(JSON.stringify(body));
 }
 const messageOf = (e: unknown) => e instanceof Error ? e.message : String(e);
+
+async function ledgerChecklist(dataDir: string, setup: Record<string, unknown> | null) {
+  const readiness = await ledgerFundingReadiness();
+  const draft = await readSetupDraft(dataDir);
+  const authority = setup?.authority as { payerAddress?: string } | undefined;
+  const funding = setup?.funding as { status?: string } | undefined;
+  const addressConfirmed = Boolean(authority?.payerAddress || draft.payerAddress);
+  const allowanceSigned = funding?.status === "funded";
+  return {
+    ...readiness,
+    addressConfirmed,
+    allowanceSigned,
+    readyToFund: readiness.canClearSign && addressConfirmed && !allowanceSigned,
+  };
+}
 
 export async function createOperatorApp(options: OperatorOptions): Promise<OperatorApp> {
   const root = resolve(options.root), dataDir = resolve(options.dataDir ?? join(root, "state/mainnet/operator"));
@@ -111,7 +127,12 @@ export async function createOperatorApp(options: OperatorOptions): Promise<Opera
       if (!['/api/state', '/api/session', '/api/agents', '/api/setup-draft', '/api/setup-inspect', '/api/setup-prepare', '/api/setup-device'].includes(path) && !path.startsWith('/api/agents/') && !path.startsWith('/api/agent-')) {
         throw new HttpError(410, "This operator route was retired. Use the mainnet agent workspace.");
       }
-      if (path === '/api/setup-draft' && req.method === 'GET') { auth.operator(principal); respond(res,200,{draft:await readSetupDraft(dataDir),configured:Boolean(agentServices)});return; }
+      if (path === '/api/setup-draft' && req.method === 'GET') {
+        auth.operator(principal);
+        const setup = (agentServices?.inspect?.() ?? null) as Record<string, unknown> | null;
+        respond(res,200,{draft:await readSetupDraft(dataDir),configured:Boolean(agentServices),ledger:await ledgerChecklist(dataDir,setup)});
+        return;
+      }
       if (path === '/api/setup-draft' && req.method === 'PUT') { auth.operator(principal); respond(res,200,{draft:await saveSetupDraft(dataDir,await jsonBody(req))});return; }
       if (path === '/api/setup-inspect' && req.method === 'POST') { auth.operator(principal); await jsonBody(req); respond(res,200,await inspectSetup(await readSetupDraft(dataDir)));return; }
       if (path === '/api/setup-device' && req.method === 'POST') {
@@ -135,7 +156,9 @@ export async function createOperatorApp(options: OperatorOptions): Promise<Opera
         await agentSetupTask;if(!prepared||!agentServices)throw new HttpError(400,setupError??loadedAgentServices.reason??'Preparation did not complete');respond(res,201,prepared);return;
       }
       if (path === "/api/agent-setup" && req.method === "GET") {
-        auth.operator(principal); respond(res,200,{setup:agentServices?.inspect?.()??null,readiness:agentServices?.readiness?.()??{ready:false,reason:loadedAgentServices.reason},busy:Boolean(agentSetupTask)});return;
+        auth.operator(principal);
+        const setup = (agentServices?.inspect?.() ?? null) as Record<string, unknown> | null;
+        respond(res,200,{setup,readiness:agentServices?.readiness?.()??{ready:false,reason:loadedAgentServices.reason},busy:Boolean(agentSetupTask),ledger:await ledgerChecklist(dataDir,setup)});return;
       }
       if (path === "/api/agent-setup/fund" && req.method === "POST") {
         auth.operator(principal);const body=await jsonBody(req);
@@ -214,8 +237,9 @@ export async function createOperatorApp(options: OperatorOptions): Promise<Opera
             reason: !readiness.ready ? readiness.reason : !p.toolIds.some(id => availableTools.includes(id)) ? "None of this agent's selected tools is configured." : readiness.reason,
           },
         ]));
+        const setup = (agentServices?.inspect?.() ?? null) as Record<string, unknown> | null;
         respond(res, 200, { agents: agents.profiles(), runs: agents.runs(), ready: readiness.ready,
-          availableTools, availability, readiness: readiness.reason, setup: agentServices?.inspect?.() ?? null, runningCount: activeAgentRuns.size, busy: Boolean(agentSetupTask) }); return;
+          availableTools, availability, readiness: readiness.reason, setup, ledger: await ledgerChecklist(dataDir, setup), runningCount: activeAgentRuns.size, busy: Boolean(agentSetupTask) }); return;
       }
       if (path === "/api/agents" && req.method === "POST") {
         auth.operator(principal);

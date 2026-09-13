@@ -18,15 +18,9 @@ dist/
 secrets/*.enc
 secrets/.hedera-pending.json
 
-# Operator-local mandate + channel state (no secrets, but per-deployment).
+# Operator-local config + channel state (no secrets, but per-deployment).
 mandate.yaml
 state/
-
-# Third-party Mobbin screenshots — local stitch refs, not ours to publish.
-console/refs/*.jpg
-console/refs/*.jpeg
-console/refs/*.png
-console/refs/*.webp
 
 # Substreams build artifacts
 substreams/**/target/

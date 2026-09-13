@@ -2,7 +2,7 @@
   "name": "mandate",
   "private": true,
   "version": "0.1.0",
-  "description": "Ledger-approved autonomous x402 agents on Base mainnet with one authenticated workspace.",
+  "description": "Ledger-approved autonomous x402 agents on Base mainnet. ETHOnline 2026 Start Fresh.",
   "workspaces": [
     "packages/*"
   ],

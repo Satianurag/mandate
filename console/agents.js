@@ -1,7 +1,7 @@
 'use strict';
 // Authenticated goal workspace. All amounts, progress and receipts come from the broker.
 (() => {
-  const toolLabels = { 'graph-agent0': 'Agent registrations', 'graph-protocol': 'Protocol activity', 'web-search': 'Web search', 'crypto-news': 'Crypto news', 'crypto-prices': 'Market prices', 'hedera-analysis': 'Evidence Lab' };
+  const toolLabels = { 'graph-agent0': 'Agent registrations', 'graph-protocol': 'Protocol activity', 'web-search': 'Web search', 'crypto-news': 'Crypto news', 'crypto-prices': 'Market prices', 'hedera-analysis': 'Hedera analysis' };
   const networkLabel = n => n === 'hedera:mainnet' ? 'Hedera mainnet' : n === 'eip155:8453' ? 'Base mainnet' : n;
   const terminal = new Set(['completed', 'partial', 'failed', 'stopped', 'interrupted']);
   const pendingKey = 'mandate.agent-run.pending.v1';
@@ -158,11 +158,33 @@
     fact(root, 'Rolling limit', `${units(a.windowBaseUnits)} USDC per ${a.windowMs / 60000} minutes · unchanged`);
     fact(root, 'Expires', when(a.expiresAt));
     fact(root, 'Ledger payer', a.payerAddress); fact(root, 'Funded software wallet', a.spendingAddress);
-    if (a.hedera) fact(root, 'Hedera second rail', `${a.hedera.accountId} → ${a.hedera.payTo} · for native hedera:mainnet vendor offers (Evidence Lab settles on Base)`);
+    if (a.hedera) fact(root, 'Hedera second rail', `${a.hedera.accountId} → ${a.hedera.payTo} · native hedera:mainnet vendor offers`);
     if (!compact) fact(root, 'Allowed services', (setup.configuredTools || []).map(t => toolLabels[t.id] || t.id).join(', '));
+  }
+  function paintLedgerChecklist(ledger) {
+    const root = $('ledgerChecklist');
+    if (!root) return;
+    const pathLabel = ledger?.path === 'partner-origin-token'
+      ? 'Partner origin token is present.'
+      : ledger?.path === 'ledger-dev-test-cal'
+        ? 'ledger-dev test CAL is configured. Open that Ethereum app before funding.'
+        : 'Set LEDGER_ORIGIN_TOKEN or MANDATE_LEDGER_TEST_CAL_URL before funding.';
+    const steps = [
+      ['ledgerStepClearSign', Boolean(ledger?.canClearSign)],
+      ['ledgerStepAddress', Boolean(ledger?.addressConfirmed)],
+      ['ledgerStepSigned', Boolean(ledger?.allowanceSigned)],
+    ];
+    for (const [id, done] of steps) {
+      const node = $(id);
+      if (!node) continue;
+      node.classList.toggle('is-done', done);
+      node.classList.toggle('is-pending', !done);
+    }
+    if ($('ledgerStepClearSignText')) $('ledgerStepClearSignText').textContent = pathLabel;
   }
   function renderSetup(data) {
     const setup = data.setup; $('agentHomeOverview').hidden = false; $('setupReadiness').textContent=data.readiness;
+    paintLedgerChecklist(data.ledger);
     if ($('setupBudgetDetails').dataset.configured !== String(Boolean(setup))) {
       $('setupBudgetDetails').open = !setup;
       $('setupBudgetDetails').dataset.configured = String(Boolean(setup));

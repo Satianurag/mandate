@@ -36,7 +36,7 @@ export function specialistEvidenceReport(run:AgentRun,observations:ToolObservati
   ];
   const market=verified.find(o=>o.toolId==='crypto-prices'),quotes=rows(object(market?.data).quotes);
   if(quotes.length)lines.push('','## Reference spot observations','',...quotes.map(q=>`- ${text(q.symbol)}: ${number(q.amount)} ${text(q.currency)}`),'','These are point-in-time reference quotes. They do not establish price stability or validate the valuations of unrelated pool tokens.');
-  lines.push('','## Evidence and payment boundary','',`${verified.length} retained paid observations informed this report. The Evidence Lab analysis was purchased through native Hedera testnet; other receipts retain their own settlement network. Exact costs and transfer evidence are displayed separately from this factual summary. No new service was called to format this report.`,'',...provenance(verified));
+  lines.push('','## Evidence and payment boundary','',`${verified.length} retained paid observations informed this report. Hedera analysis was purchased through native hedera:mainnet; other receipts retain their own settlement network. Exact costs and transfer evidence are displayed separately from this factual summary. No new service was called to format this report.`,'',...provenance(verified));
   return lines.join('\n');
  }
  if(Array.isArray(data.candidates)&&verified.some(o=>o.toolId==='graph-agent0')){

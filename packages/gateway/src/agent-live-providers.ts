@@ -124,7 +124,7 @@ export function createLiveAgentProviders(input: {
       return {quotes,observedAt:new Date().toISOString(),underlyingProvider:"Coinbase public spot API",caveat:"A point-in-time market quote does not explain protocol activity. Coinbase is not accepting this mainnet x402 payment; Mandate is the paid service."};
     }});
   const hedera:PaidAgentProvider[]=[];
-  if(catalog.some(t=>t.id==="hedera-analysis")) hedera.push({id:"hedera-analysis",description:"Evidence Lab: fresh Graph-backed data-quality and candidate-coverage investigations, paid through the reviewed Base mainnet service.",amountBaseUnits:"2000",
+  if(catalog.some(t=>t.id==="hedera-analysis")) hedera.push({id:"hedera-analysis",description:"Hedera analysis: Graph-backed data-quality and candidate-coverage investigations, paid through the reviewed hedera:mainnet service.",amountBaseUnits:"2000",
     validate(value){definition("hedera-analysis").request(value);},async execute(value,signal){
       if(value.mode==="protocol-quality"){
         const source=input.tools.protocols!.find(s=>s.id===value.sourceId)!;

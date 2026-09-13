@@ -9,7 +9,6 @@ state
 .env
 .env.*
 mandate.yaml
-console/refs
 **/*.key
 **/*.pem
 **/*.enc

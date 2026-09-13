@@ -14,6 +14,27 @@ import { withSecret } from "./keyring.ts";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "../../..");
 
+export type LedgerClearSignPath = "partner-origin-token" | "ledger-dev-test-cal" | "missing";
+
+export interface LedgerFundingReadiness {
+  originTokenPresent: boolean;
+  testCal: boolean;
+  canClearSign: boolean;
+  path: LedgerClearSignPath;
+}
+
+/** Env/key-ring facts only. Does not talk to CAL or the device. Safe to attach to /api/agents. */
+export async function ledgerFundingReadiness(): Promise<LedgerFundingReadiness> {
+  const originTokenPresent = Boolean(await loadLedgerOriginToken());
+  const testCal = Boolean(process.env.MANDATE_LEDGER_TEST_CAL_URL?.trim());
+  const path: LedgerClearSignPath = originTokenPresent
+    ? "partner-origin-token"
+    : testCal
+      ? "ledger-dev-test-cal"
+      : "missing";
+  return { originTokenPresent, testCal, canClearSign: originTokenPresent || testCal, path };
+}
+
 export async function loadLedgerOriginToken(): Promise<string | undefined> {
   const fromEnv = process.env.LEDGER_ORIGIN_TOKEN?.trim();
   if (fromEnv) return fromEnv;

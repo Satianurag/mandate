@@ -48,7 +48,7 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 8h.01M11 11h1v5h1"></path></svg>
       <span>Receipts</span>
     </button>
-  <button class="nav-item" data-navigate="settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="3"/><circle cx="15" cy="17" r="3"/></svg><span>Settings</span></button></nav>
+  <button class="nav-item" data-navigate="settings" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="3"/><circle cx="15" cy="17" r="3"/></svg><span>Settings</span></button></nav>
 
   <div class="sidebar-spacer"></div>
   <div class="sidebar-bottom">
@@ -201,6 +201,29 @@
       <p class="eyebrow">LEDGER</p>
       <h2 id="agentAllowanceDialogTitle">Spending allowance</h2>
       <p class="subtle allowance-dialog-lead">Approve how much USDC the agent can spend on Base mainnet. You review every transfer on your device.</p>
+      <ol class="ledger-checklist" id="ledgerChecklist" aria-label="Ledger funding steps">
+        <li id="ledgerStepClearSign">
+          <span class="ledger-step-mark" aria-hidden="true"></span>
+          <div>
+            <strong>Clear-signing path</strong>
+            <p id="ledgerStepClearSignText">Partner origin token or ledger-dev test CAL</p>
+          </div>
+        </li>
+        <li id="ledgerStepAddress">
+          <span class="ledger-step-mark" aria-hidden="true"></span>
+          <div>
+            <strong>Address confirmed</strong>
+            <p>Read from the device. This does not sign a payment.</p>
+          </div>
+        </li>
+        <li id="ledgerStepSigned">
+          <span class="ledger-step-mark" aria-hidden="true"></span>
+          <div>
+            <strong>Allowance signed</strong>
+            <p>EIP-712 funding on Ledger. The agent cannot raise this cap.</p>
+          </div>
+        </li>
+      </ol>
     </div>
     <div class="allowance-dialog-heading-actions">
       <span id="agentAllowanceStatus" class="badge neutral">Not configured</span>

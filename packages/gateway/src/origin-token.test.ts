@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   classifyTypedDataTrace,
+  ledgerFundingReadiness,
   loadLedgerOriginToken,
   requireLedgerOriginToken,
   signerEthCtorArgs,
@@ -31,6 +32,25 @@ test("requireLedgerOriginToken fails closed without env or sealed blob", async (
   } finally {
     if (prev === undefined) delete process.env.LEDGER_ORIGIN_TOKEN;
     else process.env.LEDGER_ORIGIN_TOKEN = prev;
+  }
+});
+
+test("ledgerFundingReadiness reports test CAL without treating it as a partner token", async () => {
+  const prevToken = process.env.LEDGER_ORIGIN_TOKEN;
+  const prevCal = process.env.MANDATE_LEDGER_TEST_CAL_URL;
+  delete process.env.LEDGER_ORIGIN_TOKEN;
+  process.env.MANDATE_LEDGER_TEST_CAL_URL = "http://127.0.0.1:8427";
+  try {
+    const ready = await ledgerFundingReadiness();
+    assert.equal(ready.originTokenPresent, false);
+    assert.equal(ready.testCal, true);
+    assert.equal(ready.canClearSign, true);
+    assert.equal(ready.path, "ledger-dev-test-cal");
+  } finally {
+    if (prevToken === undefined) delete process.env.LEDGER_ORIGIN_TOKEN;
+    else process.env.LEDGER_ORIGIN_TOKEN = prevToken;
+    if (prevCal === undefined) delete process.env.MANDATE_LEDGER_TEST_CAL_URL;
+    else process.env.MANDATE_LEDGER_TEST_CAL_URL = prevCal;
   }
 });
 

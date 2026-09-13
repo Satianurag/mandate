@@ -118,7 +118,7 @@ export class ExactAgentExecutor implements AgentToolExecutor {
     if (!Number.isSafeInteger(offer.maxTimeoutSeconds) || offer.maxTimeoutSeconds < 1 || offer.maxTimeoutSeconds > 3600 || Date.now() + offer.maxTimeoutSeconds * 1000 > a.expiresAt) throw new AgentAuthorityError("Payment authorization outlives the spending authority");
     units(offer.amount, true);
     if (offer.network.startsWith("hedera:")) {
-      if (toolId !== "hedera-analysis" || !a.hedera) throw new AgentAuthorityError("Hedera offers are only accepted for the reviewed Evidence Lab rail");
+      if (toolId !== "hedera-analysis" || !a.hedera) throw new AgentAuthorityError("Hedera offers are only accepted for the reviewed Hedera analysis rail");
       assertHederaOffer(a.hedera, offer);
       return;
     }

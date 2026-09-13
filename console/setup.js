@@ -67,6 +67,7 @@
         const result = await api('/api/setup-device', {});
         $('setupPayer').value = result.address;
         $('setupDeviceStatus').textContent = 'Address confirmed. No payment was signed.';
+        if (typeof refresh === 'function') await refresh();
       } catch (e) {
         $('setupDeviceStatus').textContent = e.message;
       } finally {

@@ -52,9 +52,12 @@ test("operator state requires authentication and rejects cross-origin, bad CSRF 
 test("custom agents persist through the authenticated API without silently granting execution authority", async t => {
   const { request, origin } = await setup(t);
   assert.equal((await fetch(`${origin}/api/agents`)).status, 401);
-  const before = await (await request("/api/agents")).json() as { agents: unknown[]; ready: boolean };
+  const before = await (await request("/api/agents")).json() as { agents: unknown[]; ready: boolean; ledger?: { canClearSign: boolean; addressConfirmed: boolean; allowanceSigned: boolean } };
   assert.equal(before.agents.length, 0);
   assert.equal(before.ready, false);
+  assert.equal(typeof before.ledger?.canClearSign, "boolean");
+  assert.equal(before.ledger?.addressConfirmed, false);
+  assert.equal(before.ledger?.allowanceSigned, false);
   const fields = {
     name: "My investigator",
     description: "One-off",
